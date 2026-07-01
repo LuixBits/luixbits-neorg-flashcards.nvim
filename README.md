@@ -89,25 +89,52 @@ Neorg workspace, Anki, SQLite, or external services.
 
 ### NVF / Nix
 
-For NVF, package the plugin with `pkgs.vimUtils.buildVimPlugin` and add it to
-`programs.nvf.settings.vim.startPlugins`.
+The repository exposes a flake package and a small NVF module. Add it as a
+flake input:
+
+```nix
+inputs.luixbits-neorg-flashcards.url = "github:devluixos/luixbits-neorg-flashcards.nvim";
+```
+
+Import the module next to your NVF/Home Manager setup:
 
 ```nix
 {
-  config,
-  pkgs,
-  ...
-}: let
-  neorgFlashcards = pkgs.vimUtils.buildVimPlugin {
-    pname = "luixbits-neorg-flashcards.nvim";
-    version = "0.1.0";
-    src = pkgs.fetchFromGitHub {
-      owner = "devluixos";
-      repo = "luixbits-neorg-flashcards.nvim";
-      rev = "v0.1.0";
-      hash = "sha256-0Sjl3BeDZKmNfVUZxnzgCVvkZ7OSO7HyEIVJQTdKKSo=";
+  imports = [
+    inputs.luixbits-neorg-flashcards.homeManagerModules.nvf
+  ];
+
+  programs.nvf.settings.vim.notes.neorg-flashcards = {
+    enable = true;
+    languagePresets = [ "japanese" ];
+    setupOpts = {
+      flashcards_dir = "~/notes/flashcards";
+      default_file = "~/notes/flashcards/cards.norg";
+      default_kind = "japanese";
+    };
+
+    keymaps = {
+      enable = true;
+      prefix = "<leader>nc";
     };
   };
+}
+```
+
+The module adds the plugin package to NVF, emits the Lua `setup` call, and only
+creates keymaps when `keymaps.enable = true`.
+
+If you do not want to import the module, use the package directly:
+
+```nix
+{
+  inputs,
+  pkgs,
+  ...
+}:
+let
+  neorgFlashcards =
+    inputs.luixbits-neorg-flashcards.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in {
   programs.nvf.settings.vim = {
     startPlugins = [
@@ -126,23 +153,6 @@ in {
     '';
   };
 }
-```
-
-To refresh the hash for a newer tag, prefetch it:
-
-```sh
-nix store prefetch-file --unpack \
-  https://github.com/devluixos/luixbits-neorg-flashcards.nvim/archive/refs/tags/v0.1.0.tar.gz
-```
-
-In a flake-based config, you can also use the repository as a flake input with
-`flake = false` and set `src = inputs.luixbits-neorg-flashcards`.
-
-```nix
-inputs.luixbits-neorg-flashcards = {
-  url = "github:devluixos/luixbits-neorg-flashcards.nvim/v0.1.0";
-  flake = false;
-};
 ```
 
 ## Quick Start
