@@ -6,6 +6,7 @@ All notable changes to this project will be documented here.
 
 - Removed the local planning checklist from the tracked public repo.
 - Expanded the README with project goals, quick start, configuration details, and NVF/Nix install examples.
+- Added a reproducible VHS demo GIF using sample Japanese flashcards.
 
 ## 0.1.0 - 2026-07-01
 

@@ -303,6 +303,12 @@ bash scripts/check-clean-install.sh
 
 If `stylua` is installed, the test script also checks formatting.
 
+Render the README demo:
+
+```sh
+vhs docs/demo.tape
+```
+
 ## Platform Support
 
 The first release targets Linux and macOS. Windows is not a `0.1.0` release
@@ -311,8 +317,11 @@ user can validate it.
 
 ## Demo
 
-A short asciinema-compatible terminal demo is available at
-[`docs/demo.cast`](docs/demo.cast).
+![Japanese flashcard review demo](docs/demo/review.gif)
+
+The demo is generated with [`vhs`](https://github.com/charmbracelet/vhs) from
+[`docs/demo.tape`](docs/demo.tape). It uses the sample Japanese cards in
+[`docs/demo/flashcards/cards.norg`](docs/demo/flashcards/cards.norg).
 
 ## License
 

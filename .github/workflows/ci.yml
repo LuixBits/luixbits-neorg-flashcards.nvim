@@ -37,6 +37,7 @@ jobs:
           fi
 
           find lua -name '*.lua' -print0 | xargs -0 "$luac_bin" -p
+          find scripts -maxdepth 1 -name '*.lua' -print0 | xargs -0 -r "$luac_bin" -p
 
       - name: Headless Neovim tests
         run: nvim --headless -u NONE -i NONE -n --cmd "set rtp^=${{ github.workspace }}" -c "luafile tests/run.lua" -c "qa!"
