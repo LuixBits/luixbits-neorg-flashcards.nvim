@@ -104,7 +104,7 @@ Import the module next to your NVF/Home Manager setup:
     inputs.luixbits-neorg-flashcards.homeManagerModules.nvf
   ];
 
-  programs.nvf.settings.vim.notes.neorg-flashcards = {
+  programs.nvf.neorg-flashcards = {
     enable = true;
     languagePresets = [ "japanese" ];
     setupOpts = {

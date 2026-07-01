@@ -16,7 +16,7 @@ let
     types
     ;
 
-  cfg = config.programs.nvf.settings.vim.notes.neorg-flashcards;
+  cfg = config.programs.nvf.neorg-flashcards;
   defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.luixbits-neorg-flashcards-nvim;
 
   toLua =
@@ -117,7 +117,7 @@ let
   ];
 in
 {
-  options.programs.nvf.settings.vim.notes.neorg-flashcards = {
+  options.programs.nvf.neorg-flashcards = {
     enable = mkEnableOption "luixbits-neorg-flashcards.nvim";
 
     package = mkOption {

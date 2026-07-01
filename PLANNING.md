@@ -18,7 +18,7 @@
   - `homeManagerModules.nvf`
   - `nixosModules.nvf`
   - flake checks for packaging, Lua syntax, headless tests, clean install, and NVF module evaluation
-- Add an NVF module under `programs.nvf.settings.vim.notes.neorg-flashcards` with:
+- Add an NVF module under `programs.nvf.neorg-flashcards` with:
   - `enable`
   - `package`
   - `setupOpts`

@@ -92,7 +92,7 @@
                   )
                   self.homeManagerModules.nvf
                   {
-                    programs.nvf.settings.vim.notes.neorg-flashcards = {
+                    programs.nvf.neorg-flashcards = {
                       enable = true;
                       languagePresets = [ "japanese" ];
                       setupOpts.default_kind = "japanese";
