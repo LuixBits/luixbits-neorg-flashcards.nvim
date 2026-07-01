@@ -1,29 +1,16 @@
 * Japanese Flashcards Demo
 
 @flashcard japanese
-japanese: 勉強
-reading: べんきょう
-english: study
-notes: noun / suru verb
-tags: jlpt school
-score: 2
-reviewed: 2026-07-01
+japanese: 言語
+reading: げんご
+english: languages
+notes: noun
+tags: demo vocab
 @end
 
 @flashcard japanese
-japanese: 図書館
-reading: としょかん
-english: library
-notes: place noun
-tags: jlpt places
-score: 1
-reviewed: 2026-07-01
-@end
-
-@flashcard japanese
-japanese: 静か
-reading: しずか
-english: quiet
-notes: na-adjective
-tags: jlpt adjectives
+japanese: リナックス
+english: linux
+notes: katakana loanword
+tags: demo tech
 @end

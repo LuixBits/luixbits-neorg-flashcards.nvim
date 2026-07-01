@@ -303,10 +303,10 @@ bash scripts/check-clean-install.sh
 
 If `stylua` is installed, the test script also checks formatting.
 
-Render the README demo:
+Record the README demo from your real desktop session:
 
 ```sh
-vhs docs/demo.tape
+bash scripts/record-real-demo.sh
 ```
 
 ## Platform Support
@@ -317,11 +317,14 @@ user can validate it.
 
 ## Demo
 
-![Japanese flashcard review demo](docs/demo/review.gif)
+![Creating and reviewing Japanese flashcards](docs/demo/review.gif)
 
-The demo is generated with [`vhs`](https://github.com/charmbracelet/vhs) from
-[`docs/demo.tape`](docs/demo.tape). It uses the sample Japanese cards in
-[`docs/demo/flashcards/cards.norg`](docs/demo/flashcards/cards.norg).
+The demo is a real screen recording captured with `wf-recorder` from an actual
+kitty + Neovim session. The recording workflow lives in
+[`scripts/record-real-demo.sh`](scripts/record-real-demo.sh) and uses the sample
+Japanese cards in [`docs/demo/flashcards/cards.norg`](docs/demo/flashcards/cards.norg).
+It creates cards for `languages` / `言語` and `linux` / `リナックス`, then reviews
+and scores them.
 
 ## License
 
