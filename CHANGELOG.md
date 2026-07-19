@@ -15,7 +15,7 @@ All notable changes to this project will be documented here.
 - Expanded regression coverage for recursive collections, tags, loaded
   buffers, and stale sources, and added formatting and Nix CI checks.
 - Added command, popup-keymap, Neorg-free, isolated-Neorg, and checksum-pinned
-  Neovim 0.10.4 compatibility tests.
+  Neovim 0.10.4 minimum and 0.12.4 current-version compatibility tests.
 - Clarified setup with and without Neorg, `.norg` file behavior, configuration
   paths, and global versus popup-local keymaps.
 - Made `NeorgFlashcardOpen` create nested parent directories for `default_file`.

@@ -33,6 +33,10 @@ local function assert_contains(value, pattern, message)
   end
 end
 
+local function canonical_path(path)
+  return vim.uv.fs_realpath(path) or vim.fn.fnamemodify(path, ":p")
+end
+
 local function current_popup()
   local bufnr = vim.api.nvim_get_current_buf()
   assert_equal(vim.bo[bufnr].buftype, "nofile", "plugin opens a nofile popup")
@@ -83,7 +87,11 @@ require("neorg_flashcards.help").close()
 assert_true(not vim.api.nvim_buf_is_valid(help_popup), "closing help wipes its scratch buffer")
 
 vim.cmd("NeorgFlashcardOpen")
-assert_equal(vim.api.nvim_buf_get_name(0), config.default_file, "open command selects the configured default file")
+assert_equal(
+  canonical_path(vim.api.nvim_buf_get_name(0)),
+  canonical_path(config.default_file),
+  "open command selects the configured default file"
+)
 assert_equal(vim.fn.filereadable(config.default_file), 1, "open command creates nested default-file directories")
 assert_contains(
   table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"),
