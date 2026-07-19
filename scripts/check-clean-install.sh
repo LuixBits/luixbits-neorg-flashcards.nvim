@@ -23,7 +23,8 @@ require("neorg_flashcards").setup({
 vim.cmd("NeorgFlashcardOpen")
 
 local current_file = vim.api.nvim_buf_get_name(0)
-if current_file ~= "$TMP/notes/flashcards/cards.norg" then
+local expected_file = vim.fs.normalize(vim.fn.resolve("$TMP/notes/flashcards/cards.norg"))
+if vim.fs.normalize(vim.fn.resolve(current_file)) ~= expected_file then
   error("unexpected flashcard file: " .. current_file)
 end
 
