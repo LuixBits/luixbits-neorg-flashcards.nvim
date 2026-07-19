@@ -23,6 +23,8 @@ All notable changes to this project will be documented here.
   and loaded files are not counted twice on macOS or other symlinked roots.
 - Hardened test exit handling and temporary-directory isolation so startup
   errors and concurrent runs cannot report false success.
+- Added a runnable 90-second Remotion explainer with burned-in captions, a full
+  narration and clip plan, a NixOS render helper, and CI composition checks.
 
 ## 0.1.0 - 2026-07-01
 

@@ -23,6 +23,7 @@ sync account, and no database outside your notes.
 - [Configuration](#configuration)
 - [Language Presets](#language-presets)
 - [Suggested Keymaps](#suggested-keymaps)
+- [Concept Video](#concept-video)
 - [Development](#development)
 - [Platform Support](#platform-support)
 - [License](#license)
@@ -435,6 +436,19 @@ vim.keymap.set("n", "<leader>ncv", "<cmd>NeorgFlashcardValidate<CR>", { desc = "
 
 Change the prefix freely. Your leader key is sovereign territory.
 
+## Concept Video
+
+The repository includes a runnable 90-second Remotion explainer for the
+file-per-chapter workflow, collection reviews, tags, plain-Neovim support, and
+rating writeback.
+
+- [`docs/VIDEO_PLAN.md`](docs/VIDEO_PLAN.md) contains the complete narration,
+  timed clip plan, optional live-insert directions, and publishing chapters.
+- [`video/`](video/) contains the Remotion composition and its own run guide.
+
+The visuals and captions are generated from React components, so the video can
+be revised without negotiating with a pile of mystery timeline layers.
+
 ## Development
 
 Run the local checks:
@@ -473,6 +487,19 @@ Record the README demo from your real desktop session:
 ```sh
 bash scripts/record-real-demo.sh
 ```
+
+Check or render the concept video:
+
+```sh
+npm ci --prefix video
+npm run check --prefix video
+npm run compositions --prefix video
+npm run still --prefix video
+npm run render --prefix video
+```
+
+On NixOS, use `bash scripts/render-video-nixos.sh`; it supplies a native
+Chromium and a compatibility environment for Remotion's FFmpeg binary.
 
 ## Platform Support
 

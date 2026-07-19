@@ -79,3 +79,28 @@ jobs:
 
       - name: Flake checks
         run: nix flake check --print-build-logs
+
+  video:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: video/package-lock.json
+
+      - name: Install video dependencies
+        run: npm ci --prefix video
+
+      - name: Type-check the composition
+        run: npm run check --prefix video
+
+      - name: Inspect the composition
+        run: npm run compositions --prefix video
+
+      - name: Render the poster frame
+        run: npm run still --prefix video
