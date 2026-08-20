@@ -4,23 +4,27 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
-- Added `:NeorgFlashcardOverview`, a full-page dashboard tab whose tag-grouped
-  canvas paints one colored glyph per card (due, soon, scheduled, new) with
-  keyboard navigation, card peek, group review in a float on top of the page,
-  source jump, and an `a` key that adds cards straight from the dashboard.
-- Added `:NeorgFlashcardStats`, which opens the dashboard scrolled to its
-  analytics section: a GitHub-style review heatmap, streak and totals, and a
-  7-day due forecast; ratings are appended to `reviews.log` in the flashcards
+- Added `:NeorgFlashcardOverview`, a full-page dashboard tab, side by side: a
+  tag-grouped card list with per-card due-state colors and `j`/`k` navigation
+  on the left, analytics (streak and totals, width-adaptive heatmap, 7-day due
+  forecast) on the right; `s` switches panes, `a` adds cards straight from the
+  dashboard, and group reviews open in a float on top and refresh both panes
+  when they close.
+- Added `:NeorgFlashcardStats`, which opens the dashboard with the analytics
+  pane focused; ratings are appended to `reviews.log` in the flashcards
   directory.
 - Replaced the sequential `vim.ui.input` prompts of `:NeorgFlashcardAdd` with
-  an editable form buffer: one field per line, `<C-s>` saves and keeps the
+  an editable form buffer: one field per line, `Enter` hops to the next field
+  (and saves from the last one), `Tab` cycles, `<C-s>` saves and keeps the
   form open for the next card.
+- Documented the public Lua API (`require("neorg_flashcards")`) for custom
+  keymaps in the README and `:help neorg-flashcards-lua-api`.
 - Added cloze support (`{{c1::answer}}` / `{{c1::answer|hint}}` are masked
   before the reveal) and a typed-answer mode (`t` in review) with UTF-8-aware
   fuzzy matching.
 - Reviews print a session summary on quit, group reviews from the overview
-  refresh the canvas underneath when they close, and an empty due review hints
-  at the next due time.
+  refresh the dashboard underneath when they close, and an empty due review
+  hints at the next due time.
 - Added score-driven scheduling: ratings now maintain `due:`, `interval:`, and
   `ease:` fields, bad cards requeue into the running session, and
   `:NeorgFlashcardReviewDue` studies only due and new cards, oldest due first.

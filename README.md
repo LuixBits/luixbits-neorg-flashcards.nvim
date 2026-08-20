@@ -27,6 +27,7 @@ notes.
 - [Configuration](#configuration)
 - [Language Presets](#language-presets)
 - [Suggested Keymaps](#suggested-keymaps)
+- [Lua API](#lua-api)
 - [Concept Video](#concept-video)
 - [Development](#development)
 - [Platform Support](#platform-support)
@@ -42,9 +43,9 @@ notes.
 - `1`, `2`, `3` scoring for bad, mid, and good cards.
 - Spaced repetition: ratings schedule the next review via a `due:` field, and
   bad cards requeue into the current session.
-- Full-page dashboard tab: tag-grouped card canvas with due-state colors,
-  peek, group review, add-card form, and the analytics section in one place
-  (`:NeorgFlashcardOverview`).
+- Full-page dashboard tab: tag-grouped card list with due-state colors on the
+  left, analytics (streak, heatmap, forecast) on the right, plus peek, group
+  review, and an add-card form (`:NeorgFlashcardOverview`).
 - Analytics with a review heatmap, streak, and due forecast
   (`:NeorgFlashcardStats` jumps straight to it).
 - Cloze markers (`{{c1::answer}}`) and a typed-answer mode with fuzzy matching.
@@ -275,7 +276,9 @@ comma-separated tag at a time.
 - `:NeorgFlashcardOpen` creates or opens `default_file`.
 - `:NeorgFlashcardAdd [kind]` opens the add-card form for the current `.norg`
   file. From another buffer, it targets `default_file` first. Without `[kind]`,
-  it uses `default_kind`.
+  it uses `default_kind`. In the form, `Enter` hops to the next field (and
+  saves from the last one), `Tab` / `Shift-Tab` cycle fields, `<C-s>` saves
+  from anywhere, and the form stays open for the next card until `q`.
 - `:NeorgFlashcardHelp` opens a short in-editor guide.
 - `:NeorgFlashcardReview` reviews all valid cards under `flashcards_dir`.
 - `:NeorgFlashcardReviewDue` reviews only due and new cards, oldest due first.
@@ -362,22 +365,28 @@ still reviews everything — treat it as the cram mode.
 
 ## Overview and Stats
 
-`:NeorgFlashcardOverview` opens a full-page dashboard in its own tab. The top
-is a canvas that groups cards by tag, one glyph per card: red is due, yellow is
-due within a day, green is scheduled, gray is new. Cards with several tags
-appear in each of their groups. Below the canvas, the analytics section shows
-review totals and streak, a 20-week heatmap, and a 7-day due forecast.
+`:NeorgFlashcardOverview` opens a full-page dashboard in its own tab, side by
+side: the left pane lists your cards grouped by tag (one line per card with a
+colored due-state glyph — red due, yellow due within a day, green scheduled,
+gray new), and the right pane shows the analytics — review totals and streak,
+a heatmap that adapts to the pane width, and a 7-day due forecast. Cards with
+several tags appear in each of their groups.
 
-- `h` / `l`: move between cards, `j` / `k`: move between rows.
+Keys in the card list (left pane):
+
+- `j` / `k`: move between cards (headers are skipped).
 - `Enter` / `r`: review the due cards of the selected group in a floating
-  review on top of the dashboard; closing that review refreshes the canvas.
+  review on top of the dashboard; closing that review refreshes both panes.
 - `a`: add a card via the form (into `default_file`), `p`: peek at the card,
-  `e`: open its source, `R`: recollect, `s`: jump to the analytics section,
+  `e`: open its source, `R`: recollect, `s`: focus the analytics pane,
   `q`: close the tab.
 
-`:NeorgFlashcardStats` opens the same dashboard scrolled to the analytics.
-Every rating appends one line to `reviews.log` inside `flashcards_dir` — a
-plain-text ledger you can inspect or delete freely.
+The analytics pane is read-only; `s`, `Tab`, or `Enter` there moves focus back
+to the card list, and `q` closes the dashboard from either pane.
+
+`:NeorgFlashcardStats` opens the same dashboard with the analytics pane
+focused. Every rating appends one line to `reviews.log` inside
+`flashcards_dir` — a plain-text ledger you can inspect or delete freely.
 
 ## Cloze and Typed Answers
 
@@ -526,6 +535,43 @@ vim.keymap.set("n", "<leader>ncv", "<cmd>NeorgFlashcardValidate<CR>", { desc = "
 
 Change the prefix freely. Your leader key is sovereign territory.
 
+## Lua API
+
+Every command above is a thin wrapper around a public function on the plugin
+module, so keymaps and custom workflows can call them directly:
+
+```lua
+local flashcards = require("neorg_flashcards")
+vim.keymap.set("n", "<leader>ncd", flashcards.review_due, { desc = "Review due flashcards" })
+vim.keymap.set("n", "<leader>ncv", flashcards.overview, { desc = "Flashcard dashboard" })
+```
+
+| Function | Action |
+| -------- | ------ |
+| `setup(opts)` | Configure the plugin (see [Configuration](#configuration)) |
+| `open_flashcards()` | Create or open `default_file` |
+| `add_kind(kind?)` | Add-card form targeting the current `.norg` file |
+| `add_to_default(kind?)` | Add-card form targeting `default_file` |
+| `add_japanese()` / `insert_japanese()` | Compatibility aliases (`japanese` preset) |
+| `validate_file()` | Validate `@flashcard` blocks in the current buffer |
+| `review_all()` | Review every valid card under `flashcards_dir` |
+| `review_due()` | Review due and new cards, oldest due first |
+| `review_file()` | Review the current file |
+| `review_tag(tag?)` | Review one tag (prompts when omitted) |
+| `review_score(score?)` | Review a score bucket: `bad`/`mid`/`good`/`new` (prompts when omitted) |
+| `overview(opts?)` | Open the dashboard tab (`opts.view = "stats"` focuses analytics) |
+| `stats()` | Dashboard with the analytics pane focused |
+| `close_review()` | Close the review popup |
+| `flip_or_next()` | Reveal the answer, then advance |
+| `next_card()` / `previous_card()` | Move within the review session |
+| `rate_current(1\|2\|3)` | Score the current card and schedule its next review |
+| `edit_current_card()` | Open the source of the current card |
+| `type_answer()` | Typed-answer mode for the current card |
+| `help()` | Short in-editor guide |
+
+The review, dashboard, and form keymaps are buffer-local — they only exist
+while those UI elements are open and never occupy your global keys.
+
 ## Concept Video
 
 The repository includes a runnable 90-second Remotion explainer for the
@@ -609,7 +655,7 @@ lua/neorg_flashcards/presets.lua  bundled language presets
 lua/neorg_flashcards/schema.lua   schema lookup, validation, render fields
 lua/neorg_flashcards/parser.lua   @flashcard parsing and collection
 lua/neorg_flashcards/review.lua   review popup, ratings, cloze, typed answers
-lua/neorg_flashcards/overview.lua full-page dashboard tab (canvas + analytics)
+lua/neorg_flashcards/overview.lua full-page dashboard tab (card list + analytics)
 lua/neorg_flashcards/stats.lua    review log, heatmap, and forecast sections
 lua/neorg_flashcards/form.lua     editable add-card form
 lua/neorg_flashcards/store.lua    score/reviewed writeback, file access

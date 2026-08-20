@@ -340,6 +340,20 @@ flashcards.add_kind("")
 local form_buf = vim.api.nvim_get_current_buf()
 assert_true(form_buf ~= form_target, "add opens the form buffer")
 assert_equal(vim.bo[form_buf].buftype, "nofile", "form is a scratch buffer")
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "form starts on the first field")
+
+local form_imaps = {}
+for _, map in ipairs(vim.api.nvim_buf_get_keymap(form_buf, "i")) do
+  form_imaps[map.lhs:lower()] = true -- lhs casing is canonicalized (<C-S>)
+end
+for _, lhs in ipairs({ "<c-s>", "<cr>", "<tab>", "<s-tab>" }) do
+  assert_true(form_imaps[lhs], "form maps " .. lhs .. " in insert mode")
+end
+form.next_field()
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 2, "Enter hops to the next field")
+form.cycle_field(-1)
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Shift-Tab hops back")
+
 vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, {
   "Japanese: 机",
   "Reading: つくえ",
@@ -348,6 +362,7 @@ vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, {
   "Tags: jlpt furniture",
 })
 form.save()
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "saving resets the form to the first field")
 form.close()
 
 local prompted = table.concat(vim.fn.readfile(prompted_path), "\n")
@@ -512,14 +527,26 @@ vim.fn.writefile({
 
 vim.cmd("NeorgFlashcardOverview")
 local overview_popup, overview_text = current_popup()
-assert_contains(overview_text, "╭", "overview draws group boxes")
+assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "dashboard opens cards and analytics panes")
 assert_contains(overview_text, "nature", "overview lists the shared tag group")
 assert_contains(overview_text, "hiking", "overview lists the second tag group")
 assert_contains(overview_text, "untagged", "overview groups cards without tags")
-assert_contains(overview_text, "▸", "overview shows the selected card preview")
+assert_contains(overview_text, "nature · 2 cards · 2 due", "overview counts cards and due per group")
+assert_contains(overview_text, "▸", "overview shows the selected card marker")
 assert_contains(overview_text, "● due", "overview shows the color legend")
-assert_buffer_maps(overview_popup, { "q", "h", "l", "j", "k", "<CR>", "r", "p", "e", "R", "a", "s" })
+assert_contains(overview_text, "山 — mountain", "card lines show front and reveal")
+assert_buffer_maps(overview_popup, { "q", "<Esc>", "j", "k", "<CR>", "r", "p", "e", "R", "a", "s" })
 assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
+
+local stats_pane_buf
+for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+  if win ~= vim.api.nvim_get_current_win() then
+    stats_pane_buf = vim.api.nvim_win_get_buf(win)
+  end
+end
+local analytics_text = table.concat(vim.api.nvim_buf_get_lines(stats_pane_buf, 0, -1, false), "\n")
+assert_contains(analytics_text, "Analytics", "dashboard shows the analytics pane")
+assert_contains(analytics_text, "Due forecast", "analytics pane shows the forecast")
 
 local overview_cursor = vim.api.nvim_win_get_cursor(0)
 overview.move(1)
@@ -535,18 +562,18 @@ local _, group_review_text = current_popup()
 assert_contains(group_review_text, "tag:chapter-01 | 1/1", "overview reviews the selected group")
 flashcards.close_review()
 local _, canvas_text = current_popup()
-assert_contains(canvas_text, "▸", "closing the group review returns to the overview canvas")
+assert_contains(canvas_text, "▸", "closing the group review returns to the card list")
 overview.close()
 
 vim.fn.writefile({ os.date("%Y-%m-%d %H:%M") .. "\t3" }, collection_dir .. "/reviews.log")
 vim.cmd("NeorgFlashcardStats")
+assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "stats opens the two-pane dashboard")
 local stats_popup, stats_text = current_popup()
 assert_contains(stats_text, "1 reviews total", "stats totals the review log")
 assert_contains(stats_text, "1 today", "stats counts today's reviews")
 assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
 assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
-assert_contains(stats_text, "╭", "stats view keeps the canvas above the analytics")
-assert_buffer_maps(stats_popup, { "q", "<CR>", "r", "p", "e", "R", "a", "s" })
+assert_buffer_maps(stats_popup, { "q", "s" })
 overview.close()
 assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")
 

@@ -11,6 +11,7 @@ CONTENTS                                         *neorg-flashcards-contents*
 6. Scheduling                    |neorg-flashcards-scheduling|
 7. Overview and stats            |neorg-flashcards-overview|
 8. Cloze and typed answers       |neorg-flashcards-cloze|
+9. Lua API                       |neorg-flashcards-lua-api|
 
 ==============================================================================
 SETUP                                               *neorg-flashcards-setup*
@@ -45,10 +46,11 @@ COMMANDS                                         *neorg-flashcards-commands*
                                                          *:NeorgFlashcardAdd*
 :NeorgFlashcardAdd [kind]
         Open the add-card form: an editable scratch buffer with one line per
-        field. Edit the values, save with <C-s> (insert/normal) or <Enter>
-        (normal); the form stays open for the next card, `q` cancels. The card
-        is added to the current `.norg` file, or to `default_file` from any
-        other buffer. Uses `default_kind` when [kind] is omitted.
+        field. `Enter` hops to the next field and saves from the last one,
+        `Tab`/`Shift-Tab` cycle fields, and <C-s> saves from anywhere; the
+        form stays open for the next card until `q`. The card is added to the
+        current `.norg` file, or to `default_file` from any other buffer.
+        Uses `default_kind` when [kind] is omitted.
 
                                                       *:NeorgFlashcardReview*
 :NeorgFlashcardReview
@@ -117,6 +119,27 @@ Review keys:
   e               edit source card
   q               close review
 
+Dashboard keys (left pane; see |neorg-flashcards-overview|):
+
+  j / k           move between cards
+  Enter / r       review the due cards of the selected group
+  a               add a card via the form
+  p               peek at the selected card
+  e               open the card source
+  R               recollect cards
+  s               focus the analytics pane (`s`/`Tab`/`Enter` there jumps back)
+  q               close the dashboard
+
+Form keys:
+
+  Enter           next field; saves from the last field (insert mode)
+  Tab / Shift-Tab cycle fields (insert mode)
+  Ctrl-S          save (insert and normal mode)
+  q / Esc         cancel (normal mode)
+
+All popup, dashboard, and form keys are buffer-local: they exist only while
+those UI elements are open and never touch your global mappings.
+
 ==============================================================================
 CHAPTERS AND COLLECTIONS                    *neorg-flashcards-collections*
 
@@ -179,28 +202,29 @@ Override the knobs via the `scheduling` table in setup; every key is optional:
 ==============================================================================
 OVERVIEW AND STATS                               *neorg-flashcards-overview*
 
-|:NeorgFlashcardOverview| opens a full-page dashboard in its own tab. The top
-is a canvas that groups cards by tag, one glyph per card: red is due, yellow is
-due within a day, green is scheduled, gray is new. Cards with several tags
-appear in each of their groups. Below the canvas, the analytics section shows
-review totals and streak, a 20-week heatmap, and a 7-day due forecast. Keys
-inside the dashboard:
+|:NeorgFlashcardOverview| opens a full-page dashboard in its own tab, side by
+side. The left pane lists cards grouped by tag, one line per card with a
+colored due-state glyph: red is due, yellow is due within a day, green is
+scheduled, gray is new. Cards with several tags appear in each of their
+groups. The right pane shows the analytics: review totals and streak, a
+heatmap that adapts to the pane width, and a 7-day due forecast. Keys inside
+the dashboard:
 
-  h / l           move between cards
-  j / k           move between rows
+  j / k           move between cards
   Enter / r       review the due cards of the selected group in a float on top
-                  of the dashboard; closing it refreshes the canvas
+                  of the dashboard; closing it refreshes both panes
   a               add a card via the form (into `default_file`)
   p               peek at the selected card
   e               open the card source
   R               recollect cards
-  s               jump to the analytics section
-  q               close the tab
+  s               focus the analytics pane (`s`/`Tab`/`Enter` there jumps back)
+  q               close the dashboard (works from either pane)
 
-|:NeorgFlashcardStats| opens the same dashboard scrolled to the analytics.
-Every rating appends one `YYYY-MM-DD HH:MM<Tab>score` line to `reviews.log`
-inside `flashcards_dir`; the file is plain text and can be inspected or deleted
-freely. Closing a review after one or more ratings prints a session summary.
+|:NeorgFlashcardStats| opens the same dashboard with the analytics pane
+focused. Every rating appends one `YYYY-MM-DD HH:MM<Tab>score` line to
+`reviews.log` inside `flashcards_dir`; the file is plain text and can be
+inspected or deleted freely. Closing a review after one or more ratings prints
+a session summary.
 
 ==============================================================================
 CLOZE AND TYPED ANSWERS                            *neorg-flashcards-cloze*
@@ -216,5 +240,42 @@ Before the reveal a marker shows as `[...]`, or `[country]` with a hint; after
 the reveal it unwraps to the plain answer. Pressing `t` during review prompts
 for the answer and compares it against the reveal fields with a UTF-8-aware
 fuzzy match; you still rate the card yourself with 1/2/3.
+
+==============================================================================
+LUA API                                           *neorg-flashcards-lua-api*
+
+Every command is a thin wrapper around a public function, so keymaps and
+custom workflows can call the module directly:
+>
+  local flashcards = require("neorg_flashcards")
+  vim.keymap.set("n", "<leader>ncd", flashcards.review_due,
+    { desc = "Review due flashcards" })
+<
+                                                  *neorg-flashcards-functions*
+setup({opts})             Configure the plugin; see |neorg-flashcards-setup|.
+open_flashcards()         Create or open `default_file`.
+add_kind({kind})          Add-card form targeting the current `.norg` file.
+add_to_default({kind})    Add-card form targeting `default_file`.
+add_japanese()            Compatibility aliases for the japanese preset.
+insert_japanese()
+validate_file()           Validate `@flashcard` blocks in the current buffer.
+review_all()              Review every valid card under `flashcards_dir`.
+review_due()              Review due and new cards, oldest due first.
+review_file()             Review the current file.
+review_tag({tag})         Review one tag (prompts when omitted).
+review_score({score})     Review a score bucket: bad/mid/good/new (prompts
+                          when omitted).
+overview({opts})          Open the dashboard tab; `opts.view = "stats"`
+                          focuses the analytics pane.
+stats()                   Dashboard with the analytics pane focused.
+close_review()            Close the review popup.
+flip_or_next()            Reveal the answer, then advance.
+next_card()               Next card in the review session.
+previous_card()           Previous card in the review session.
+rate_current({score})     Score the current card (1/2/3) and schedule its
+                          next review.
+edit_current_card()       Open the source of the current card.
+type_answer()             Typed-answer mode for the current card.
+help()                    Short in-editor guide.
 
 vim:tw=78:ts=8:ft=help:norl:

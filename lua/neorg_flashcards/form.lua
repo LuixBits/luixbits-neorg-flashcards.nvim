@@ -19,6 +19,37 @@ function M.is_open()
   return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
 end
 
+---Move the cursor to a field, landing after its label.
+function M.goto_field(index)
+  if not M.is_open() or #state.fields == 0 then
+    return
+  end
+  index = math.max(1, math.min(#state.fields, index))
+  vim.api.nvim_win_set_cursor(state.win, { index, #state.fields[index].label })
+end
+
+---<CR> in insert mode: hop to the next field, save from the last one.
+function M.next_field()
+  if not M.is_open() then
+    return
+  end
+  local line = vim.api.nvim_win_get_cursor(state.win)[1]
+  if line >= #state.fields then
+    M.save()
+    return
+  end
+  M.goto_field(line + 1)
+end
+
+---<Tab>/<S-Tab> in insert mode: cycle fields without saving.
+function M.cycle_field(delta)
+  if not M.is_open() or #state.fields == 0 then
+    return
+  end
+  local line = vim.api.nvim_win_get_cursor(state.win)[1]
+  M.goto_field(((line - 1 + delta) % #state.fields) + 1)
+end
+
 local function render_fields()
   local lines = {}
   for _, field in ipairs(state.fields) do
@@ -65,11 +96,11 @@ function M.save()
     return
   end
 
-  -- Stay open for the next card, with cleared fields.
+  -- Stay open for the next card, with cleared fields, ready to type.
   vim.bo[state.buf].modifiable = true
   vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, render_fields())
-  local first = 1
-  vim.api.nvim_win_set_cursor(state.win, { first, #(state.fields[first] and state.fields[first].label or "") })
+  M.goto_field(1)
+  vim.cmd("startinsert!")
 end
 
 function M.open(config, kind, opts)
@@ -107,7 +138,7 @@ function M.open(config, kind, opts)
     border = "rounded",
     title = " Add flashcard (" .. (language.label or kind) .. ") ",
     title_pos = "center",
-    footer = " Ctrl-S save · add another · Esc/q cancel ",
+    footer = " Enter next field · Ctrl-S save · q cancel ",
     footer_pos = "center",
     style = "minimal",
   })
@@ -116,11 +147,17 @@ function M.open(config, kind, opts)
 
   vim.keymap.set({ "n", "i" }, "<C-s>", M.save, { buffer = buf, silent = true, desc = "Save card" })
   vim.keymap.set("n", "<CR>", M.save, { buffer = buf, silent = true, desc = "Save card" })
+  vim.keymap.set("i", "<CR>", M.next_field, { buffer = buf, silent = true, desc = "Next field (save from the last)" })
+  vim.keymap.set("i", "<Tab>", function()
+    M.cycle_field(1)
+  end, { buffer = buf, silent = true, desc = "Next field" })
+  vim.keymap.set("i", "<S-Tab>", function()
+    M.cycle_field(-1)
+  end, { buffer = buf, silent = true, desc = "Previous field" })
   vim.keymap.set("n", "q", M.close, { buffer = buf, silent = true, desc = "Cancel" })
   vim.keymap.set("n", "<Esc>", M.close, { buffer = buf, silent = true, desc = "Cancel" })
 
-  local first_label = state.fields[1] and state.fields[1].label or ""
-  vim.api.nvim_win_set_cursor(state.win, { 1, #first_label })
+  M.goto_field(1)
   vim.cmd("startinsert!")
 
   return true

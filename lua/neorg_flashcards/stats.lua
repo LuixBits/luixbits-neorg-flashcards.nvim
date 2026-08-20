@@ -146,7 +146,8 @@ function M.summary_section(cards, entries, now)
   return lines, spans
 end
 
-function M.heatmap_section(entries, now)
+function M.heatmap_section(entries, now, weeks)
+  weeks = weeks or WEEKS
   local noon = add_days(now, 0)
   local counts = count_by_day(entries)
 
@@ -160,15 +161,15 @@ function M.heatmap_section(entries, now)
   end
 
   -- Columns are weeks (oldest on the left), rows are weekdays.
-  push("  Last " .. WEEKS .. " weeks", "Title")
+  push("  Last " .. weeks .. " weeks", "Title")
   local weekday = os.date("*t", now).wday -- 1 = Sunday
   local monday_offset = (weekday + 5) % 7
-  local first_monday = add_days(noon, -monday_offset - (WEEKS - 1) * 7)
+  local first_monday = add_days(noon, -monday_offset - (weeks - 1) * 7)
 
   local month_header = "       "
   local previous_month = nil
   local carry = 0
-  for column = 0, WEEKS - 1 do
+  for column = 0, weeks - 1 do
     local month = os.date("%b", add_days(first_monday, column * 7))
     if month ~= previous_month then
       month_header = month_header .. month
@@ -184,7 +185,7 @@ function M.heatmap_section(entries, now)
   local weekday_names = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" }
   for row = 0, 6 do
     local line = "  " .. weekday_names[row + 1] .. "  "
-    for column = 0, WEEKS - 1 do
+    for column = 0, weeks - 1 do
       local cell_epoch = add_days(first_monday, column * 7 + row)
       if cell_epoch > noon then
         line = line .. "  "
@@ -207,8 +208,9 @@ function M.heatmap_section(entries, now)
   return lines, spans
 end
 
-function M.forecast_section(cards, now)
+function M.forecast_section(cards, now, width)
   local noon = add_days(now, 0)
+  local max_bar = math.max(4, (width or 44) - 14)
 
   local lines = { "  Due forecast" }
   local spans = {
@@ -225,7 +227,7 @@ function M.forecast_section(cards, now)
         count = count + 1
       end
     end
-    local bar = string.rep("█", math.min(count, 30))
+    local bar = string.rep("█", math.min(count, max_bar))
     local label = offset == 0 and "today" or os.date("%a %d", day_start + 12 * 3600)
     local line = string.format("  %-8s %s %d", label, bar, count)
     table.insert(lines, line)
