@@ -20,6 +20,7 @@ sync account, and no database outside your notes.
 - [Commands](#commands)
 - [Review Keys](#review-keys)
 - [Card Format](#card-format)
+- [Scheduling](#scheduling)
 - [Configuration](#configuration)
 - [Language Presets](#language-presets)
 - [Suggested Keymaps](#suggested-keymaps)
@@ -35,7 +36,9 @@ sync account, and no database outside your notes.
 - Prompt-based card creation with configurable fields.
 - Floating review popup with reveal, next, previous, edit, and quit actions.
 - `1`, `2`, `3` scoring for bad, mid, and good cards.
-- Review all cards, the current file, a tag, or a score bucket.
+- Spaced repetition: ratings schedule the next review via a `due:` field, and
+  bad cards requeue into the current session.
+- Review all cards, due cards, the current file, a tag, or a score bucket.
 - Opt-in Japanese and Chinese presets.
 - Custom schemas for any language or subject.
 - Lazy.nvim and Nix/NVF setup examples.
@@ -265,6 +268,7 @@ comma-separated tag at a time.
   `default_kind`.
 - `:NeorgFlashcardHelp` opens a short in-editor guide.
 - `:NeorgFlashcardReview` reviews all valid cards under `flashcards_dir`.
+- `:NeorgFlashcardReviewDue` reviews only due and new cards, oldest due first.
 - `:NeorgFlashcardReviewFile` reviews valid cards in the current file.
 - `:NeorgFlashcardReviewTag [tag]` reviews cards with a matching `tags:` value.
 - `:NeorgFlashcardReviewScore [bad|mid|good|new]` reviews cards by score.
@@ -288,6 +292,11 @@ normal-mode keys.
 - `e`: open the source card for editing.
 - `q`: close review.
 
+Ratings also schedule the next review: `1` requeues the card later in the same
+session and sets `due:` a few minutes out, `2` keeps the card on at least a
+twice-a-day leash, and `3` pushes it a few ease-scaled days into the future. See
+[Scheduling](#scheduling).
+
 If the source card file is already open and has unsaved edits, ratings update
 that buffer but do not write it automatically. Save the file normally to persist
 both your edits and the rating. Collection reviews read loaded buffers so the
@@ -308,12 +317,34 @@ notes: noun / suru verb
 tags: jlpt vocab
 score: 2
 reviewed: 2026-07-01
+due: 2026-07-02 08:30
+interval: 0.5
+ease: 2.5
 @end
 ```
 
 Only fields marked `required = true` in the language schema are required.
 `score:` and `reviewed:` are maintained by the review UI when you press `1`,
-`2`, or `3`.
+`2`, or `3`. The same rating also maintains `due:`, `interval:`, and `ease:`;
+see [Scheduling](#scheduling).
+
+## Scheduling
+
+Ratings schedule the next review with a small SM-2-style rule set:
+
+- `1` (bad): the card requeues a few positions later in the current session and
+  becomes due again after `scheduling.again_minutes` (default 10 minutes). Its
+  ease drops by 0.2, never below `min_ease` (default 1.3).
+- `2` (mid): the interval grows slowly (`×1.2`), starting at
+  `scheduling.mid_hours` (default 12 hours), so a mid card appears at least
+  twice a day. Ease stays unchanged.
+- `3` (good): the interval multiplies by the card's ease, starting at
+  `scheduling.good_days` (default 3 days). Ease rises by 0.05, up to
+  `max_ease` (default 2.8).
+
+New cards and cards whose `due:` has passed make up
+`:NeorgFlashcardReviewDue`, sorted oldest due first. `:NeorgFlashcardReview`
+still reviews everything — treat it as the cram mode.
 
 ## Configuration
 
@@ -325,6 +356,14 @@ require("neorg_flashcards").setup({
   default_file = vim.fn.expand("~/notes/flashcards/cards.norg"),
   default_kind = nil,
   languages = {},
+  scheduling = {
+    again_minutes = 10,
+    mid_hours = 12,
+    good_days = 3,
+    starting_ease = 2.5,
+    min_ease = 1.3,
+    max_ease = 2.8,
+  },
 })
 ```
 
@@ -334,6 +373,7 @@ require("neorg_flashcards").setup({
 | `default_file` | File opened by `NeorgFlashcardOpen` and used when adding outside a `.norg` buffer. |
 | `default_kind` | Schema used by `NeorgFlashcardAdd` when no kind argument is given. |
 | `languages` | Map of supported card kinds to their schemas. At least one is required for useful cards. |
+| `scheduling` | Spaced-repetition knobs; every key is optional. |
 
 Set `flashcards_dir` and `default_file` together. Changing the directory does
 not silently rewrite the independently configured default file—configuration
@@ -520,6 +560,7 @@ lua/neorg_flashcards/schema.lua   schema lookup, validation, render fields
 lua/neorg_flashcards/parser.lua   @flashcard parsing and collection
 lua/neorg_flashcards/review.lua   review popup and rating actions
 lua/neorg_flashcards/store.lua    score/reviewed writeback
+lua/neorg_flashcards/schedule.lua due-date scheduling rules
 lua/neorg_flashcards/help.lua     short guide popup
 lua/neorg_flashcards/popup.lua    shared floating window helper
 lua/neorg_flashcards/util.lua     shared helpers

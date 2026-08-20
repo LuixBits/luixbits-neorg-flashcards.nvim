@@ -2,6 +2,7 @@ local help = require("neorg_flashcards.help")
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
 local review = require("neorg_flashcards.review")
+local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local util = require("neorg_flashcards.util")
 
@@ -13,6 +14,7 @@ local defaults = {
   default_file = vim.fn.expand("~/notes/flashcards/cards.norg"),
   default_kind = nil,
   languages = vim.deepcopy(schema.default_languages),
+  scheduling = vim.deepcopy(schedule.DEFAULTS),
 }
 
 local config = vim.deepcopy(defaults)
@@ -156,6 +158,19 @@ function M.review_all()
   review.start(cards, errors, "all")
 end
 
+function M.review_due()
+  local cards, errors = parser.collect_flashcards(config)
+  local now = os.time()
+  local due = {}
+  for _, card in ipairs(cards) do
+    if schedule.is_due(card, now) then
+      table.insert(due, card)
+    end
+  end
+
+  review.start(due, errors, "due", "No due flashcards", { sort = "due" })
+end
+
 function M.review_file()
   local cards, errors = parser.valid_cards(config, parser.parse_buffer(0))
   review.start(cards, errors, "file")
@@ -265,6 +280,7 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("NeorgFlashcardAddJapanese", M.add_japanese, {})
   vim.api.nvim_create_user_command("NeorgFlashcardInsertJapanese", M.insert_japanese, {})
   vim.api.nvim_create_user_command("NeorgFlashcardReview", M.review_all, {})
+  vim.api.nvim_create_user_command("NeorgFlashcardReviewDue", M.review_due, {})
   vim.api.nvim_create_user_command("NeorgFlashcardReviewFile", M.review_file, {})
   vim.api.nvim_create_user_command("NeorgFlashcardReviewTag", function(opts_)
     M.review_tag(opts_.args)

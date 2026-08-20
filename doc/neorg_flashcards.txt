@@ -8,6 +8,7 @@ CONTENTS                                         *neorg-flashcards-contents*
 3. Keymaps                       |neorg-flashcards-keymaps|
 4. Chapters and collections      |neorg-flashcards-collections|
 5. Card format                   |neorg-flashcards-card-format|
+6. Scheduling                    |neorg-flashcards-scheduling|
 
 ==============================================================================
 SETUP                                               *neorg-flashcards-setup*
@@ -47,7 +48,13 @@ COMMANDS                                         *neorg-flashcards-commands*
 
                                                       *:NeorgFlashcardReview*
 :NeorgFlashcardReview
-        Review all valid cards under `flashcards_dir`.
+        Review all valid cards under `flashcards_dir`. This is the cram mode;
+        for daily study prefer |:NeorgFlashcardReviewDue|.
+
+                                                   *:NeorgFlashcardReviewDue*
+:NeorgFlashcardReviewDue
+        Review only due and new cards under `flashcards_dir`, sorted oldest
+        due first. See |neorg-flashcards-scheduling|.
 
                                                   *:NeorgFlashcardReviewFile*
 :NeorgFlashcardReviewFile
@@ -88,7 +95,7 @@ the review popup. Example global mappings:
 Review keys:
 
   Space / Enter   reveal answer, then advance
-  1               save score 1 and advance
+  1               save score 1 and advance (requeues the card in this session)
   2               save score 2 and advance
   3               save score 3 and advance
   n               next card
@@ -122,10 +129,37 @@ CARD FORMAT                                   *neorg-flashcards-card-format*
   tags: jlpt vocab
   score: 2
   reviewed: 2026-07-01
+  due: 2026-07-02 08:30
+  interval: 0.5
+  ease: 2.5
   @end
 <
 
 `score:` and `reviewed:` are updated by the review UI when rating with 1, 2,
-or 3.
+or 3. The same rating also maintains `due:` (local `YYYY-MM-DD HH:MM`),
+`interval:` (days), and `ease:`; see |neorg-flashcards-scheduling|.
+
+==============================================================================
+SCHEDULING                                   *neorg-flashcards-scheduling*
+
+Ratings schedule the next review with a small SM-2-style rule set:
+
+  1 (bad)   requeues the card a few positions later in the current session and
+            sets `due:` `scheduling.again_minutes` (default 10 minutes) ahead;
+            ease drops by 0.2, never below `min_ease` (default 1.3).
+  2 (mid)   grows the interval slowly (`* 1.2`), starting at
+            `scheduling.mid_hours` (default 12 hours), so a mid card appears at
+            least twice a day; ease is unchanged.
+  3 (good)  multiplies the interval by the card's ease, starting at
+            `scheduling.good_days` (default 3 days); ease rises by 0.05, up to
+            `max_ease` (default 2.8).
+
+New cards and cards whose `due:` has passed make up |:NeorgFlashcardReviewDue|.
+Override the knobs via the `scheduling` table in setup; every key is optional:
+>
+  require("neorg_flashcards").setup({
+    scheduling = { again_minutes = 15, good_days = 4 },
+  })
+<
 
 vim:tw=78:ts=8:ft=help:norl:

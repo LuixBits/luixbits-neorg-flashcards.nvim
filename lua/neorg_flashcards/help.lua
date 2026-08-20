@@ -61,12 +61,13 @@ function M.open()
     "",
     "Make: :NeorgFlashcardOpen, then :NeorgFlashcardAdd [kind]",
     "Review all: :NeorgFlashcardReview",
+    "Review due: :NeorgFlashcardReviewDue",
     "Review file: :NeorgFlashcardReviewFile",
     "Filter: :NeorgFlashcardReviewTag tag",
     "Score mode: :NeorgFlashcardReviewScore bad|mid|good|new",
     "",
     "Keys: Space reveal/next, n next, p back",
-    "Score: 1 bad, 2 mid, 3 good",
+    "Score: 1 bad (requeues), 2 mid, 3 good",
     "Edit: e source, q close",
   })
 end

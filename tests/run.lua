@@ -3,6 +3,7 @@ vim.opt.runtimepath:prepend(root)
 
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
+local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local store = require("neorg_flashcards.store")
 local flashcards = require("neorg_flashcards")
@@ -70,6 +71,7 @@ for _, command in ipairs({
   "NeorgFlashcardAdd",
   "NeorgFlashcardHelp",
   "NeorgFlashcardReview",
+  "NeorgFlashcardReviewDue",
   "NeorgFlashcardReviewFile",
   "NeorgFlashcardReviewTag",
   "NeorgFlashcardReviewScore",
@@ -387,6 +389,109 @@ local modified_buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, f
 local modified_disk_text = table.concat(vim.fn.readfile(modified_path), "\n")
 assert_contains(modified_buffer_text, "score: 1", "score is applied to the modified buffer")
 assert_true(not modified_disk_text:find("score: 1", 1, true), "score is not written to disk while buffer is modified")
+vim.cmd("silent! bwipeout!")
+
+local fixed_now = os.time({ year = 2026, month = 8, day = 20, hour = 12, min = 0, sec = 0 })
+
+local function updates_map(updates)
+  local map = {}
+  for _, update in ipairs(updates) do
+    map[update.field] = update.value
+  end
+  return map
+end
+
+local good_updates, good_due = schedule.review_updates({ values = {} }, 3, fixed_now)
+local good_map = updates_map(good_updates)
+assert_equal(good_map.score, "3", "rating keeps its score field")
+assert_equal(good_map.interval, "3", "first good rating uses the three-day interval")
+assert_equal(good_map.ease, "2.55", "good rating nudges ease up")
+assert_equal(good_map.reviewed, "2026-08-20", "rating stamps the review date")
+assert_equal(good_due, fixed_now + 3 * 86400, "good rating is due three days out")
+assert_equal(good_map.due, schedule.format_due(fixed_now + 3 * 86400), "due field matches the due epoch")
+
+local grown = updates_map(schedule.review_updates({ values = { interval = "3", ease = "2.5" } }, 3, fixed_now))
+assert_equal(grown.interval, "7.5", "good rating multiplies the interval by ease")
+
+local mid_updates, mid_due = schedule.review_updates({ values = {} }, 2, fixed_now)
+local mid_map = updates_map(mid_updates)
+assert_equal(mid_map.interval, "0.5", "first mid rating uses the twelve-hour interval")
+assert_equal(mid_map.ease, "2.5", "mid rating keeps the starting ease")
+assert_equal(mid_due, fixed_now + 12 * 3600, "mid rating is due twelve hours out")
+
+local mid_grown = updates_map(schedule.review_updates({ values = { interval = "0.5" } }, 2, fixed_now))
+assert_equal(mid_grown.interval, "0.6", "mid rating grows the interval slowly")
+
+local bad_updates, bad_due = schedule.review_updates({ values = {} }, 1, fixed_now)
+local bad_map = updates_map(bad_updates)
+assert_equal(bad_map.interval, "0", "bad rating resets the interval")
+assert_equal(bad_map.ease, "2.3", "bad rating lowers ease")
+assert_equal(bad_due, fixed_now + 600, "bad rating is due again within minutes")
+
+local clamped = updates_map(schedule.review_updates({ values = { ease = "1.3" } }, 1, fixed_now))
+assert_equal(clamped.ease, "1.3", "ease never drops below the minimum")
+
+assert_equal(schedule.parse_due("2026-08-20 12:00"), fixed_now, "datetime due parses")
+assert_equal(
+  schedule.parse_due("2026-08-20"),
+  os.time({ year = 2026, month = 8, day = 20, hour = 0, min = 0, sec = 0 }),
+  "date-only due parses as the start of the day"
+)
+assert_equal(schedule.parse_due(schedule.format_due(fixed_now)), fixed_now, "due format roundtrips")
+assert_equal(schedule.parse_due("garbage"), nil, "garbage due is rejected")
+assert_true(schedule.is_due({ values = { due = "2020-01-01 00:00" } }, fixed_now), "past card is due")
+assert_true(not schedule.is_due({ values = { due = "2999-01-01 00:00" } }, fixed_now), "future card is not due")
+assert_true(schedule.is_due({ values = {} }, fixed_now), "new card is due")
+assert_equal(schedule.due_key({ values = { due = "2026-08-20 12:00" } }), fixed_now, "due key uses the due epoch")
+assert_equal(schedule.due_key({ values = {} }), 0, "new cards sort first by due key")
+
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 過去",
+  "english: past",
+  "due: 2020-01-01 00:00",
+  "@end",
+  "",
+  "@flashcard japanese",
+  "japanese: 未来",
+  "english: future",
+  "due: 2999-01-01 00:00",
+  "@end",
+}, collection_dir .. "/due-check.norg")
+
+vim.cmd("NeorgFlashcardReviewDue")
+local _, due_text = current_popup()
+assert_contains(due_text, "due | 1/3", "due review keeps only due and new cards")
+assert_true(not due_text:find("未来", 1, true), "due review skips cards scheduled in the future")
+flashcards.close_review()
+
+local requeue_path = vim.fn.tempname() .. ".norg"
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 朝",
+  "english: morning",
+  "@end",
+  "",
+  "@flashcard japanese",
+  "japanese: 夜",
+  "english: night",
+  "@end",
+}, requeue_path)
+vim.cmd.edit(vim.fn.fnameescape(requeue_path))
+
+vim.cmd("NeorgFlashcardReviewFile")
+local _, requeue_initial = current_popup()
+assert_contains(requeue_initial, "file | 1/2", "requeue fixture starts with two cards")
+flashcards.rate_current(1)
+local _, requeue_text = current_popup()
+assert_contains(requeue_text, "file | 2/3", "bad rating requeues the card within the session")
+flashcards.close_review()
+
+local requeue_disk = table.concat(vim.fn.readfile(requeue_path), "\n")
+assert_contains(requeue_disk, "score: 1", "bad rating persists the score")
+assert_contains(requeue_disk, "due: ", "bad rating persists a due timestamp")
+assert_contains(requeue_disk, "interval: 0", "bad rating persists the reset interval")
+assert_contains(requeue_disk, "ease: 2.3", "bad rating persists the lowered ease")
 vim.cmd("silent! bwipeout!")
 
 vim.g.neorg_flashcards_tests_passed = true

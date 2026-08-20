@@ -1,4 +1,5 @@
 local popup = require("neorg_flashcards.popup")
+local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local store = require("neorg_flashcards.store")
 local util = require("neorg_flashcards.util")
@@ -71,13 +72,21 @@ local function render()
   local card = state.cards[state.index]
   local front_title, front_value = schema.front(config, card)
   local stats = schema.review_stats(state.cards)
+  local now = os.time()
+  local due_count = 0
+  for _, item in ipairs(state.cards) do
+    if schedule.is_due(item, now) then
+      due_count = due_count + 1
+    end
+  end
   local label = state.label ~= "" and (state.label .. " | ") or ""
   local lines = {
     string.format(
-      "* %s%d/%d | new %d | bad %d | mid %d | good %d",
+      "* %s%d/%d | due %d | new %d | bad %d | mid %d | good %d",
       label,
       state.index,
       #state.cards,
+      due_count,
       stats.new,
       stats.bad,
       stats.medium,
@@ -104,7 +113,7 @@ function M.setup(opts)
   config = opts
 end
 
-function M.start(cards, errors, label, empty_message)
+function M.start(cards, errors, label, empty_message, opts)
   if #errors > 0 then
     util.notify(table.concat(errors, "\n"), vim.log.levels.WARN)
   end
@@ -115,7 +124,14 @@ function M.start(cards, errors, label, empty_message)
     return
   end
 
-  state.cards = util.shuffled(cards)
+  if opts and opts.sort == "due" then
+    table.sort(cards, function(left, right)
+      return schedule.due_key(left) < schedule.due_key(right)
+    end)
+    state.cards = cards
+  else
+    state.cards = util.shuffled(cards)
+  end
   state.index = 1
   state.showing_answer = false
   state.label = label or ""
@@ -165,10 +181,9 @@ function M.rate_current(score)
   end
 
   local card = state.cards[state.index]
-  local ok, message = store.set_card_fields(card, {
-    { field = "score", value = tostring(score) },
-    { field = "reviewed", value = os.date("%Y-%m-%d") },
-  }, { cards = state.cards })
+  local now = os.time()
+  local updates, due = schedule.review_updates(card, score, now, config.scheduling)
+  local ok, message = store.set_card_fields(card, updates, { cards = state.cards })
 
   if not ok then
     util.notify(message, vim.log.levels.ERROR)
@@ -178,6 +193,12 @@ function M.rate_current(score)
   if message then
     util.notify(message, vim.log.levels.WARN)
   end
+
+  if score == 1 then
+    table.insert(state.cards, math.min(state.index + 4, #state.cards + 1), card)
+  end
+
+  util.notify("Next review " .. schedule.humanize(due - now))
 
   M.next()
 end
