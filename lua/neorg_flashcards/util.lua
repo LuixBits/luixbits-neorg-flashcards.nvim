@@ -121,4 +121,47 @@ function M.shuffled(items)
   return result
 end
 
+function M.utf8_chars(text)
+  local chars = {}
+  -- Decimal escapes: LuaJIT (5.1) has no \x string escapes.
+  for char in tostring(text or ""):gmatch("[\1-\127\194-\244][\128-\191]*") do
+    table.insert(chars, char)
+  end
+  return chars
+end
+
+-- Levenshtein distance over UTF-8 characters, not bytes, so multi-byte
+-- answers (e.g. Japanese readings) compare fairly.
+function M.levenshtein(left, right)
+  local a = M.utf8_chars(left)
+  local b = M.utf8_chars(right)
+  local previous = {}
+  for column = 0, #b do
+    previous[column] = column
+  end
+
+  for i = 1, #a do
+    local current = { [0] = i }
+    for j = 1, #b do
+      local cost = a[i] == b[j] and 0 or 1
+      current[j] = math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+    end
+    previous = current
+  end
+
+  return previous[#b]
+end
+
+-- Split a field value into buffer-safe lines (values may embed newlines).
+function M.value_lines(value)
+  local lines = {}
+  for line in (tostring(value or "") .. "\n"):gmatch("(.-)\n") do
+    table.insert(lines, line)
+  end
+  if #lines == 0 then
+    return { "" }
+  end
+  return lines
+end
+
 return M

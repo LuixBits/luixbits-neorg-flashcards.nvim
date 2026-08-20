@@ -65,8 +65,10 @@ function M.open()
     "Review file: :NeorgFlashcardReviewFile",
     "Filter: :NeorgFlashcardReviewTag tag",
     "Score mode: :NeorgFlashcardReviewScore bad|mid|good|new",
+    "Overview: :NeorgFlashcardOverview (canvas by tag)",
+    "Stats: :NeorgFlashcardStats (heatmap)",
     "",
-    "Keys: Space reveal/next, n next, p back",
+    "Keys: Space reveal/next, n next, p back, t type answer",
     "Score: 1 bad (requeues), 2 mid, 3 good",
     "Edit: e source, q close",
   })

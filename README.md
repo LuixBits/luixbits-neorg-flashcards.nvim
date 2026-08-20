@@ -21,6 +21,8 @@ sync account, and no database outside your notes.
 - [Review Keys](#review-keys)
 - [Card Format](#card-format)
 - [Scheduling](#scheduling)
+- [Overview and Stats](#overview-and-stats)
+- [Cloze and Typed Answers](#cloze-and-typed-answers)
 - [Configuration](#configuration)
 - [Language Presets](#language-presets)
 - [Suggested Keymaps](#suggested-keymaps)
@@ -38,6 +40,11 @@ sync account, and no database outside your notes.
 - `1`, `2`, `3` scoring for bad, mid, and good cards.
 - Spaced repetition: ratings schedule the next review via a `due:` field, and
   bad cards requeue into the current session.
+- Tag-grouped overview canvas with per-card due-state colors, peek, and group
+  review (`:NeorgFlashcardOverview`).
+- Stats popup with a review heatmap, streak, and due forecast
+  (`:NeorgFlashcardStats`).
+- Cloze markers (`{{c1::answer}}`) and a typed-answer mode with fuzzy matching.
 - Review all cards, due cards, the current file, a tag, or a score bucket.
 - Opt-in Japanese and Chinese presets.
 - Custom schemas for any language or subject.
@@ -269,6 +276,8 @@ comma-separated tag at a time.
 - `:NeorgFlashcardHelp` opens a short in-editor guide.
 - `:NeorgFlashcardReview` reviews all valid cards under `flashcards_dir`.
 - `:NeorgFlashcardReviewDue` reviews only due and new cards, oldest due first.
+- `:NeorgFlashcardOverview` opens the tag-grouped overview canvas.
+- `:NeorgFlashcardStats` opens the review heatmap and due forecast.
 - `:NeorgFlashcardReviewFile` reviews valid cards in the current file.
 - `:NeorgFlashcardReviewTag [tag]` reviews cards with a matching `tags:` value.
 - `:NeorgFlashcardReviewScore [bad|mid|good|new]` reviews cards by score.
@@ -284,6 +293,7 @@ These mappings exist only inside the review popup; they do not occupy global
 normal-mode keys.
 
 - `Space` / `Enter`: reveal the answer, then advance.
+- `t`: type the answer and check it against the reveal fields.
 - `1`: save `score: 1` and advance.
 - `2`: save `score: 2` and advance.
 - `3`: save `score: 3` and advance.
@@ -345,6 +355,37 @@ Ratings schedule the next review with a small SM-2-style rule set:
 New cards and cards whose `due:` has passed make up
 `:NeorgFlashcardReviewDue`, sorted oldest due first. `:NeorgFlashcardReview`
 still reviews everything — treat it as the cram mode.
+
+## Overview and Stats
+
+`:NeorgFlashcardOverview` opens a canvas that groups cards by tag, one glyph
+per card: red is due, yellow is due within a day, green is scheduled, gray is
+new. Cards with several tags appear in each of their groups.
+
+- `h` / `l`: move between cards, `j` / `k`: move between rows.
+- `Enter` / `r`: review the due cards of the selected group.
+- `p`: peek at the card, `e`: open its source, `R`: recollect, `q`: quit.
+
+`:NeorgFlashcardStats` shows review totals and streak, a 20-week heatmap, and
+a 7-day due forecast. Every rating appends one line to `reviews.log` inside
+`flashcards_dir` — a plain-text ledger you can inspect or delete freely.
+
+## Cloze and Typed Answers
+
+Any field may contain Anki-style cloze markers:
+
+```norg
+@flashcard japanese
+japanese: 東京は{{c1::日本}}の首都です
+english: Tokyo is the capital of {{c1::Japan|country}}
+@end
+```
+
+Before the reveal the marker shows as `[...]`, or `[country]` with a hint;
+after the reveal it unwraps to the plain answer. Pressing `t` during review
+prompts for the answer and compares it against the reveal fields with a
+UTF-8-aware fuzzy match: exact answers, near misses, and wrong answers each
+get distinct feedback, and you still rate the card yourself with `1`/`2`/`3`.
 
 ## Configuration
 
@@ -558,7 +599,9 @@ lua/neorg_flashcards/init.lua     public setup, commands, add/open actions
 lua/neorg_flashcards/presets.lua  bundled language presets
 lua/neorg_flashcards/schema.lua   schema lookup, validation, render fields
 lua/neorg_flashcards/parser.lua   @flashcard parsing and collection
-lua/neorg_flashcards/review.lua   review popup and rating actions
+lua/neorg_flashcards/review.lua   review popup, ratings, cloze, typed answers
+lua/neorg_flashcards/overview.lua tag-grouped overview canvas
+lua/neorg_flashcards/stats.lua    review log, heatmap, and forecast
 lua/neorg_flashcards/store.lua    score/reviewed writeback
 lua/neorg_flashcards/schedule.lua due-date scheduling rules
 lua/neorg_flashcards/help.lua     short guide popup

@@ -1,9 +1,11 @@
 local help = require("neorg_flashcards.help")
+local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
 local review = require("neorg_flashcards.review")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
+local stats = require("neorg_flashcards.stats")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -171,6 +173,20 @@ function M.review_due()
   review.start(due, errors, "due", "No due flashcards", { sort = "due" })
 end
 
+function M.overview()
+  overview.open(function()
+    return parser.collect_flashcards(config)
+  end)
+end
+
+function M.stats()
+  local cards, errors = parser.collect_flashcards(config)
+  if #errors > 0 then
+    util.notify(table.concat(errors, "\n"), vim.log.levels.WARN)
+  end
+  stats.open(cards)
+end
+
 function M.review_file()
   local cards, errors = parser.valid_cards(config, parser.parse_buffer(0))
   review.start(cards, errors, "file")
@@ -256,6 +272,10 @@ function M.edit_current_card()
   review.edit_current()
 end
 
+function M.type_answer()
+  review.type_answer()
+end
+
 function M.help()
   help.open()
 end
@@ -266,7 +286,9 @@ function M.setup(opts)
   config.default_file = vim.fs.normalize(vim.fn.expand(config.default_file))
 
   help.setup(config)
+  overview.setup(config)
   review.setup(config)
+  stats.setup(config)
 
   vim.api.nvim_create_user_command("NeorgFlashcardOpen", M.open_flashcards, {})
   vim.api.nvim_create_user_command("NeorgFlashcardAdd", function(opts_)
@@ -288,6 +310,8 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("NeorgFlashcardReviewScore", function(opts_)
     M.review_score(opts_.args)
   end, { nargs = "?" })
+  vim.api.nvim_create_user_command("NeorgFlashcardOverview", M.overview, {})
+  vim.api.nvim_create_user_command("NeorgFlashcardStats", M.stats, {})
   vim.api.nvim_create_user_command("NeorgFlashcardHelp", M.help, {})
   vim.api.nvim_create_user_command("NeorgFlashcardValidate", M.validate_file, {})
 end

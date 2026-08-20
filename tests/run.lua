@@ -1,10 +1,12 @@
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.runtimepath:prepend(root)
 
+local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
+local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
 local flashcards = require("neorg_flashcards")
 
@@ -75,6 +77,8 @@ for _, command in ipairs({
   "NeorgFlashcardReviewFile",
   "NeorgFlashcardReviewTag",
   "NeorgFlashcardReviewScore",
+  "NeorgFlashcardOverview",
+  "NeorgFlashcardStats",
   "NeorgFlashcardValidate",
 }) do
   assert_equal(vim.fn.exists(":" .. command), 2, command .. " is registered")
@@ -492,6 +496,85 @@ assert_contains(requeue_disk, "score: 1", "bad rating persists the score")
 assert_contains(requeue_disk, "due: ", "bad rating persists a due timestamp")
 assert_contains(requeue_disk, "interval: 0", "bad rating persists the reset interval")
 assert_contains(requeue_disk, "ease: 2.3", "bad rating persists the lowered ease")
+vim.cmd("silent! bwipeout!")
+
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 山",
+  "english: mountain",
+  "tags: nature hiking",
+  "score: 1",
+  "due: 2020-01-01 00:00",
+  "@end",
+  "",
+  "@flashcard japanese",
+  "japanese: 川",
+  "english: river",
+  "tags: nature",
+  "@end",
+}, collection_dir .. "/overview-check.norg")
+
+vim.cmd("NeorgFlashcardOverview")
+local overview_popup, overview_text = current_popup()
+assert_contains(overview_text, "╭", "overview draws group boxes")
+assert_contains(overview_text, "nature", "overview lists the shared tag group")
+assert_contains(overview_text, "hiking", "overview lists the second tag group")
+assert_contains(overview_text, "untagged", "overview groups cards without tags")
+assert_contains(overview_text, "▸", "overview shows the selected card preview")
+assert_contains(overview_text, "● due", "overview shows the color legend")
+assert_buffer_maps(overview_popup, { "q", "h", "l", "j", "k", "<CR>", "p", "e", "R" })
+assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
+
+local overview_cursor = vim.api.nvim_win_get_cursor(0)
+overview.move(1)
+local moved_cursor = vim.api.nvim_win_get_cursor(0)
+assert_true(
+  moved_cursor[1] ~= overview_cursor[1] or moved_cursor[2] ~= overview_cursor[2],
+  "moving the selection repositions the cursor"
+)
+
+overview.move(-1) -- back onto the alphabetically first group (chapter-01)
+overview.review_group()
+local _, group_review_text = current_popup()
+assert_contains(group_review_text, "tag:chapter-01 | 1/1", "overview reviews the selected group")
+flashcards.close_review()
+
+vim.fn.writefile({ os.date("%Y-%m-%d %H:%M") .. "\t3" }, collection_dir .. "/reviews.log")
+vim.cmd("NeorgFlashcardStats")
+local stats_popup, stats_text = current_popup()
+assert_contains(stats_text, "1 reviews total", "stats totals the review log")
+assert_contains(stats_text, "1 today", "stats counts today's reviews")
+assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
+assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
+assert_buffer_maps(stats_popup, { "q" })
+stats.close()
+
+local cloze_path = vim.fn.tempname() .. ".norg"
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 東京は{{c1::日本}}の首都です",
+  "reading: とうきょう",
+  "english: Tokyo is the capital of {{c1::Japan|country}}",
+  "@end",
+}, cloze_path)
+vim.cmd.edit(vim.fn.fnameescape(cloze_path))
+
+vim.cmd("NeorgFlashcardReviewFile")
+local _, cloze_front = current_popup()
+assert_contains(cloze_front, "東京は[...]の首都です", "cloze is masked before the reveal")
+assert_true(not cloze_front:find("日本", 1, true), "cloze hides the answer before the reveal")
+
+local typed_input = vim.ui.input
+vim.ui.input = function(_, callback)
+  callback("とうきょう")
+end
+flashcards.type_answer()
+vim.ui.input = typed_input
+
+local _, cloze_after = current_popup()
+assert_contains(cloze_after, "東京は日本の首都です", "typed answer reveals the unwrapped cloze")
+assert_contains(cloze_after, "Tokyo is the capital of Japan", "hint cloze unwraps after the reveal")
+flashcards.close_review()
 vim.cmd("silent! bwipeout!")
 
 vim.g.neorg_flashcards_tests_passed = true

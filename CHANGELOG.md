@@ -4,6 +4,15 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+- Added `:NeorgFlashcardOverview`, a tag-grouped canvas that paints one colored
+  glyph per card (due, soon, scheduled, new) with keyboard navigation, card
+  peek, group review, and source jump.
+- Added `:NeorgFlashcardStats` with a GitHub-style review heatmap, streak and
+  totals, and a 7-day due forecast; ratings are appended to `reviews.log` in
+  the flashcards directory.
+- Added cloze support (`{{c1::answer}}` / `{{c1::answer|hint}}` are masked
+  before the reveal) and a typed-answer mode (`t` in review) with UTF-8-aware
+  fuzzy matching.
 - Added score-driven scheduling: ratings now maintain `due:`, `interval:`, and
   `ease:` fields, bad cards requeue into the running session, and
   `:NeorgFlashcardReviewDue` studies only due and new cards, oldest due first.

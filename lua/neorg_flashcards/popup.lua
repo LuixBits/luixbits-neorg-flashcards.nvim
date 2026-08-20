@@ -11,14 +11,16 @@ function M.open(state, opts)
   vim.bo[state.buf].filetype = opts.filetype or "norg"
   vim.bo[state.buf].swapfile = false
 
-  local width = math.min(
-    opts.max_width or 84,
-    math.max(opts.min_width or 52, math.floor(vim.o.columns * (opts.width_ratio or 0.72)))
-  )
-  local height = math.min(
-    opts.max_height or 24,
-    math.max(opts.min_height or 10, math.floor(vim.o.lines * (opts.height_ratio or 0.55)))
-  )
+  local width = opts.width
+    or math.min(
+      opts.max_width or 84,
+      math.max(opts.min_width or 52, math.floor(vim.o.columns * (opts.width_ratio or 0.72)))
+    )
+  local height = opts.height
+    or math.min(
+      opts.max_height or 24,
+      math.max(opts.min_height or 10, math.floor(vim.o.lines * (opts.height_ratio or 0.55)))
+    )
   local row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1)
   local col = math.max(0, math.floor((vim.o.columns - width) / 2))
 
