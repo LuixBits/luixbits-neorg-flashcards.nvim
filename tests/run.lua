@@ -1,12 +1,12 @@
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.runtimepath:prepend(root)
 
+local form = require("neorg_flashcards.form")
 local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
-local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
 local flashcards = require("neorg_flashcards")
 
@@ -335,31 +335,27 @@ vim.api.nvim_buf_set_lines(0, 0, -1, false, {
 vim.cmd.write()
 vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-local original_input = vim.ui.input
-local answers = {
-  "机",
-  "つくえ",
-  "desk",
-  "noun",
-  "jlpt furniture",
-}
-local answer_index = 0
-
-vim.ui.input = function(_, callback)
-  answer_index = answer_index + 1
-  callback(answers[answer_index])
-end
-
+local form_target = vim.api.nvim_get_current_buf()
 flashcards.add_kind("")
-vim.ui.input = original_input
-
-assert_equal(answer_index, #answers, "prompt flow requested each configured field")
+local form_buf = vim.api.nvim_get_current_buf()
+assert_true(form_buf ~= form_target, "add opens the form buffer")
+assert_equal(vim.bo[form_buf].buftype, "nofile", "form is a scratch buffer")
+vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, {
+  "Japanese: 机",
+  "Reading: つくえ",
+  "English: desk",
+  "Notes: noun",
+  "Tags: jlpt furniture",
+})
+form.save()
+form.close()
 
 local prompted = table.concat(vim.fn.readfile(prompted_path), "\n")
-assert_contains(prompted, "@flashcard japanese", "prompt flow inserted a Japanese card")
-assert_contains(prompted, "japanese: 机", "prompt flow saved front field")
-assert_contains(prompted, "english: desk", "prompt flow saved required answer field")
-assert_contains(prompted, "tags: jlpt furniture", "prompt flow saved optional tags")
+assert_contains(prompted, "@flashcard japanese", "form flow inserted a Japanese card")
+assert_contains(prompted, "japanese: 机", "form flow saved front field")
+assert_contains(prompted, "english: desk", "form flow saved required answer field")
+assert_contains(prompted, "tags: jlpt furniture", "form flow saved optional tags")
+assert_equal(vim.api.nvim_get_current_buf(), form_target, "closing the form returns to the card file")
 vim.cmd("silent! bwipeout!")
 
 local modified_path = vim.fn.tempname() .. ".norg"
@@ -522,7 +518,7 @@ assert_contains(overview_text, "hiking", "overview lists the second tag group")
 assert_contains(overview_text, "untagged", "overview groups cards without tags")
 assert_contains(overview_text, "▸", "overview shows the selected card preview")
 assert_contains(overview_text, "● due", "overview shows the color legend")
-assert_buffer_maps(overview_popup, { "q", "h", "l", "j", "k", "<CR>", "p", "e", "R" })
+assert_buffer_maps(overview_popup, { "q", "h", "l", "j", "k", "<CR>", "r", "p", "e", "R", "a", "s" })
 assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
 
 local overview_cursor = vim.api.nvim_win_get_cursor(0)
@@ -549,8 +545,10 @@ assert_contains(stats_text, "1 reviews total", "stats totals the review log")
 assert_contains(stats_text, "1 today", "stats counts today's reviews")
 assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
 assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
-assert_buffer_maps(stats_popup, { "q", "r" })
-stats.close()
+assert_contains(stats_text, "╭", "stats view keeps the canvas above the analytics")
+assert_buffer_maps(stats_popup, { "q", "<CR>", "r", "p", "e", "R", "a", "s" })
+overview.close()
+assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")
 
 local cloze_path = vim.fn.tempname() .. ".norg"
 vim.fn.writefile({
@@ -619,6 +617,28 @@ for _, message in ipairs(notifications) do
 end
 assert_true(summary_seen, "closing a review summarizes the session")
 vim.cmd("silent! bwipeout!")
+
+-- add_to_default goes through the form and appends to the default file; it
+-- runs last against the first collection because it writes a card into
+-- flashcards_dir/inbox.
+flashcards.add_to_default("")
+local default_form_buf = vim.api.nvim_get_current_buf()
+assert_equal(vim.bo[default_form_buf].buftype, "nofile", "add_to_default opens the form")
+vim.api.nvim_buf_set_lines(default_form_buf, 0, -1, false, {
+  "Japanese: 猫",
+  "Reading: ねこ",
+  "English: cat",
+  "Notes: ",
+  "Tags: animals",
+})
+form.save()
+form.close()
+
+local default_text = table.concat(vim.fn.readfile(config.default_file), "\n")
+assert_contains(default_text, "* Flashcards", "default file keeps its heading")
+assert_contains(default_text, "@flashcard japanese", "dashboard add writes a card to the default file")
+assert_contains(default_text, "japanese: 猫", "dashboard add saved the front field")
+assert_contains(default_text, "tags: animals", "dashboard add saved the tags")
 
 local future_dir = vim.fn.tempname()
 vim.fn.mkdir(future_dir, "p")

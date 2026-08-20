@@ -12,19 +12,19 @@ local function field_line(lines, start_line, end_line, field)
   return nil
 end
 
-local function source_lines(card)
-  if util.isempty(card.path) then
+local function source_lines(path)
+  if util.isempty(path) then
     return nil, nil, "Cannot save rating for an unsaved buffer"
   end
 
-  local bufnr = util.loaded_buffer(card.path)
+  local bufnr = util.loaded_buffer(path)
   if bufnr then
     return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), bufnr, nil
   end
 
-  local ok, lines = pcall(vim.fn.readfile, card.path)
+  local ok, lines = pcall(vim.fn.readfile, path)
   if not ok then
-    return nil, nil, string.format("%s: could not read file", card.path)
+    return nil, nil, string.format("%s: could not read file", path)
   end
 
   return lines, nil, nil
@@ -110,7 +110,7 @@ local function update_source_versions(cards, updated_card, lines)
 end
 
 function M.set_card_fields(card, updates, opts)
-  local lines, bufnr, err = source_lines(card)
+  local lines, bufnr, err = source_lines(card.path)
   if not lines then
     return false, err, false
   end
@@ -146,6 +146,17 @@ function M.set_card_fields(card, updates, opts)
   update_source_versions(opts and opts.cards, card, final_lines)
 
   return true, message, persisted
+end
+
+-- Buffer-aware file access shared with the add-card flow: reads go through a
+-- loaded buffer when one exists, writes persist unless that buffer has unsaved
+-- edits.
+function M.read_lines(path)
+  return source_lines(path)
+end
+
+function M.write_lines(path, bufnr, lines)
+  return write_source_lines(path, bufnr, lines)
 end
 
 return M

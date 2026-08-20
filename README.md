@@ -5,9 +5,10 @@
 Local flashcards for Neorg notes in Neovim.
 
 `luixbits-neorg-flashcards.nvim` keeps language-learning cards in plain `.norg`
-files, then gives you a small prompt for creating cards and a floating review
-UI for studying them. It is intentionally local-first: no Anki, no server, no
-sync account, and no database outside your notes.
+files, then gives you a full-page dashboard for browsing, adding, and analyzing
+them plus a floating review UI for studying them. It is intentionally
+local-first: no Anki, no server, no sync account, and no database outside your
+notes.
 
 ## Index
 
@@ -35,15 +36,17 @@ sync account, and no database outside your notes.
 ## Features
 
 - Plain-text flashcards stored as Neorg `@flashcard` blocks.
-- Prompt-based card creation with configurable fields.
+- Form-based card creation: an editable scratch buffer, one line per field
+  (`<C-s>` saves, the form stays open for the next card).
 - Floating review popup with reveal, next, previous, edit, and quit actions.
 - `1`, `2`, `3` scoring for bad, mid, and good cards.
 - Spaced repetition: ratings schedule the next review via a `due:` field, and
   bad cards requeue into the current session.
-- Tag-grouped overview canvas with per-card due-state colors, peek, and group
-  review (`:NeorgFlashcardOverview`).
-- Stats popup with a review heatmap, streak, and due forecast
-  (`:NeorgFlashcardStats`).
+- Full-page dashboard tab: tag-grouped card canvas with due-state colors,
+  peek, group review, add-card form, and the analytics section in one place
+  (`:NeorgFlashcardOverview`).
+- Analytics with a review heatmap, streak, and due forecast
+  (`:NeorgFlashcardStats` jumps straight to it).
 - Cloze markers (`{{c1::answer}}`) and a typed-answer mode with fuzzy matching.
 - Review all cards, due cards, the current file, a tag, or a score bucket.
 - Opt-in Japanese and Chinese presets.
@@ -270,14 +273,14 @@ comma-separated tag at a time.
 ## Commands
 
 - `:NeorgFlashcardOpen` creates or opens `default_file`.
-- `:NeorgFlashcardAdd [kind]` adds to the current `.norg` file. From another
-  buffer, it opens `default_file` first. Without `[kind]`, it uses
-  `default_kind`.
+- `:NeorgFlashcardAdd [kind]` opens the add-card form for the current `.norg`
+  file. From another buffer, it targets `default_file` first. Without `[kind]`,
+  it uses `default_kind`.
 - `:NeorgFlashcardHelp` opens a short in-editor guide.
 - `:NeorgFlashcardReview` reviews all valid cards under `flashcards_dir`.
 - `:NeorgFlashcardReviewDue` reviews only due and new cards, oldest due first.
-- `:NeorgFlashcardOverview` opens the tag-grouped overview canvas.
-- `:NeorgFlashcardStats` opens the review heatmap and due forecast.
+- `:NeorgFlashcardOverview` opens the full-page dashboard tab.
+- `:NeorgFlashcardStats` opens the dashboard at the analytics section.
 - `:NeorgFlashcardReviewFile` reviews valid cards in the current file.
 - `:NeorgFlashcardReviewTag [tag]` reviews cards with a matching `tags:` value.
 - `:NeorgFlashcardReviewScore [bad|mid|good|new]` reviews cards by score.
@@ -359,19 +362,22 @@ still reviews everything — treat it as the cram mode.
 
 ## Overview and Stats
 
-`:NeorgFlashcardOverview` opens a canvas that groups cards by tag, one glyph
-per card: red is due, yellow is due within a day, green is scheduled, gray is
-new. Cards with several tags appear in each of their groups.
+`:NeorgFlashcardOverview` opens a full-page dashboard in its own tab. The top
+is a canvas that groups cards by tag, one glyph per card: red is due, yellow is
+due within a day, green is scheduled, gray is new. Cards with several tags
+appear in each of their groups. Below the canvas, the analytics section shows
+review totals and streak, a 20-week heatmap, and a 7-day due forecast.
 
 - `h` / `l`: move between cards, `j` / `k`: move between rows.
-- `Enter` / `r`: review the due cards of the selected group; closing that
-  review returns you to the canvas, refreshed.
-- `p`: peek at the card, `e`: open its source, `R`: recollect, `q`: quit.
+- `Enter` / `r`: review the due cards of the selected group in a floating
+  review on top of the dashboard; closing that review refreshes the canvas.
+- `a`: add a card via the form (into `default_file`), `p`: peek at the card,
+  `e`: open its source, `R`: recollect, `s`: jump to the analytics section,
+  `q`: close the tab.
 
-`:NeorgFlashcardStats` shows review totals and streak, a 20-week heatmap, and
-a 7-day due forecast. Press `r` inside it to jump straight into the due
-review. Every rating appends one line to `reviews.log` inside
-`flashcards_dir` — a plain-text ledger you can inspect or delete freely.
+`:NeorgFlashcardStats` opens the same dashboard scrolled to the analytics.
+Every rating appends one line to `reviews.log` inside `flashcards_dir` — a
+plain-text ledger you can inspect or delete freely.
 
 ## Cloze and Typed Answers
 
@@ -603,9 +609,10 @@ lua/neorg_flashcards/presets.lua  bundled language presets
 lua/neorg_flashcards/schema.lua   schema lookup, validation, render fields
 lua/neorg_flashcards/parser.lua   @flashcard parsing and collection
 lua/neorg_flashcards/review.lua   review popup, ratings, cloze, typed answers
-lua/neorg_flashcards/overview.lua tag-grouped overview canvas
-lua/neorg_flashcards/stats.lua    review log, heatmap, and forecast
-lua/neorg_flashcards/store.lua    score/reviewed writeback
+lua/neorg_flashcards/overview.lua full-page dashboard tab (canvas + analytics)
+lua/neorg_flashcards/stats.lua    review log, heatmap, and forecast sections
+lua/neorg_flashcards/form.lua     editable add-card form
+lua/neorg_flashcards/store.lua    score/reviewed writeback, file access
 lua/neorg_flashcards/schedule.lua due-date scheduling rules
 lua/neorg_flashcards/help.lua     short guide popup
 lua/neorg_flashcards/popup.lua    shared floating window helper

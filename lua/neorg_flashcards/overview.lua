@@ -6,6 +6,7 @@ local popup = require("neorg_flashcards.popup")
 local review = require("neorg_flashcards.review")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
+local stats = require("neorg_flashcards.stats")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -24,18 +25,22 @@ local HIGHLIGHTS = {
   title = "NeorgFlashcardsGroupTitle",
   muted = "NeorgFlashcardsMuted",
   selected = "NeorgFlashcardsSelected",
+  heading = "NeorgFlashcardsHeading",
 }
 
 local config = {}
+local handlers = {}
 local provider = nil
 local ns = vim.api.nvim_create_namespace("neorg_flashcards_overview")
 
 local state = {
   buf = nil,
   win = nil,
+  tab = nil,
   groups = {},
   cells = {},
   sel = 1,
+  analytics_line = nil,
 }
 
 local peek = {
@@ -52,6 +57,7 @@ local function define_highlights()
   vim.api.nvim_set_hl(0, HIGHLIGHTS.title, { link = "Title", default = true })
   vim.api.nvim_set_hl(0, HIGHLIGHTS.muted, { link = "Comment", default = true })
   vim.api.nvim_set_hl(0, HIGHLIGHTS.selected, { reverse = true, bold = true, default = true })
+  vim.api.nvim_set_hl(0, HIGHLIGHTS.heading, { link = "Title", default = true })
 end
 
 local function card_visual(card, now)
@@ -206,7 +212,7 @@ end
 
 local function build()
   local now = os.time()
-  local width = state.width
+  local width = M.is_open() and vim.api.nvim_win_get_width(state.win) or 80
 
   -- Build the box body first so the header preview can reference the freshly
   -- computed cells (the selection is clamped against the new cell list).
@@ -309,12 +315,12 @@ local function build()
   -- groups), the selected-card preview, and the color legend.
   local total_due = 0
   local seen = {}
-  local total_cards = 0
+  local unique = {}
   for _, group in ipairs(state.groups) do
     for _, card in ipairs(group.cards) do
       if not seen[card] then
         seen[card] = true
-        total_cards = total_cards + 1
+        table.insert(unique, card)
         if schedule.is_due(card, now) then
           total_due = total_due + 1
         end
@@ -324,7 +330,7 @@ local function build()
 
   local header_offset = 4
   local lines = {
-    string.format("  %d cards · %d groups · %d due", total_cards, #state.groups, total_due),
+    string.format("  %d cards · %d groups · %d due", #unique, #state.groups, total_due),
     preview_line(selected),
     string.format("  %s due   %s soon   %s scheduled   %s new", GLYPH, GLYPH, GLYPH, GLYPH),
     "",
@@ -359,6 +365,35 @@ local function build()
   for _, line in ipairs(body_lines) do
     table.insert(lines, line)
   end
+
+  -- Analytics section below the canvas, composed from the stats builders.
+  local function stitch(section_lines, section_spans)
+    local offset = #lines
+    for _, line in ipairs(section_lines) do
+      table.insert(lines, line)
+    end
+    for _, span in ipairs(section_spans) do
+      table.insert(spans, {
+        line = span.line + offset,
+        start_col = span.start_col,
+        end_col = span.end_col,
+        hl = span.hl,
+      })
+    end
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, "  Analytics")
+  state.analytics_line = #lines
+  table.insert(spans, { line = #lines, start_col = 0, end_col = -1, hl = HIGHLIGHTS.heading })
+  table.insert(lines, "")
+
+  local entries = stats.read_log()
+  stitch(stats.summary_section(unique, entries, now))
+  table.insert(lines, "")
+  stitch(stats.heatmap_section(entries, now))
+  table.insert(lines, "")
+  stitch(stats.forecast_section(unique, now))
 
   return lines, spans, cells
 end
@@ -473,14 +508,11 @@ function M.review_group()
     return
   end
 
+  -- The review float opens on top of the hub; closing it just refreshes.
   local name = cell.group.name
-  local sel = state.sel
-  M.close()
   review.start(due, {}, "tag:" .. name, nil, {
     on_close = function()
-      if provider then
-        M.open(provider, sel)
-      end
+      M.refresh()
     end,
   })
 end
@@ -497,7 +529,7 @@ function M.edit_card()
 end
 
 function M.refresh()
-  if not provider then
+  if not provider or not M.is_open() then
     return
   end
 
@@ -509,9 +541,29 @@ function M.refresh()
   render()
 end
 
+function M.is_open()
+  return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
+end
+
 function M.close()
   popup.close(peek)
-  popup.close(state)
+
+  if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+    vim.api.nvim_buf_delete(state.buf, { force = true })
+  end
+  state.buf = nil
+  state.win = nil
+
+  if state.tab and vim.api.nvim_tabpage_is_valid(state.tab) and #vim.api.nvim_list_tabpages() > 1 then
+    pcall(vim.cmd, "tabclose " .. vim.api.nvim_tabpage_get_number(state.tab))
+  end
+  state.tab = nil
+end
+
+function M.jump_stats()
+  if M.is_open() and state.analytics_line then
+    vim.api.nvim_win_set_cursor(state.win, { state.analytics_line, 0 })
+  end
 end
 
 local function move_by(delta)
@@ -526,7 +578,16 @@ local function move_vertically(direction)
   end
 end
 
-function M.open(collect, sel)
+local function add_card()
+  if handlers.on_add then
+    handlers.on_add()
+  else
+    util.notify("Adding cards is not configured", vim.log.levels.WARN)
+  end
+end
+
+function M.open(collect, opts)
+  opts = opts or {}
   provider = collect
   local cards, errors = collect()
   if errors and #errors > 0 then
@@ -534,15 +595,24 @@ function M.open(collect, sel)
   end
 
   state.groups = group_cards(cards, os.time())
-  state.sel = sel or 1
-  state.width = math.max(64, math.min(124, math.floor(vim.o.columns * 0.94)))
+  state.sel = opts.sel or 1
 
-  popup.open(state, {
-    title = " Flashcard overview ",
-    footer = " h/l move  j/k row  ⏎ review group  p peek  e edit  R refresh  q quit ",
-    width = state.width,
-    height = math.max(18, math.min(44, math.floor(vim.o.lines * 0.9))),
-    maps = {
+  if not M.is_open() then
+    vim.cmd("tabnew")
+    state.tab = vim.api.nvim_get_current_tabpage()
+    state.win = vim.api.nvim_get_current_win()
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[buf].buftype = "nofile"
+    vim.bo[buf].bufhidden = "wipe"
+    vim.bo[buf].filetype = "norg"
+    vim.bo[buf].swapfile = false
+    state.buf = buf
+    vim.api.nvim_win_set_buf(state.win, buf)
+
+    vim.wo[state.win].winbar = " ⏎ review group · a add card · p peek · e edit · R refresh · s stats · q quit"
+
+    local maps = {
       { "q", M.close, "Close overview" },
       { "<Esc>", M.close, "Close overview" },
       { "h", move_by(-1), "Previous card" },
@@ -558,15 +628,35 @@ function M.open(collect, sel)
       { "p", M.peek, "Peek at card" },
       { "e", M.edit_card, "Edit card source" },
       { "R", M.refresh, "Recollect cards" },
-    },
-  })
+      { "a", add_card, "Add a flashcard" },
+      { "s", M.jump_stats, "Jump to analytics" },
+    }
+    for _, map in ipairs(maps) do
+      vim.keymap.set("n", map[1], map[2], { buffer = buf, silent = true, nowait = true, desc = map[3] })
+    end
+  end
 
   render()
+
+  if opts.view == "stats" then
+    M.jump_stats()
+  end
 end
 
-function M.setup(opts)
+function M.setup(opts, extra_handlers)
   config = opts or {}
+  handlers = extra_handlers or {}
   define_highlights()
+
+  local group = vim.api.nvim_create_augroup("neorg_flashcards_overview", { clear = true })
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = group,
+    callback = function()
+      if M.is_open() then
+        render()
+      end
+    end,
+  })
 end
 
 return M

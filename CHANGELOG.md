@@ -4,18 +4,23 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
-- Added `:NeorgFlashcardOverview`, a tag-grouped canvas that paints one colored
-  glyph per card (due, soon, scheduled, new) with keyboard navigation, card
-  peek, group review, and source jump.
-- Added `:NeorgFlashcardStats` with a GitHub-style review heatmap, streak and
-  totals, and a 7-day due forecast; ratings are appended to `reviews.log` in
-  the flashcards directory.
+- Added `:NeorgFlashcardOverview`, a full-page dashboard tab whose tag-grouped
+  canvas paints one colored glyph per card (due, soon, scheduled, new) with
+  keyboard navigation, card peek, group review in a float on top of the page,
+  source jump, and an `a` key that adds cards straight from the dashboard.
+- Added `:NeorgFlashcardStats`, which opens the dashboard scrolled to its
+  analytics section: a GitHub-style review heatmap, streak and totals, and a
+  7-day due forecast; ratings are appended to `reviews.log` in the flashcards
+  directory.
+- Replaced the sequential `vim.ui.input` prompts of `:NeorgFlashcardAdd` with
+  an editable form buffer: one field per line, `<C-s>` saves and keeps the
+  form open for the next card.
 - Added cloze support (`{{c1::answer}}` / `{{c1::answer|hint}}` are masked
   before the reveal) and a typed-answer mode (`t` in review) with UTF-8-aware
   fuzzy matching.
 - Reviews print a session summary on quit, group reviews from the overview
-  return to the refreshed canvas, the stats popup can jump straight into the
-  due review with `r`, and an empty due review hints at the next due time.
+  refresh the canvas underneath when they close, and an empty due review hints
+  at the next due time.
 - Added score-driven scheduling: ratings now maintain `due:`, `interval:`, and
   `ease:` fields, bad cards requeue into the running session, and
   `:NeorgFlashcardReviewDue` studies only due and new cards, oldest due first.

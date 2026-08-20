@@ -44,9 +44,11 @@ COMMANDS                                         *neorg-flashcards-commands*
 
                                                          *:NeorgFlashcardAdd*
 :NeorgFlashcardAdd [kind]
-        Prompt for a new card. Adds to the current `.norg` file, or opens
-        `default_file` from any other buffer. Uses `default_kind` when [kind]
-        is omitted.
+        Open the add-card form: an editable scratch buffer with one line per
+        field. Edit the values, save with <C-s> (insert/normal) or <Enter>
+        (normal); the form stays open for the next card, `q` cancels. The card
+        is added to the current `.norg` file, or to `default_file` from any
+        other buffer. Uses `default_kind` when [kind] is omitted.
 
                                                       *:NeorgFlashcardReview*
 :NeorgFlashcardReview
@@ -72,11 +74,12 @@ COMMANDS                                         *neorg-flashcards-commands*
 
                                                   *:NeorgFlashcardOverview*
 :NeorgFlashcardOverview
-        Open the tag-grouped overview canvas. See |neorg-flashcards-overview|.
+        Open the full-page dashboard tab. See |neorg-flashcards-overview|.
 
                                                      *:NeorgFlashcardStats*
 :NeorgFlashcardStats
-        Open the review heatmap and due forecast. See |neorg-flashcards-overview|.
+        Open the dashboard at the analytics section.
+        See |neorg-flashcards-overview|.
 
                                                     *:NeorgFlashcardValidate*
 :NeorgFlashcardValidate
@@ -176,24 +179,27 @@ Override the knobs via the `scheduling` table in setup; every key is optional:
 ==============================================================================
 OVERVIEW AND STATS                               *neorg-flashcards-overview*
 
-|:NeorgFlashcardOverview| opens a canvas that groups cards by tag, one glyph
-per card: red is due, yellow is due within a day, green is scheduled, gray is
-new. Cards with several tags appear in each of their groups. Keys inside the
-canvas:
+|:NeorgFlashcardOverview| opens a full-page dashboard in its own tab. The top
+is a canvas that groups cards by tag, one glyph per card: red is due, yellow is
+due within a day, green is scheduled, gray is new. Cards with several tags
+appear in each of their groups. Below the canvas, the analytics section shows
+review totals and streak, a 20-week heatmap, and a 7-day due forecast. Keys
+inside the dashboard:
 
   h / l           move between cards
   j / k           move between rows
-  Enter / r       review the due cards of the selected group; closing that
-                  review returns to the refreshed canvas
+  Enter / r       review the due cards of the selected group in a float on top
+                  of the dashboard; closing it refreshes the canvas
+  a               add a card via the form (into `default_file`)
   p               peek at the selected card
   e               open the card source
   R               recollect cards
-  q               quit
+  s               jump to the analytics section
+  q               close the tab
 
-|:NeorgFlashcardStats| shows review totals and streak, a 20-week heatmap, and
-a 7-day due forecast. Press `r` inside it to start the due review. Every
-rating appends one `YYYY-MM-DD HH:MM<Tab>score` line to `reviews.log` inside
-`flashcards_dir`; the file is plain text and can be inspected or deleted
+|:NeorgFlashcardStats| opens the same dashboard scrolled to the analytics.
+Every rating appends one `YYYY-MM-DD HH:MM<Tab>score` line to `reviews.log`
+inside `flashcards_dir`; the file is plain text and can be inspected or deleted
 freely. Closing a review after one or more ratings prints a session summary.
 
 ==============================================================================

@@ -1,7 +1,7 @@
--- Review log and stats popup: per-day review counts rendered as a
--- GitHub-style heatmap, a streak counter, and a 7-day due forecast.
+-- Review log plus stats computations. The UI is a set of section builders
+-- returning lines and highlight spans; the overview page stitches them into
+-- its analytics section.
 
-local popup = require("neorg_flashcards.popup")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local util = require("neorg_flashcards.util")
@@ -19,12 +19,6 @@ local HEAT = {
 }
 
 local config = {}
-local ns = vim.api.nvim_create_namespace("neorg_flashcards_stats")
-
-local state = {
-  buf = nil,
-  win = nil,
-}
 
 local function define_highlights()
   vim.api.nvim_set_hl(0, HEAT[0], { link = "NonText", default = true })
@@ -93,22 +87,21 @@ local function heat_level(count)
   return 4
 end
 
-function M.close()
-  popup.close(state)
-end
-
-function M.open(cards, opts)
-  local now = os.time()
-  local noon = add_days(now, 0)
-  local today_key = day_key(now)
-
+local function count_by_day(entries)
   local counts = {}
-  local total_reviews = 0
-  for _, entry in ipairs(M.read_log()) do
+  for _, entry in ipairs(entries) do
     local key = day_key(entry.epoch)
     counts[key] = (counts[key] or 0) + 1
-    total_reviews = total_reviews + 1
   end
+  return counts
+end
+
+-- Sections return `lines, spans` with spans relative to the section start, so
+-- callers can stitch them into a larger page at any offset.
+
+function M.summary_section(cards, entries, now)
+  local noon = add_days(now, 0)
+  local counts = count_by_day(entries)
 
   local streak = 0
   for offset = 0, 3650 do
@@ -134,20 +127,8 @@ function M.open(cards, opts)
     end
   end
 
-  local lines = {}
-  local spans = {}
-  local function push(line, hl)
-    table.insert(lines, line)
-    if hl then
-      table.insert(spans, { line = #lines, start_col = 0, end_col = -1, hl = hl })
-    end
-  end
-
-  push(
-    string.format("  %d reviews total · %d today · %d day streak", total_reviews, counts[today_key] or 0, streak),
-    "Title"
-  )
-  push(
+  local lines = {
+    string.format("  %d reviews total · %d today · %d day streak", #entries, counts[day_key(now)] or 0, streak),
     string.format(
       "  %d cards · %d due now · %d new · %d bad · %d mid · %d good",
       #cards,
@@ -157,11 +138,28 @@ function M.open(cards, opts)
       score_counts[2],
       score_counts[3]
     ),
-    "Comment"
-  )
-  push("")
+  }
+  local spans = {
+    { line = 1, start_col = 0, end_col = -1, hl = "Title" },
+    { line = 2, start_col = 0, end_col = -1, hl = "Comment" },
+  }
+  return lines, spans
+end
 
-  -- Heatmap, oldest week on the left. Columns are weeks, rows are weekdays.
+function M.heatmap_section(entries, now)
+  local noon = add_days(now, 0)
+  local counts = count_by_day(entries)
+
+  local lines = {}
+  local spans = {}
+  local function push(line, hl)
+    table.insert(lines, line)
+    if hl then
+      table.insert(spans, { line = #lines, start_col = 0, end_col = -1, hl = hl })
+    end
+  end
+
+  -- Columns are weeks (oldest on the left), rows are weekdays.
   push("  Last " .. WEEKS .. " weeks", "Title")
   local weekday = os.date("*t", now).wday -- 1 = Sunday
   local monday_offset = (weekday + 5) % 7
@@ -205,9 +203,18 @@ function M.open(cards, opts)
     end
     push(line)
   end
-  push("")
 
-  push("  Due forecast", "Title")
+  return lines, spans
+end
+
+function M.forecast_section(cards, now)
+  local noon = add_days(now, 0)
+
+  local lines = { "  Due forecast" }
+  local spans = {
+    { line = 1, start_col = 0, end_col = -1, hl = "Title" },
+  }
+
   for offset = 0, 6 do
     local day_start = add_days(noon, offset) - 12 * 3600
     local day_end = add_days(noon, offset + 1) - 12 * 3600
@@ -233,34 +240,7 @@ function M.open(cards, opts)
     end
   end
 
-  local maps = {
-    { "q", M.close, "Close stats" },
-    { "<Esc>", M.close, "Close stats" },
-  }
-  if opts and opts.review_due then
-    table.insert(maps, {
-      "r",
-      function()
-        M.close()
-        opts.review_due()
-      end,
-      "Review due cards",
-    })
-  end
-
-  popup.open(state, {
-    title = " Flashcard stats ",
-    footer = (opts and opts.review_due) and " r review due  q quit " or " q quit ",
-    width = math.min(72, math.max(56, vim.o.columns - 8)),
-    height = math.min(#lines, math.max(12, vim.o.lines - 5)),
-    maps = maps,
-  })
-
-  popup.set_lines(state, lines)
-  vim.api.nvim_buf_clear_namespace(state.buf, ns, 0, -1)
-  for _, span in ipairs(spans) do
-    vim.api.nvim_buf_add_highlight(state.buf, ns, span.hl, span.line - 1, span.start_col, span.end_col)
-  end
+  return lines, spans
 end
 
 function M.setup(opts)

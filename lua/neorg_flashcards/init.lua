@@ -1,3 +1,4 @@
+local form = require("neorg_flashcards.form")
 local help = require("neorg_flashcards.help")
 local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
@@ -6,6 +7,7 @@ local review = require("neorg_flashcards.review")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local stats = require("neorg_flashcards.stats")
+local store = require("neorg_flashcards.store")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -43,50 +45,61 @@ local function ensure_editable_flashcard_buffer()
   return true
 end
 
-local function prompt_sequence(prompts, done)
-  local values = {}
+---Insert a card into a .norg buffer and persist it.
+---@param kind string
+---@param values table<string, string>
+---@param append boolean append at the end instead of above the cursor
+---@param target_buf number|nil
+local function insert_card(kind, values, append, target_buf)
+  target_buf = target_buf or vim.api.nvim_get_current_buf()
 
-  local function ask(index)
-    local prompt = prompts[index]
-    if not prompt then
-      done(values)
-      return
-    end
-
-    vim.ui.input({
-      prompt = prompt.label,
-      default = prompt.default or "",
-    }, function(input)
-      if input == nil then
-        util.notify("Flashcard cancelled", vim.log.levels.WARN)
-        return
-      end
-
-      values[prompt.key] = util.trim(input)
-      if prompt.required and util.isempty(values[prompt.key]) then
-        util.notify(prompt.label .. " is required", vim.log.levels.ERROR)
-        ask(index)
-        return
-      end
-
-      ask(index + 1)
-    end)
+  local row
+  local win = vim.fn.bufwinid(target_buf)
+  if append or win == -1 then
+    row = vim.api.nvim_buf_line_count(target_buf)
+  else
+    row = vim.api.nvim_win_get_cursor(win)[1] - 1
   end
 
-  ask(1)
+  vim.api.nvim_buf_set_lines(target_buf, row, row, false, schema.card_lines(config, kind, values))
+  vim.api.nvim_buf_call(target_buf, function()
+    vim.cmd("silent write")
+  end)
+  util.notify("Flashcard saved")
+  overview.refresh()
 end
 
-local function insert_card(kind, values, append)
-  local row
-  if append then
-    row = vim.api.nvim_buf_line_count(0)
-  else
-    row = vim.api.nvim_win_get_cursor(0)[1] - 1
+---Append a card to the default file, creating it when missing.
+---@return boolean ok
+local function append_to_default(kind, values)
+  ensure_default_file_dir()
+
+  local path = config.default_file
+  if vim.fn.filereadable(path) == 0 and not util.loaded_buffer(path) then
+    vim.fn.writefile({ "* Flashcards", "" }, path)
   end
 
-  vim.api.nvim_buf_set_lines(0, row, row, false, schema.card_lines(config, kind, values))
-  vim.cmd.write()
-  util.notify("Flashcard saved")
+  local lines, bufnr, err = store.read_lines(path)
+  if not lines then
+    util.notify(err, vim.log.levels.ERROR)
+    return false
+  end
+
+  local card_lines = schema.card_lines(config, kind, values)
+  if #lines > 0 and lines[#lines] == "" and card_lines[1] == "" then
+    table.remove(card_lines, 1)
+  end
+  vim.list_extend(lines, card_lines)
+
+  local ok, write_err = store.write_lines(path, bufnr, lines)
+  if not ok then
+    util.notify(tostring(write_err), vim.log.levels.ERROR)
+    return false
+  end
+
+  util.notify("Flashcard saved to " .. vim.fn.fnamemodify(path, ":t"))
+  overview.refresh()
+  return true
 end
 
 local function add_card(kind)
@@ -96,9 +109,13 @@ local function add_card(kind)
   end
 
   local append = ensure_editable_flashcard_buffer()
-  prompt_sequence(schema.prompt_fields(config, kind), function(values)
-    insert_card(kind, values, append)
-  end)
+  local target_buf = vim.api.nvim_get_current_buf()
+
+  form.open(config, kind, {
+    on_save = function(values)
+      insert_card(kind, values, append, target_buf)
+    end,
+  })
 end
 
 function M.open_flashcards()
@@ -134,6 +151,32 @@ end
 
 function M.add_japanese()
   M.add_kind("japanese")
+end
+
+---Add a card straight to the default file, no matter which buffer is current.
+---Used by the overview's `a` key. Falls back to default_kind.
+---@param kind string|nil
+function M.add_to_default(kind)
+  kind = util.trim(kind or "")
+  if kind == "" then
+    kind = util.trim(config.default_kind or "")
+  end
+
+  if kind == "" then
+    util.notify("No flashcard kind given and default_kind is not configured", vim.log.levels.ERROR)
+    return
+  end
+
+  if not schema.for_kind(config, kind) then
+    util.notify("Unsupported flashcard kind: " .. kind, vim.log.levels.ERROR)
+    return
+  end
+
+  form.open(config, kind, {
+    on_save = function(values)
+      return append_to_default(kind, values)
+    end,
+  })
 end
 
 function M.insert_japanese()
@@ -179,18 +222,14 @@ function M.review_due()
   review.start(due, errors, "due", empty_message, { sort = "due" })
 end
 
-function M.overview()
+function M.overview(opts)
   overview.open(function()
     return parser.collect_flashcards(config)
-  end)
+  end, opts)
 end
 
 function M.stats()
-  local cards, errors = parser.collect_flashcards(config)
-  if #errors > 0 then
-    util.notify(table.concat(errors, "\n"), vim.log.levels.WARN)
-  end
-  stats.open(cards, { review_due = M.review_due })
+  M.overview({ view = "stats" })
 end
 
 function M.review_file()
@@ -292,7 +331,11 @@ function M.setup(opts)
   config.default_file = vim.fs.normalize(vim.fn.expand(config.default_file))
 
   help.setup(config)
-  overview.setup(config)
+  overview.setup(config, {
+    on_add = function()
+      M.add_to_default("")
+    end,
+  })
   review.setup(config)
   stats.setup(config)
 
