@@ -183,16 +183,18 @@ canvas:
 
   h / l           move between cards
   j / k           move between rows
-  Enter / r       review the due cards of the selected group
+  Enter / r       review the due cards of the selected group; closing that
+                  review returns to the refreshed canvas
   p               peek at the selected card
   e               open the card source
   R               recollect cards
   q               quit
 
 |:NeorgFlashcardStats| shows review totals and streak, a 20-week heatmap, and
-a 7-day due forecast. Every rating appends one `YYYY-MM-DD HH:MM<Tab>score`
-line to `reviews.log` inside `flashcards_dir`; the file is plain text and can
-be inspected or deleted freely.
+a 7-day due forecast. Press `r` inside it to start the due review. Every
+rating appends one `YYYY-MM-DD HH:MM<Tab>score` line to `reviews.log` inside
+`flashcards_dir`; the file is plain text and can be inspected or deleted
+freely. Closing a review after one or more ratings prints a session summary.
 
 ==============================================================================
 CLOZE AND TYPED ANSWERS                            *neorg-flashcards-cloze*

@@ -538,6 +538,9 @@ overview.review_group()
 local _, group_review_text = current_popup()
 assert_contains(group_review_text, "tag:chapter-01 | 1/1", "overview reviews the selected group")
 flashcards.close_review()
+local _, canvas_text = current_popup()
+assert_contains(canvas_text, "▸", "closing the group review returns to the overview canvas")
+overview.close()
 
 vim.fn.writefile({ os.date("%Y-%m-%d %H:%M") .. "\t3" }, collection_dir .. "/reviews.log")
 vim.cmd("NeorgFlashcardStats")
@@ -546,7 +549,7 @@ assert_contains(stats_text, "1 reviews total", "stats totals the review log")
 assert_contains(stats_text, "1 today", "stats counts today's reviews")
 assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
 assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
-assert_buffer_maps(stats_popup, { "q" })
+assert_buffer_maps(stats_popup, { "q", "r" })
 stats.close()
 
 local cloze_path = vim.fn.tempname() .. ".norg"
@@ -576,6 +579,79 @@ assert_contains(cloze_after, "東京は日本の首都です", "typed answer rev
 assert_contains(cloze_after, "Tokyo is the capital of Japan", "hint cloze unwraps after the reveal")
 flashcards.close_review()
 vim.cmd("silent! bwipeout!")
+
+assert_equal(
+  schedule.next_due({ { values = { due = "2999-01-01 00:00" } }, { values = {} } }, fixed_now),
+  schedule.parse_due("2999-01-01 00:00"),
+  "next due finds the earliest future timestamp"
+)
+assert_equal(
+  schedule.next_due({ { values = { due = "2020-01-01 00:00" } } }, fixed_now),
+  nil,
+  "next due ignores past-due cards"
+)
+
+local summary_path = vim.fn.tempname() .. ".norg"
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 森",
+  "english: forest",
+  "@end",
+}, summary_path)
+vim.cmd.edit(vim.fn.fnameescape(summary_path))
+
+local notifications = {}
+local notify_original = vim.notify
+vim.notify = function(message)
+  table.insert(notifications, tostring(message))
+end
+
+vim.cmd("NeorgFlashcardReviewFile")
+flashcards.rate_current(3)
+flashcards.close_review()
+vim.notify = notify_original
+
+local summary_seen = false
+for _, message in ipairs(notifications) do
+  if message:find("Session: 1 reviewed", 1, true) then
+    summary_seen = true
+  end
+end
+assert_true(summary_seen, "closing a review summarizes the session")
+vim.cmd("silent! bwipeout!")
+
+local future_dir = vim.fn.tempname()
+vim.fn.mkdir(future_dir, "p")
+vim.fn.writefile({
+  "@flashcard japanese",
+  "japanese: 明日",
+  "english: tomorrow",
+  "due: 2999-01-01 00:00",
+  "@end",
+}, future_dir .. "/cards.norg")
+
+flashcards.setup({
+  flashcards_dir = future_dir,
+  default_file = future_dir .. "/cards.norg",
+  default_kind = "japanese",
+  languages = presets.only("japanese"),
+})
+
+local hints = {}
+local hint_original = vim.notify
+vim.notify = function(message)
+  table.insert(hints, tostring(message))
+end
+vim.cmd("NeorgFlashcardReviewDue")
+vim.notify = hint_original
+
+local hint_seen = false
+for _, message in ipairs(hints) do
+  if message:find("next at 2999-01-01", 1, true) then
+    hint_seen = true
+  end
+end
+assert_true(hint_seen, "empty due review hints at the next due time")
 
 vim.g.neorg_flashcards_tests_passed = true
 print("neorg_flashcards tests passed")

@@ -8,6 +8,11 @@ local util = require("neorg_flashcards.util")
 local M = {}
 
 local config = {}
+
+local function fresh_session()
+  return { total = 0, [1] = 0, [2] = 0, [3] = 0 }
+end
+
 local state = {
   cards = {},
   index = 1,
@@ -15,6 +20,8 @@ local state = {
   label = "",
   buf = nil,
   win = nil,
+  session = fresh_session(),
+  on_close = nil,
 }
 
 local footer = " 1! bad  2~ mid  3✓ good  ⏎/Space flip  t⌨ type  n→ next  p← prev  e✎ edit  q× quit "
@@ -159,11 +166,32 @@ function M.start(cards, errors, label, empty_message, opts)
   state.index = 1
   state.showing_answer = false
   state.label = label or ""
+  state.session = fresh_session()
+  state.on_close = opts and opts.on_close or nil
   render()
 end
 
 function M.close()
   popup.close(state)
+
+  if state.session.total > 0 then
+    util.notify(
+      string.format(
+        "Session: %d reviewed · %d bad · %d mid · %d good",
+        state.session.total,
+        state.session[1],
+        state.session[2],
+        state.session[3]
+      )
+    )
+  end
+  state.session = fresh_session()
+
+  local on_close = state.on_close
+  state.on_close = nil
+  if on_close then
+    on_close()
+  end
 end
 
 function M.flip_or_next()
@@ -219,6 +247,8 @@ function M.rate_current(score)
   end
 
   stats.log_review(score)
+  state.session.total = state.session.total + 1
+  state.session[score] = state.session[score] + 1
 
   if score == 1 then
     table.insert(state.cards, math.min(state.index + 4, #state.cards + 1), card)
@@ -234,8 +264,11 @@ function M.edit_current()
     return
   end
 
+  -- Editing leaves the review flow entirely: no session summary, no on_close.
   local card = state.cards[state.index]
-  M.close()
+  popup.close(state)
+  state.session = fresh_session()
+  state.on_close = nil
   vim.cmd.edit(util.fname(card.path))
   vim.api.nvim_win_set_cursor(0, { card.start_line, 0 })
 end

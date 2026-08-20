@@ -305,7 +305,8 @@ normal-mode keys.
 Ratings also schedule the next review: `1` requeues the card later in the same
 session and sets `due:` a few minutes out, `2` keeps the card on at least a
 twice-a-day leash, and `3` pushes it a few ease-scaled days into the future. See
-[Scheduling](#scheduling).
+[Scheduling](#scheduling). Quitting a review after one or more ratings prints a
+short session summary.
 
 If the source card file is already open and has unsaved edits, ratings update
 that buffer but do not write it automatically. Save the file normally to persist
@@ -363,11 +364,13 @@ per card: red is due, yellow is due within a day, green is scheduled, gray is
 new. Cards with several tags appear in each of their groups.
 
 - `h` / `l`: move between cards, `j` / `k`: move between rows.
-- `Enter` / `r`: review the due cards of the selected group.
+- `Enter` / `r`: review the due cards of the selected group; closing that
+  review returns you to the canvas, refreshed.
 - `p`: peek at the card, `e`: open its source, `R`: recollect, `q`: quit.
 
 `:NeorgFlashcardStats` shows review totals and streak, a 20-week heatmap, and
-a 7-day due forecast. Every rating appends one line to `reviews.log` inside
+a 7-day due forecast. Press `r` inside it to jump straight into the due
+review. Every rating appends one line to `reviews.log` inside
 `flashcards_dir` — a plain-text ledger you can inspect or delete freely.
 
 ## Cloze and Typed Answers

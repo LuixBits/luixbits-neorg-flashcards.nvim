@@ -97,7 +97,7 @@ function M.close()
   popup.close(state)
 end
 
-function M.open(cards)
+function M.open(cards, opts)
   local now = os.time()
   local noon = add_days(now, 0)
   local today_key = day_key(now)
@@ -233,15 +233,27 @@ function M.open(cards)
     end
   end
 
+  local maps = {
+    { "q", M.close, "Close stats" },
+    { "<Esc>", M.close, "Close stats" },
+  }
+  if opts and opts.review_due then
+    table.insert(maps, {
+      "r",
+      function()
+        M.close()
+        opts.review_due()
+      end,
+      "Review due cards",
+    })
+  end
+
   popup.open(state, {
     title = " Flashcard stats ",
-    footer = " q quit ",
+    footer = (opts and opts.review_due) and " r review due  q quit " or " q quit ",
     width = math.min(72, math.max(56, vim.o.columns - 8)),
     height = math.min(#lines, math.max(12, vim.o.lines - 5)),
-    maps = {
-      { "q", M.close, "Close stats" },
-      { "<Esc>", M.close, "Close stats" },
-    },
+    maps = maps,
   })
 
   popup.set_lines(state, lines)

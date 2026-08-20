@@ -87,6 +87,18 @@ function M.due_key(card)
   return M.parse_due((card and card.values) and card.values.due) or 0
 end
 
+-- Earliest future due epoch across the collection, for "next review at" hints.
+function M.next_due(cards, now)
+  local best = nil
+  for _, card in ipairs(cards or {}) do
+    local due = M.parse_due(card.values and card.values.due)
+    if due and due > now and (not best or due < best) then
+      best = due
+    end
+  end
+  return best
+end
+
 function M.humanize(seconds)
   if seconds < 3600 then
     return string.format("in %d min", math.max(1, math.floor(seconds / 60 + 0.5)))

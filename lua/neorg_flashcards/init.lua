@@ -170,7 +170,13 @@ function M.review_due()
     end
   end
 
-  review.start(due, errors, "due", "No due flashcards", { sort = "due" })
+  local empty_message = "No due flashcards"
+  local next_due = schedule.next_due(cards, now)
+  if next_due then
+    empty_message = empty_message .. " — next at " .. schedule.format_due(next_due)
+  end
+
+  review.start(due, errors, "due", empty_message, { sort = "due" })
 end
 
 function M.overview()
@@ -184,7 +190,7 @@ function M.stats()
   if #errors > 0 then
     util.notify(table.concat(errors, "\n"), vim.log.levels.WARN)
   end
-  stats.open(cards)
+  stats.open(cards, { review_due = M.review_due })
 end
 
 function M.review_file()

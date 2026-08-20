@@ -474,8 +474,15 @@ function M.review_group()
   end
 
   local name = cell.group.name
+  local sel = state.sel
   M.close()
-  review.start(due, {}, "tag:" .. name)
+  review.start(due, {}, "tag:" .. name, nil, {
+    on_close = function()
+      if provider then
+        M.open(provider, sel)
+      end
+    end,
+  })
 end
 
 function M.edit_card()
@@ -507,7 +514,19 @@ function M.close()
   popup.close(state)
 end
 
-function M.open(collect)
+local function move_by(delta)
+  return function()
+    M.move(delta)
+  end
+end
+
+local function move_vertically(direction)
+  return function()
+    M.move_vertical(direction)
+  end
+end
+
+function M.open(collect, sel)
   provider = collect
   local cards, errors = collect()
   if errors and #errors > 0 then
@@ -515,7 +534,7 @@ function M.open(collect)
   end
 
   state.groups = group_cards(cards, os.time())
-  state.sel = 1
+  state.sel = sel or 1
   state.width = math.max(64, math.min(124, math.floor(vim.o.columns * 0.94)))
 
   popup.open(state, {
@@ -526,14 +545,14 @@ function M.open(collect)
     maps = {
       { "q", M.close, "Close overview" },
       { "<Esc>", M.close, "Close overview" },
-      { "h", M.wrap_move(-1), "Previous card" },
-      { "<Left>", M.wrap_move(-1), "Previous card" },
-      { "l", M.wrap_move(1), "Next card" },
-      { "<Right>", M.wrap_move(1), "Next card" },
-      { "j", M.wrap_vertical(1), "Card below" },
-      { "<Down>", M.wrap_vertical(1), "Card below" },
-      { "k", M.wrap_vertical(-1), "Card above" },
-      { "<Up>", M.wrap_vertical(-1), "Card above" },
+      { "h", move_by(-1), "Previous card" },
+      { "<Left>", move_by(-1), "Previous card" },
+      { "l", move_by(1), "Next card" },
+      { "<Right>", move_by(1), "Next card" },
+      { "j", move_vertically(1), "Card below" },
+      { "<Down>", move_vertically(1), "Card below" },
+      { "k", move_vertically(-1), "Card above" },
+      { "<Up>", move_vertically(-1), "Card above" },
       { "<CR>", M.review_group, "Review due cards in group" },
       { "r", M.review_group, "Review due cards in group" },
       { "p", M.peek, "Peek at card" },
@@ -543,18 +562,6 @@ function M.open(collect)
   })
 
   render()
-end
-
-function M.wrap_move(delta)
-  return function()
-    M.move(delta)
-  end
-end
-
-function M.wrap_vertical(direction)
-  return function()
-    M.move_vertical(direction)
-  end
 end
 
 function M.setup(opts)
