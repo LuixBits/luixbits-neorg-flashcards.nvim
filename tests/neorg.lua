@@ -18,6 +18,16 @@ flashcards.setup({
   languages = presets.only("japanese"),
 })
 
+assert(vim.fn.exists(":Flashcards") == 2, "unified :Flashcards command was not registered")
+vim.cmd("Flashcards cards")
+local overview = require("neorg_flashcards.overview")
+assert(overview.current_view() == "cards", "unified command did not open the Cards page")
+assert(#vim.api.nvim_tabpage_list_wins(0) == 2, "hub did not create its two native Neovim panes")
+local hub_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+assert(hub_text:find(" Cards", 1, true), "Cards page was not rendered with Neorg installed")
+assert(vim.bo.filetype == "norg", "hub scratch buffer does not use the norg filetype")
+overview.close()
+
 vim.cmd.edit(vim.fn.fnameescape(cards))
 assert(vim.bo.filetype == "norg", "Neorg did not detect the norg filetype")
 local parser_ok, parser_or_error = pcall(vim.treesitter.get_parser, 0, "norg")

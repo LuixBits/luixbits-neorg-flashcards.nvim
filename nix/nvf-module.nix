@@ -65,7 +65,16 @@ let
 
   key = suffix: "${cfg.keymaps.prefix}${suffix}";
 
-  keymaps = [
+  hubKeymaps = [
+    {
+      mode = "n";
+      key = cfg.keymaps.prefix;
+      action = "<cmd>Flashcards<CR>";
+      desc = "Open flashcards";
+    }
+  ];
+
+  legacyKeymaps = [
     {
       mode = "n";
       key = key "o";
@@ -115,6 +124,8 @@ let
       desc = "Validate flashcards";
     }
   ];
+
+  keymaps = if cfg.keymaps.mode == "legacy" then legacyKeymaps else hubKeymaps;
 in
 {
   options.programs.nvf.neorg-flashcards = {
@@ -158,10 +169,25 @@ in
     keymaps = {
       enable = mkEnableOption "default luixbits-neorg-flashcards.nvim keymaps";
 
+      mode = mkOption {
+        type = types.enum [
+          "hub"
+          "legacy"
+        ];
+        default = "hub";
+        description = ''
+          Keymap layout. `hub` maps the prefix itself to the unified
+          `:Flashcards` dashboard. `legacy` keeps the older command-per-key
+          group below the prefix.
+        '';
+      };
+
       prefix = mkOption {
         type = types.str;
         default = "<leader>nc";
-        description = "Prefix used when `keymaps.enable` is true.";
+        description = ''
+          Exact dashboard key in hub mode, or the group prefix in legacy mode.
+        '';
       };
 
       registerWhichKey = mkOption {
@@ -177,7 +203,9 @@ in
       startPlugins = [ cfg.package ];
       luaConfigRC.neorg-flashcards = setupLua;
       keymaps = mkIf cfg.keymaps.enable keymaps;
-      binds.whichKey.register = mkIf (cfg.keymaps.enable && cfg.keymaps.registerWhichKey) {
+      binds.whichKey.register = mkIf (
+        cfg.keymaps.enable && cfg.keymaps.registerWhichKey && cfg.keymaps.mode == "legacy"
+      ) {
         ${cfg.keymaps.prefix} = "+Cards";
       };
     };

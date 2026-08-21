@@ -20,7 +20,8 @@ require("neorg_flashcards").setup({
   languages = presets.only("japanese"),
 })
 
-vim.cmd("NeorgFlashcardOpen")
+assert(vim.fn.exists(":Flashcards") == 2, "unified command was not registered")
+vim.cmd("Flashcards open")
 
 local current_file = vim.api.nvim_buf_get_name(0)
 local expected_file = vim.fs.normalize(vim.fn.resolve("$TMP/notes/flashcards/cards.norg"))
@@ -44,7 +45,7 @@ vim.api.nvim_buf_set_lines(0, 0, -1, false, {
   "@end",
 })
 vim.cmd.write()
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 
 local popup = vim.api.nvim_get_current_buf()
 if vim.bo[popup].buftype ~= "nofile" or vim.bo[popup].filetype ~= "norg" then

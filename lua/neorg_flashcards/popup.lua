@@ -21,6 +21,8 @@ function M.open(state, opts)
       opts.max_height or 24,
       math.max(opts.min_height or 10, math.floor(vim.o.lines * (opts.height_ratio or 0.55)))
     )
+  width = math.max(1, math.min(width, vim.o.columns - 4))
+  height = math.max(1, math.min(height, vim.o.lines - 4))
   local row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1)
   local col = math.max(0, math.floor((vim.o.columns - width) / 2))
 

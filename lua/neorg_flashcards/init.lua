@@ -1,5 +1,7 @@
 local form = require("neorg_flashcards.form")
 local help = require("neorg_flashcards.help")
+local health = require("neorg_flashcards.health")
+local history = require("neorg_flashcards.history")
 local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
 local presets = require("neorg_flashcards.presets")
@@ -19,9 +21,27 @@ local defaults = {
   default_kind = nil,
   languages = vim.deepcopy(schema.default_languages),
   scheduling = vim.deepcopy(schedule.DEFAULTS),
+  leech_threshold = 8,
 }
 
 local config = vim.deepcopy(defaults)
+local pending_history = {}
+-- Failed persisted events are kept in independent FIFO queues per history
+-- destination. A stale or read-only path must not block reviews after setup()
+-- switches the plugin to another collection.
+local failed_history = {}
+
+local command_routes = {
+  "overview",
+  "cards",
+  "stats",
+  "review",
+  "add",
+  "open",
+  "check",
+  "migrate",
+  "help",
+}
 
 local function ensure_flashcards_dir()
   vim.fn.mkdir(config.flashcards_dir, "p")
@@ -97,7 +117,11 @@ local function append_to_default(kind, values)
     return false
   end
 
-  util.notify("Flashcard saved to " .. vim.fn.fnamemodify(path, ":t"))
+  if write_err then
+    util.notify(write_err, vim.log.levels.WARN)
+  else
+    util.notify("Flashcard saved to " .. vim.fn.fnamemodify(path, ":t"))
+  end
   overview.refresh()
   return true
 end
@@ -198,9 +222,37 @@ function M.validate_file()
   end
 end
 
+function M.validate_collection()
+  local cards, errors = parser.collect_flashcards(config)
+  local issues = health.inspect(config, cards)
+  local counts = health.counts(issues)
+  local messages = vim.deepcopy(errors)
+  local _, history_errors = history.read(config)
+  vim.list_extend(messages, history_errors)
+  for _, item in ipairs(issues) do
+    table.insert(messages, health.format(config, item))
+  end
+
+  if #messages == 0 then
+    util.notify(string.format("Collection healthy: %d valid flashcard(s)", #cards))
+    return true, cards, issues
+  end
+
+  local level = (#errors > 0 or counts.error > 0) and vim.log.levels.ERROR or vim.log.levels.WARN
+  util.notify(table.concat(messages, "\n"), level)
+  return level ~= vim.log.levels.ERROR, cards, issues, errors
+end
+
 function M.review_all()
   local cards, errors = parser.collect_flashcards(config)
-  review.start(cards, errors, "all")
+  local active = {}
+  local now = os.time()
+  for _, card in ipairs(cards) do
+    if schedule.is_available(card, now) then
+      table.insert(active, card)
+    end
+  end
+  review.start(active, errors, "all", "No active flashcards")
 end
 
 function M.review_due()
@@ -232,9 +284,75 @@ function M.stats()
   M.overview({ view = "stats" })
 end
 
+function M.cards()
+  M.overview({ view = "cards" })
+end
+
+-- Validate the current file against every card identity in the collection.
+-- Without the wider scope, an ID duplicated in another file could still enter
+-- review history through `review file` even though collection review correctly
+-- quarantines both copies.
+local function current_file_review_cards()
+  local current_cards = parser.parse_buffer(0)
+  local current_set = {}
+  for _, card in ipairs(current_cards) do
+    current_set[card] = true
+  end
+
+  local current_path = util.canonical_path(vim.api.nvim_buf_get_name(0))
+  local collection_cards, collection_errors, collection_invalid = parser.collect_flashcards(config)
+  local unreadable_sources = {}
+  for _, message in ipairs(collection_errors or {}) do
+    if tostring(message):find("could not read file", 1, true) then
+      table.insert(unreadable_sources, message)
+    end
+  end
+  if #unreadable_sources > 0 then
+    return {}, unreadable_sources
+  end
+  local identity_scope = {}
+  local function add_other_file(card)
+    if not card then
+      return
+    end
+    local card_path = util.canonical_path(card.path)
+    if current_path == "" or card_path ~= current_path then
+      table.insert(identity_scope, card)
+    end
+  end
+  for _, card in ipairs(collection_cards or {}) do
+    add_other_file(card)
+  end
+  for _, descriptor in ipairs(collection_invalid or {}) do
+    add_other_file(descriptor.card)
+  end
+  vim.list_extend(identity_scope, current_cards)
+
+  local safe, _, invalid = parser.valid_cards(config, identity_scope)
+  local selected, errors = {}, {}
+  for _, card in ipairs(safe) do
+    if current_set[card] then
+      table.insert(selected, card)
+    end
+  end
+  for _, descriptor in ipairs(invalid) do
+    if current_set[descriptor.card] then
+      table.insert(errors, string.format("%s: %s", descriptor.source, table.concat(descriptor.messages, ", ")))
+    end
+  end
+  return selected, errors
+end
+
 function M.review_file()
-  local cards, errors = parser.valid_cards(config, parser.parse_buffer(0))
-  review.start(cards, errors, "file")
+  local cards, errors = current_file_review_cards()
+  local active = {}
+  local now = os.time()
+  for _, card in ipairs(cards) do
+    if schedule.is_available(card, now) then
+      table.insert(active, card)
+    end
+  end
+  review.start(active, errors, "file", "No active flashcards in this file")
 end
 
 function M.review_tag(tag)
@@ -253,8 +371,9 @@ function M.review_tag(tag)
 
   local cards, errors = parser.collect_flashcards(config)
   local filtered = {}
+  local now = os.time()
   for _, card in ipairs(cards) do
-    if schema.card_has_tag(card, tag) then
+    if schedule.is_available(card, now) and schema.card_has_tag(card, tag) then
       table.insert(filtered, card)
     end
   end
@@ -284,8 +403,9 @@ function M.review_score(score)
 
   local cards, errors = parser.collect_flashcards(config)
   local filtered = {}
+  local now = os.time()
   for _, card in ipairs(cards) do
-    if filter.matches(card) then
+    if schedule.is_available(card, now) and filter.matches(card) then
       table.insert(filtered, card)
     end
   end
@@ -321,8 +441,219 @@ function M.type_answer()
   review.type_answer()
 end
 
+function M.hint_current()
+  review.hint()
+end
+
+function M.undo_last_rating()
+  return review.undo_last()
+end
+
+function M.bury_current()
+  return review.bury_current()
+end
+
+function M.suspend_current()
+  return review.suspend_current()
+end
+
+function M.get_review_state()
+  return review.get_session_state()
+end
+
 function M.help()
   help.open()
+end
+
+local function notify_migration_errors(result)
+  local errors = (result and result.errors) or { "Unknown card ID migration error" }
+  util.notify(table.concat(errors, "\n"), vim.log.levels.ERROR)
+end
+
+local function apply_id_migration()
+  local ok, result = parser.migrate_ids(config)
+  if not ok then
+    notify_migration_errors(result)
+    return false, result
+  end
+
+  local pending = result.pending_buffers or 0
+  local suffix = pending > 0 and string.format("; %d modified buffer(s) still need saving", pending) or ""
+  util.notify(
+    string.format("Assigned stable IDs to %d card(s) across %d file(s)%s", result.assigned, result.files, suffix)
+  )
+  overview.refresh()
+  return true, result
+end
+
+---Preview and confirm the one-time stable-ID migration for legacy cards.
+---@param opts table|nil `{ dry_run = true }` only previews; `{ apply = true }`
+---applies without the interactive confirmation (useful to embedding callers).
+function M.migrate_ids(opts)
+  opts = opts or {}
+  local ok, preview = parser.migrate_ids(config, { dry_run = true })
+  if not ok then
+    notify_migration_errors(preview)
+    return false, preview
+  end
+
+  if preview.planned == 0 then
+    util.notify(string.format("All %d flashcard(s) already have stable IDs", preview.total))
+    return true, preview
+  end
+  if opts.dry_run then
+    return true, preview
+  end
+  if opts.apply then
+    return apply_id_migration()
+  end
+
+  vim.ui.select({ "Migrate " .. preview.planned .. " cards", "Cancel" }, {
+    prompt = string.format("Add stable IDs to %d legacy card(s) across the collection?", preview.planned),
+  }, function(choice)
+    if choice and choice:match("^Migrate") then
+      apply_id_migration()
+    else
+      util.notify("Card ID migration cancelled", vim.log.levels.WARN)
+    end
+  end)
+  return true, preview
+end
+
+local function update_card(card, updates, success_message, cards)
+  if not card then
+    return false, "No flashcard selected"
+  end
+  local ok, message = store.set_card_fields(card, updates, { cards = cards or { card } })
+  if not ok then
+    util.notify(message, vim.log.levels.ERROR)
+    return false, message
+  end
+  if message then
+    util.notify(message, vim.log.levels.WARN)
+  elseif success_message then
+    util.notify(success_message)
+  end
+  overview.refresh()
+  return true, message
+end
+
+local function next_day(now)
+  local date = os.date("*t", now or os.time())
+  return os.time({
+    year = date.year,
+    month = date.month,
+    day = date.day + 1,
+    hour = 0,
+    min = 0,
+    sec = 0,
+  })
+end
+
+function M.toggle_suspend(card, context)
+  local status = schedule.card_status(card, os.time(), config.scheduling)
+  local suspended = status.availability ~= "suspended"
+  return update_card(
+    card,
+    { { field = "availability", value = suspended and "suspended" or "active" } },
+    suspended and "Flashcard suspended" or "Flashcard resumed",
+    context and context.cards
+  )
+end
+
+function M.bury_card(card, context)
+  return update_card(card, {
+    { field = "availability", value = "buried" },
+    { field = "available_at", value = schedule.format_due(next_day()) },
+  }, "Flashcard buried until tomorrow", context and context.cards)
+end
+
+function M.toggle_bury(card, context)
+  local status = schedule.card_status(card, os.time(), config.scheduling)
+  if status.availability == "buried" then
+    return update_card(card, {
+      { field = "availability", value = "active" },
+      { field = "available_at", value = "" },
+    }, "Flashcard unburied", context and context.cards)
+  end
+  return M.bury_card(card, context)
+end
+
+function M.open_card(card)
+  if not card or util.isempty(card.path) then
+    M.open_flashcards()
+    return
+  end
+  overview.close()
+  vim.cmd.edit(util.fname(card.path))
+  vim.api.nvim_win_set_cursor(0, { card.start_line, 0 })
+end
+
+local function command_words(args)
+  return vim.split(util.trim(args or ""), "%s+", { trimempty = true })
+end
+
+---Single discoverable command surface. The longer NeorgFlashcard* commands
+---remain compatibility aliases for existing configurations and scripts.
+---@param args string|nil
+function M.command(args)
+  local words = command_words(args)
+  local route = table.remove(words, 1) or "overview"
+
+  if route == "overview" or route == "home" then
+    M.overview()
+  elseif route == "cards" or route == "browse" then
+    M.cards()
+  elseif route == "stats" or route == "analytics" then
+    M.stats()
+  elseif route == "review" or route == "due" then
+    local scope = table.remove(words, 1) or "due"
+    if scope == "due" then
+      M.review_due()
+    elseif scope == "all" then
+      M.review_all()
+    elseif scope == "file" then
+      M.review_file()
+    elseif scope == "tag" then
+      M.review_tag(table.concat(words, " "))
+    elseif scope == "score" then
+      M.review_score(table.concat(words, " "))
+    else
+      util.notify("Unknown review scope: " .. scope .. " (use due, all, file, tag, or score)", vim.log.levels.ERROR)
+    end
+  elseif route == "add" then
+    M.add_kind(table.concat(words, " "))
+  elseif route == "open" or route == "source" then
+    M.open_flashcards()
+  elseif route == "check" or route == "validate" then
+    M.validate_collection()
+  elseif route == "migrate" then
+    if M.migrate_ids then
+      M.migrate_ids()
+    else
+      util.notify("Card ID migration is not available", vim.log.levels.WARN)
+    end
+  elseif route == "help" or route == "?" then
+    M.help()
+  else
+    util.notify("Unknown Flashcards action: " .. route .. " (try :Flashcards help)", vim.log.levels.ERROR)
+  end
+end
+
+local function complete_command(arg_lead, cmd_line)
+  local words = vim.split(cmd_line, "%s+", { trimempty = true })
+  local choices = command_routes
+
+  if words[2] == "review" and #words >= 2 then
+    choices = { "due", "all", "file", "tag", "score" }
+  elseif words[2] == "add" and #words >= 2 then
+    choices = vim.tbl_keys(config.languages or {})
+    table.sort(choices)
+  end
+
+  return vim.tbl_filter(function(value)
+    return value:find("^" .. vim.pesc(arg_lead)) ~= nil
+  end, choices)
 end
 
 function M.setup(opts)
@@ -330,14 +661,261 @@ function M.setup(opts)
   config.flashcards_dir = vim.fs.normalize(vim.fn.expand(config.flashcards_dir))
   config.default_file = vim.fs.normalize(vim.fn.expand(config.default_file))
 
+  local user_on_review = config.on_review
+  local user_on_bury = config.on_bury
+  local user_on_suspend = config.on_suspend
+  local user_on_edit = config.on_edit
+
+  local function call_user_review(event, callback)
+    if callback == nil then
+      callback = user_on_review
+    end
+    if type(callback) ~= "function" then
+      return
+    end
+    local hook_ok, hook_err = pcall(callback, event)
+    if not hook_ok then
+      util.notify("on_review callback failed: " .. tostring(hook_err), vim.log.levels.WARN)
+    end
+  end
+
+  local function history_event_copy(event)
+    local copy = vim.deepcopy(event)
+    copy._source_bufnr = nil
+    copy._history_path = nil
+    copy._user_on_review = nil
+    return copy
+  end
+
+  local function history_destination_key(destination)
+    return history.path(destination or config) or false
+  end
+
+  local function failed_history_queue(destination, create)
+    local key = history_destination_key(destination)
+    for _, queue in ipairs(failed_history) do
+      if queue.destination == key then
+        return queue
+      end
+    end
+    if not create then
+      return nil
+    end
+    local queue = { destination = key, events = {} }
+    table.insert(failed_history, queue)
+    return queue
+  end
+
+  local function failed_history_count()
+    local count = 0
+    for _, queue in ipairs(failed_history) do
+      count = count + #queue.events
+    end
+    return count
+  end
+
+  local function drain_failed_history(destination, targeted)
+    local target = targeted and history_destination_key(destination) or nil
+    local appended = false
+    local drained = true
+    local index = 1
+    while index <= #failed_history do
+      local queue = failed_history[index]
+      if not targeted or queue.destination == target then
+        while #queue.events > 0 do
+          local ok, result = history.append(queue.events[1], queue.destination or config)
+          if not ok then
+            drained = false
+            util.notify("Could not retry review history: " .. tostring(result), vim.log.levels.WARN)
+            break
+          end
+          table.remove(queue.events, 1)
+          appended = true
+        end
+        if #queue.events == 0 then
+          table.remove(failed_history, index)
+        else
+          index = index + 1
+        end
+      else
+        index = index + 1
+      end
+    end
+    if appended then
+      overview.refresh()
+    end
+    return drained
+  end
+
+  local function append_review_history(event, notify_user, destination, observer)
+    local copy = history_event_copy(event)
+    local history_path = history.path(destination or config)
+    drain_failed_history(history_path, true)
+    local queue = failed_history_queue(history_path, false)
+    local ok, result = false, "an earlier review history event is still queued"
+    if not queue then
+      ok, result = history.append(copy, history_path or destination or config)
+    end
+    if not ok then
+      queue = queue or failed_history_queue(history_path, true)
+      table.insert(queue.events, copy)
+      util.notify("Could not append review history; queued for retry: " .. tostring(result), vim.log.levels.WARN)
+    end
+    if notify_user ~= false then
+      call_user_review(event, observer)
+    end
+    overview.refresh()
+    return ok
+  end
+
+  local function queue_pending_history(event)
+    if event.type ~= "review" then
+      return
+    end
+    if event.event == "undo" then
+      for index = #pending_history, 1, -1 do
+        if pending_history[index].event_id == event.undo_of then
+          table.remove(pending_history, index)
+          overview.refresh()
+          return
+        end
+      end
+      return
+    end
+    if event.event == "rated" then
+      event._source_bufnr = util.loaded_buffer(event.path)
+      event._history_path = history.path(config)
+      event._user_on_review = user_on_review or false
+      table.insert(pending_history, event)
+      overview.refresh()
+    end
+  end
+
+  local review_config = vim.tbl_deep_extend("force", {}, config, {
+    on_review = append_review_history,
+    on_review_pending = queue_pending_history,
+    on_bury = function(card, context)
+      local ok, message = M.bury_card(card, context)
+      if ok and type(user_on_bury) == "function" then
+        local hook_ok, accepted, hook_message = pcall(user_on_bury, card, context)
+        if not hook_ok then
+          util.notify("on_bury callback failed: " .. tostring(accepted), vim.log.levels.WARN)
+        elseif accepted == false then
+          util.notify(hook_message or "on_bury callback rejected the completed action", vim.log.levels.WARN)
+        end
+      end
+      return ok, message
+    end,
+    on_suspend = function(card, context)
+      local ok, message = M.toggle_suspend(card, context)
+      if ok and type(user_on_suspend) == "function" then
+        local hook_ok, accepted, hook_message = pcall(user_on_suspend, card, context)
+        if not hook_ok then
+          util.notify("on_suspend callback failed: " .. tostring(accepted), vim.log.levels.WARN)
+        elseif accepted == false then
+          util.notify(hook_message or "on_suspend callback rejected the completed action", vim.log.levels.WARN)
+        end
+      end
+      return ok, message
+    end,
+    on_edit = function(card)
+      M.open_card(card)
+      if type(user_on_edit) == "function" then
+        local hook_ok, hook_err = pcall(user_on_edit, card)
+        if not hook_ok then
+          util.notify("on_edit callback failed: " .. tostring(hook_err), vim.log.levels.WARN)
+        end
+      end
+    end,
+  })
+
+  history.setup(config)
+  drain_failed_history()
+  local history_group = vim.api.nvim_create_augroup("neorg_flashcards_history", { clear = true })
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    group = history_group,
+    callback = function(args)
+      drain_failed_history()
+      local written = util.canonical_path(args.file)
+      local index = 1
+      while index <= #pending_history do
+        local event = pending_history[index]
+        if event._source_bufnr == args.buf or util.canonical_path(event.path) == written then
+          local persisted_event = vim.deepcopy(event)
+          persisted_event._source_bufnr = nil
+          persisted_event._history_path = nil
+          persisted_event._user_on_review = nil
+          persisted_event.path = written
+          if type(persisted_event.card_ref) == "table" then
+            persisted_event.card_ref.path = written
+          end
+          persisted_event.persisted = true
+          append_review_history(persisted_event, true, event._history_path, event._user_on_review)
+          table.remove(pending_history, index)
+        else
+          index = index + 1
+        end
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "FocusGained", "VimLeavePre" }, {
+    group = history_group,
+    callback = function(args)
+      local drained = drain_failed_history()
+      if not drained and args.event == "VimLeavePre" then
+        util.notify(
+          string.format("%d persisted review history event(s) could not be written before exit", failed_history_count()),
+          vim.log.levels.ERROR
+        )
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete", "BufWipeout" }, {
+    group = history_group,
+    callback = function(args)
+      local discarded = 0
+      local path = util.canonical_path(args.file)
+      for index = #pending_history, 1, -1 do
+        if
+          pending_history[index]._source_bufnr == args.buf or util.canonical_path(pending_history[index].path) == path
+        then
+          table.remove(pending_history, index)
+          discarded = discarded + 1
+        end
+      end
+      if discarded > 0 then
+        util.notify(
+          string.format("Discarded %d unsaved review history event(s) with the buffer", discarded),
+          vim.log.levels.WARN
+        )
+      end
+    end,
+  })
+  health.setup(config)
+  stats.setup(config)
   help.setup(config)
   overview.setup(config, {
     on_add = function()
       M.add_to_default("")
     end,
+    on_review_due = M.review_due,
+    on_review_all = M.review_all,
+    on_check = M.validate_collection,
+    on_migrate = M.migrate_ids,
+    on_open_source = M.open_card,
+    on_help = M.help,
+    on_toggle_suspend = M.toggle_suspend,
+    on_bury = M.toggle_bury,
   })
-  review.setup(config)
-  stats.setup(config)
+  review.setup(review_config)
+
+  vim.api.nvim_create_user_command("Flashcards", function(opts_)
+    M.command(opts_.args)
+  end, {
+    nargs = "*",
+    complete = complete_command,
+    desc = "Open the flashcard hub or run a flashcard action",
+  })
 
   vim.api.nvim_create_user_command("NeorgFlashcardOpen", M.open_flashcards, {})
   vim.api.nvim_create_user_command("NeorgFlashcardAdd", function(opts_)

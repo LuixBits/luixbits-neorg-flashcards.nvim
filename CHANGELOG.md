@@ -2,55 +2,49 @@
 
 All notable changes to this project will be documented here.
 
-## Unreleased
+## 0.2.0 - 2026-08-21
 
-- Added `:NeorgFlashcardOverview`, a full-page dashboard tab, side by side: a
-  tag-grouped card list with per-card due-state colors and `j`/`k` navigation
-  on the left, analytics (streak and totals, width-adaptive heatmap, 7-day due
-  forecast) on the right; `s` switches panes, `a` adds cards straight from the
-  dashboard, and group reviews open in a float on top and refresh both panes
-  when they close.
-- Added `:NeorgFlashcardStats`, which opens the dashboard with the analytics
-  pane focused; ratings are appended to `reviews.log` in the flashcards
-  directory.
-- Replaced the sequential `vim.ui.input` prompts of `:NeorgFlashcardAdd` with
-  an editable form buffer: one field per line, `Enter` hops to the next field
-  (and saves from the last one), `Tab` cycles, `<C-s>` saves and keeps the
-  form open for the next card.
-- Documented the public Lua API (`require("neorg_flashcards")`) for custom
-  keymaps in the README and `:help neorg-flashcards-lua-api`.
-- Added cloze support (`{{c1::answer}}` / `{{c1::answer|hint}}` are masked
-  before the reveal) and a typed-answer mode (`t` in review) with UTF-8-aware
-  fuzzy matching.
-- Reviews print a session summary on quit, group reviews from the overview
-  refresh the dashboard underneath when they close, and an empty due review
-  hints at the next due time.
-- Added score-driven scheduling: ratings now maintain `due:`, `interval:`, and
-  `ease:` fields, bad cards requeue into the running session, and
-  `:NeorgFlashcardReviewDue` studies only due and new cards, oldest due first.
-- Removed the local planning checklist from the tracked public repo.
-- Expanded the README with project goals, quick start, configuration details,
-  and NVF/Nix install examples.
-- Added a real screen-recorded README demo using sample Japanese flashcards.
-- Fixed collection reviews to use unsaved changes from loaded chapter files and
-  guard against stale rating writes.
-- Added source-file context to the review popup and documented
-  file-per-chapter collections.
-- Expanded regression coverage for recursive collections, tags, loaded
-  buffers, and stale sources, and added formatting and Nix CI checks.
-- Added command, popup-keymap, Neorg-free, isolated-Neorg, and checksum-pinned
-  Neovim 0.10.4 minimum and 0.12.4 current-version compatibility tests.
-- Clarified setup with and without Neorg, `.norg` file behavior, configuration
-  paths, and global versus popup-local keymaps.
-- Made `NeorgFlashcardOpen` create nested parent directories for `default_file`.
-- Normalized symlinked collection paths so chapter source labels stay relative
-  and loaded files are not counted twice on macOS or other symlinked roots.
-- Hardened test exit handling and temporary-directory isolation so startup
-  errors and concurrent runs cannot report false success.
-- Added a runnable 90-second Remotion explainer with burned-in captions, a full
-  narration and clip plan, a NixOS render helper, and CI composition checks.
-- Matched the explainer to the laptop's native 2880×1800 16:10 panel and added
-  scoped Remotion project instructions to preserve that format.
+- Added `:Flashcards` as the primary command, with overview, cards, stats,
+  review, add, open, check, migrate, and help routes. The longer
+  `:NeorgFlashcard*` commands remain compatibility aliases.
+- Rebuilt the dashboard as a responsive full-tab hub with Overview, Cards, and
+  Stats pages, contextual statusline hints, generated `?` help, page shortcuts,
+  and stacked or column layouts based on the available width.
+- Added a complete card browser with text search, state filters, due/front/
+  state/source sorting, card details, preview, source editing, suspend/resume,
+  and bury/unbury actions. Invalid blocks, including duplicate-ID cards, stay
+  visible for repair but are excluded from review and scheduling actions.
+- Expanded analytics with total and daily activity, streak, 7/30/90-day
+  retention, 30-day answer distribution, lifecycle and availability counts,
+  leeches, median answer time, estimated workload, a responsive heatmap, a
+  seven-day forecast, tag-group sizes, and weak-card hints.
+- Made review sessions finite. Again retries each card at most once per
+  session; the popup now shows queue progress, progressive `h` hints, next
+  intervals, `u` undo, `b` bury, `x` suspend, and a completion summary.
+- Added stable opaque card IDs. New cards receive IDs automatically, ratings
+  backfill them when needed, and `:Flashcards migrate` performs a previewed,
+  confirmed, all-source-preflight migration for legacy collections.
+- Split displayed card state into lifecycle (`new`, `learning`, `review`,
+  `relearning`), timing, and availability (`active`, `suspended`, `buried`).
+  Ratings now also maintain `reps`, `lapses`, and `lifecycle`.
+- Replaced new aggregate log writes with versioned append-only
+  `reviews.jsonl` events carrying stable card, timing, duration, hint, state,
+  and session context. Analytics still reads the legacy `reviews.log`, and
+  undo is recorded as a compensating event.
+- Added collection health inspection for IDs, duplicate fronts, scheduling
+  metadata, lifecycle values, and leeches through `:Flashcards check` and
+  `:checkhealth neorg_flashcards`.
+- Changed the opt-in NVF keymap default to one exact hub mapping at
+  `<leader>nc`. `keymaps.mode = "legacy"` preserves the older suffix group.
+- Replaced sequential add prompts with a reusable editable form buffer and
+  added cloze masking, UTF-8-aware typed-answer checking, due-review queues,
+  next-due hints, and source context in review.
+- Preserved unsaved loaded-buffer edits during collection, review, and ID
+  migration; stale sources stop metadata writes before the wrong card can be
+  changed. Review history for a modified source waits until that source is
+  saved, and undo before the save cancels the pending event.
+- Expanded the README, Vim help, public Lua API documentation, headless and
+  clean-install coverage, Neovim compatibility checks, and Nix flake checks.
 
 ## 0.1.0 - 2026-07-01
 

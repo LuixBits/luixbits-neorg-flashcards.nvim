@@ -50,6 +50,7 @@ function M.parse_lines(lines, path)
       if not card.closed then
         card.end_line = #lines
       end
+      card.id = schema.card_id(card)
       table.insert(cards, card)
     end
     index = index + 1
@@ -82,17 +83,56 @@ end
 function M.valid_cards(config, cards)
   local valid = {}
   local errors = {}
+  local invalid = {}
+  local messages_by_card = {}
+  local cards_by_id = {}
 
   for _, card in ipairs(cards) do
     local card_errors = schema.validate_card(config, card)
+    messages_by_card[card] = card_errors
+
+    local id = schema.card_id(card)
+    if id then
+      cards_by_id[id] = cards_by_id[id] or {}
+      table.insert(cards_by_id[id], card)
+    end
+  end
+
+  -- A stable ID is the scheduling identity of a card. If it is ambiguous,
+  -- neither copy is safe to review: updating one could otherwise attach
+  -- history or scheduling state to the wrong block.
+  for id, duplicate_cards in pairs(cards_by_id) do
+    if #duplicate_cards > 1 then
+      for _, card in ipairs(duplicate_cards) do
+        local other_sources = {}
+        for _, other in ipairs(duplicate_cards) do
+          if other ~= card then
+            table.insert(other_sources, source_label(other))
+          end
+        end
+        table.insert(
+          messages_by_card[card],
+          string.format("duplicate id %s (also used by %s)", id, table.concat(other_sources, ", "))
+        )
+      end
+    end
+  end
+
+  for _, card in ipairs(cards) do
+    local card_errors = messages_by_card[card]
     if #card_errors == 0 then
       table.insert(valid, card)
     else
+      table.insert(invalid, {
+        card = card,
+        messages = card_errors,
+        source = source_label(card),
+      })
       table.insert(errors, string.format("%s: %s", source_label(card), table.concat(card_errors, ", ")))
     end
   end
 
-  return valid, errors
+  return valid, errors, invalid
 end
 
 function M.flashcard_files(config)
@@ -136,12 +176,32 @@ function M.collect_flashcards(config)
     end
   end
 
-  local valid, validation_errors = M.valid_cards(config, cards)
+  local valid, validation_errors, invalid = M.valid_cards(config, cards)
   for _, err in ipairs(validation_errors) do
     table.insert(errors, err)
   end
 
-  return valid, errors
+  return valid, errors, invalid
+end
+
+-- Assign stable IDs to legacy cards after fully collecting and validating the
+-- collection. The store performs an all-files preflight before writing, so a
+-- stale or malformed source stops the migration before writes begin.
+function M.migrate_ids(config, opts)
+  local cards, errors = M.collect_flashcards(config)
+  if #errors > 0 and not (opts and opts.allow_validation_errors) then
+    return false, {
+      assigned = 0,
+      total = #cards,
+      errors = errors,
+    }
+  end
+
+  local ok, result = require("neorg_flashcards.store").migrate_card_ids(cards, opts)
+  if #errors > 0 then
+    result.validation_errors = errors
+  end
+  return ok, result
 end
 
 return M

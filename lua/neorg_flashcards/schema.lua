@@ -1,3 +1,4 @@
+local identity = require("neorg_flashcards.identity")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -109,6 +110,11 @@ function M.validate_card(config, card)
     table.insert(errors, "missing @end")
   end
 
+  local id = identity.card_id(card)
+  if id and not identity.is_valid(id) then
+    table.insert(errors, "invalid id (use letters, numbers, _, ., :, or -)")
+  end
+
   for _, field in ipairs(language.fields or {}) do
     if field.required and util.isempty(M.field_value(card, language, field.key)) then
       table.insert(errors, "missing " .. field.key)
@@ -119,10 +125,12 @@ function M.validate_card(config, card)
 end
 
 function M.card_lines(config, kind, values)
+  values = values or {}
   local language = M.for_kind(config, kind)
   local lines = {
     "",
     "@flashcard " .. kind,
+    "id: " .. (identity.card_id({ values = values }) or identity.generate()),
   }
 
   for _, field in ipairs((language and language.fields) or {}) do
@@ -135,6 +143,14 @@ function M.card_lines(config, kind, values)
   table.insert(lines, "@end")
   table.insert(lines, "")
   return lines
+end
+
+function M.card_id(card)
+  return identity.card_id(card)
+end
+
+function M.new_card_id(used)
+  return identity.generate(used)
 end
 
 function M.card_score(card)
