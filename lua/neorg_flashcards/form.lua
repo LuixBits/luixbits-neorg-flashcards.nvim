@@ -2,7 +2,9 @@
 -- field. Replaces sequential vim.ui.input prompts with a normal buffer you
 -- can edit with full Neovim motions.
 
+local popup = require("neorg_flashcards.popup")
 local schema = require("neorg_flashcards.schema")
+local actions = require("neorg_flashcards.ui.actions")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -13,7 +15,14 @@ local state = {
   kind = nil,
   fields = {},
   on_save = nil,
+  config = {},
 }
+
+local key_help = { buf = nil, win = nil }
+
+local function show_shortcuts()
+  return type(state.config.ui) ~= "table" or state.config.ui.show_shortcuts ~= false
+end
 
 function M.is_open()
   return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
@@ -59,11 +68,52 @@ local function render_fields()
 end
 
 function M.close()
+  popup.close(key_help)
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_win_close(state.win, true)
   end
   state.win = nil
   state.buf = nil
+end
+
+function M.context_help()
+  popup.open(key_help, {
+    title = " " .. actions.title("form") .. " ",
+    footer = " q/Esc/? close ",
+    min_width = 56,
+    max_width = 76,
+    min_height = 12,
+    max_height = 22,
+    maps = {
+      { "q", M.help_close, "Close form key help" },
+      { "<Esc>", M.help_close, "Close form key help" },
+      { "?", M.help_close, "Close form key help" },
+    },
+  })
+  popup.set_lines(key_help, actions.help_lines("form"))
+end
+
+function M.help_close()
+  popup.close(key_help)
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_set_current_win(state.win)
+  end
+end
+
+local function dispatch(action_name)
+  if action_name == "close" then
+    M.close()
+  elseif action_name == "context_help" then
+    M.context_help()
+  elseif action_name == "save" then
+    M.save()
+  elseif action_name == "next_field" then
+    M.next_field()
+  elseif action_name == "next_form_field" then
+    M.cycle_field(1)
+  elseif action_name == "previous_form_field" then
+    M.cycle_field(-1)
+  end
 end
 
 function M.save()
@@ -114,6 +164,7 @@ function M.open(config, kind, opts)
 
   state.kind = kind
   state.on_save = opts and opts.on_save
+  state.config = config
   state.fields = {}
   for _, field in ipairs(schema.prompt_fields(config, kind)) do
     table.insert(state.fields, field)
@@ -129,7 +180,7 @@ function M.open(config, kind, opts)
 
   local width = math.min(72, math.max(48, math.floor(vim.o.columns * 0.6)))
   local height = #state.fields + 2
-  state.win = vim.api.nvim_open_win(buf, true, {
+  local window_config = {
     relative = "editor",
     width = width,
     height = height,
@@ -138,24 +189,22 @@ function M.open(config, kind, opts)
     border = "rounded",
     title = " Add flashcard (" .. (language.label or kind) .. ") ",
     title_pos = "center",
-    footer = " Enter next field · Ctrl-S save · q cancel ",
-    footer_pos = "center",
     style = "minimal",
-  })
+  }
+  if show_shortcuts() then
+    window_config.footer = actions.footer("form", width)
+    window_config.footer_pos = "center"
+  end
+  state.win = vim.api.nvim_open_win(buf, true, window_config)
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, render_fields())
 
-  vim.keymap.set({ "n", "i" }, "<C-s>", M.save, { buffer = buf, silent = true, desc = "Save card" })
-  vim.keymap.set("n", "<CR>", M.save, { buffer = buf, silent = true, desc = "Save card" })
-  vim.keymap.set("i", "<CR>", M.next_field, { buffer = buf, silent = true, desc = "Next field (save from the last)" })
-  vim.keymap.set("i", "<Tab>", function()
-    M.cycle_field(1)
-  end, { buffer = buf, silent = true, desc = "Next field" })
-  vim.keymap.set("i", "<S-Tab>", function()
-    M.cycle_field(-1)
-  end, { buffer = buf, silent = true, desc = "Previous field" })
-  vim.keymap.set("n", "q", M.close, { buffer = buf, silent = true, desc = "Cancel" })
-  vim.keymap.set("n", "<Esc>", M.close, { buffer = buf, silent = true, desc = "Cancel" })
+  for _, binding in ipairs(actions.available_bindings("form")) do
+    local action_name = binding.action
+    vim.keymap.set(binding.mode, binding.key, function()
+      dispatch(action_name)
+    end, { buffer = buf, silent = true, nowait = true, desc = binding.description })
+  end
 
   M.goto_field(1)
   vim.cmd("startinsert!")

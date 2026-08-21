@@ -96,6 +96,10 @@ local function lower(value)
   return util.trim(value):lower()
 end
 
+local function show_shortcuts()
+  return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
+end
+
 local function truthy(value)
   value = lower(value)
   return value == "1" or value == "true" or value == "yes" or value == "on"
@@ -1170,7 +1174,10 @@ local function apply_chrome()
   for _, pane in ipairs({ state.cards, state.stats }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) then
       vim.wo[pane.win].winbar = nav
-      local footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), state.capabilities)
+      local footer = " "
+      if show_shortcuts() then
+        footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), state.capabilities)
+      end
       vim.wo[pane.win].statusline = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
     end
   end
@@ -1545,9 +1552,6 @@ end
 
 function M.show(view)
   view = lower(view)
-  if view == "analytics" then
-    view = "stats"
-  end
   if view ~= "overview" and view ~= "cards" and view ~= "stats" then
     view = "overview"
   end
@@ -1570,14 +1574,6 @@ local function cycle_page(delta)
     end
   end
   M.show(PAGES[((index - 1 + delta) % #PAGES) + 1])
-end
-
-local function alternate_pane()
-  if vim.api.nvim_get_current_win() == state.cards.win then
-    M.focus_stats()
-  else
-    M.focus_cards()
-  end
 end
 
 local function dispatch(action)
@@ -1651,8 +1647,6 @@ local function dispatch(action)
     end
   elseif action == "refresh" then
     M.refresh()
-  elseif action == "alternate_pane" then
-    alternate_pane()
   end
 end
 
@@ -1709,9 +1703,10 @@ local function apply_layout()
 end
 
 local function install_maps(buf)
-  for _, binding in ipairs(actions.available_bindings(state.capabilities)) do
+  for _, binding in ipairs(actions.available_bindings("hub", state.capabilities)) do
+    local action_name = binding.action
     vim.keymap.set("n", binding.key, function()
-      dispatch(binding.action)
+      dispatch(action_name)
     end, {
       buffer = buf,
       silent = true,

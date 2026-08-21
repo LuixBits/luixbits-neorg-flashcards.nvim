@@ -3,6 +3,7 @@ local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
+local actions = require("neorg_flashcards.ui.actions")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -54,18 +55,38 @@ local state = {
   event_sequence = 0,
 }
 
-local active_footer = " ⏎/Space reveal  1/2/3 rate  h hint  t type  j/k browse  u undo  e edit  q close "
-local complete_footer = " u undo last rating  q/⎋ close "
+local key_help = { buf = nil, win = nil }
 
-local function active_footer_text()
-  local actions = active_footer
-  if type(config.on_bury) == "function" then
-    actions = actions:gsub(" q close $", " b bury  q close ")
+local function review_context()
+  if state.completed then
+    return "review_complete"
   end
-  if type(config.on_suspend) == "function" then
-    actions = actions:gsub(" q close $", " x suspend  q close ")
+  if state.showing_answer then
+    return "review_answer"
   end
-  return actions
+  return "review_question"
+end
+
+local function review_capabilities()
+  return {
+    bury = type(config.on_bury) == "function",
+    suspend = type(config.on_suspend) == "function",
+  }
+end
+
+local function show_shortcuts()
+  return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
+end
+
+local function shortcut_footer()
+  if not show_shortcuts() then
+    return ""
+  end
+  local width = 84
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    width = vim.api.nvim_win_get_width(state.win)
+  end
+  return actions.footer(review_context(), width, review_capabilities())
 end
 
 -- Masks {{cN::answer}} / {{cN::answer|hint}} cloze markers before the reveal.
@@ -222,15 +243,47 @@ local function emit_event(event)
   end
 end
 
-local function update_footer(text)
+local function update_footer()
   if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
     return
   end
-  pcall(vim.api.nvim_win_set_config, state.win, { footer = text, footer_pos = "center" })
+  pcall(vim.api.nvim_win_set_config, state.win, { footer = shortcut_footer(), footer_pos = "center" })
 end
 
 local function rate_from_popup(score)
   M.rate_current(score, { require_reveal = true })
+end
+
+local function dispatch(action_name)
+  if action_name == "close" then
+    M.close()
+  elseif action_name == "context_help" then
+    M.context_help()
+  elseif action_name == "flip_or_next" then
+    M.flip_or_next()
+  elseif action_name == "next" then
+    M.next()
+  elseif action_name == "previous" then
+    M.previous()
+  elseif action_name == "hint" then
+    M.hint()
+  elseif action_name == "undo" then
+    M.undo_last()
+  elseif action_name == "edit" then
+    M.edit_current()
+  elseif action_name == "type_answer" then
+    M.type_answer()
+  elseif action_name == "rate_again" then
+    rate_from_popup(1)
+  elseif action_name == "rate_hard" then
+    rate_from_popup(2)
+  elseif action_name == "rate_good" then
+    rate_from_popup(3)
+  elseif action_name == "bury" then
+    M.bury_current()
+  elseif action_name == "suspend" then
+    M.suspend_current()
+  end
 end
 
 local function ensure_window()
@@ -238,52 +291,21 @@ local function ensure_window()
     return
   end
 
-  local maps = {
-    { "q", M.close, "Close review" },
-    { "<Esc>", M.close, "Close review" },
-    { "<Space>", M.flip_or_next, "Reveal answer" },
-    { "<CR>", M.flip_or_next, "Reveal answer" },
-    { "j", M.next, "Browse next pending card" },
-    { "k", M.previous, "Browse previous pending card" },
-    -- Kept as quiet compatibility aliases; the UI and docs use j/k.
-    { "n", M.next, "Browse next pending card" },
-    { "p", M.previous, "Browse previous pending card" },
-    { "h", M.hint, "Show a progressive hint" },
-    { "u", M.undo_last, "Undo the last rating" },
-    { "e", M.edit_current, "Edit card" },
-    { "t", M.type_answer, "Type the answer" },
-    {
-      "1",
+  local maps = {}
+  for _, binding in ipairs(actions.available_bindings("review", review_capabilities())) do
+    local action_name = binding.action
+    table.insert(maps, {
+      binding.key,
       function()
-        rate_from_popup(1)
+        dispatch(action_name)
       end,
-      "Rate Again",
-    },
-    {
-      "2",
-      function()
-        rate_from_popup(2)
-      end,
-      "Rate Hard",
-    },
-    {
-      "3",
-      function()
-        rate_from_popup(3)
-      end,
-      "Rate Good",
-    },
-  }
-  if type(config.on_bury) == "function" then
-    table.insert(maps, { "b", M.bury_current, "Bury card for this session" })
-  end
-  if type(config.on_suspend) == "function" then
-    table.insert(maps, { "x", M.suspend_current, "Suspend card" })
+      binding.description,
+    })
   end
 
   popup.open(state, {
     title = " Flashcards ",
-    footer = active_footer_text(),
+    footer = shortcut_footer(),
     min_height = 17,
     maps = maps,
   })
@@ -330,7 +352,7 @@ local function progressive_hint(text, level)
 end
 
 local function render_completion()
-  update_footer(complete_footer)
+  update_footer()
   local label = state.label ~= "" and (state.label .. " | ") or ""
   local lines = {
     "* " .. label .. "Session complete ✓",
@@ -371,7 +393,7 @@ local function render()
     return
   end
 
-  update_footer(active_footer_text())
+  update_footer()
   local attempt = current_attempt()
   if not attempt then
     state.completed = true
@@ -455,6 +477,31 @@ function M.setup(opts)
   config = opts or {}
 end
 
+function M.context_help()
+  local context = review_context()
+  popup.open(key_help, {
+    title = " " .. actions.title(context) .. " ",
+    footer = " q/Esc/? close ",
+    min_width = 52,
+    max_width = 76,
+    min_height = 12,
+    max_height = 28,
+    maps = {
+      { "q", M.help_close, "Close review key help" },
+      { "<Esc>", M.help_close, "Close review key help" },
+      { "?", M.help_close, "Close review key help" },
+    },
+  })
+  popup.set_lines(key_help, actions.help_lines(context, review_capabilities()))
+end
+
+function M.help_close()
+  popup.close(key_help)
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_set_current_win(state.win)
+  end
+end
+
 function M.start(cards, errors, label, empty_message, opts)
   cards = cards or {}
   errors = errors or {}
@@ -507,6 +554,7 @@ end
 
 function M.close()
   commit_last_action()
+  popup.close(key_help)
   popup.close(state)
 
   local snapshot = session_snapshot()
@@ -863,6 +911,7 @@ function M.edit_current()
   -- Editing leaves the review flow entirely: no session summary, no on_close.
   commit_last_action()
   local card = current_attempt().card
+  popup.close(key_help)
   popup.close(state)
   clear_state()
   if type(config.on_edit) == "function" then

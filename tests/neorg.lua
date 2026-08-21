@@ -33,7 +33,7 @@ assert(vim.bo.filetype == "norg", "Neorg did not detect the norg filetype")
 local parser_ok, parser_or_error = pcall(vim.treesitter.get_parser, 0, "norg")
 assert(parser_ok, parser_or_error)
 
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 local popup = vim.api.nvim_get_current_buf()
 assert(vim.bo[popup].buftype == "nofile", "review popup was not created")
 local text = table.concat(vim.api.nvim_buf_get_lines(popup, 0, -1, false), "\n")

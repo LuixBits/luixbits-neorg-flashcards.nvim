@@ -22,9 +22,11 @@
         f:
         lib.genAttrs systems (
           system:
-          f system (import nixpkgs {
-            inherit system;
-          })
+          f system (
+            import nixpkgs {
+              inherit system;
+            }
+          )
         );
     in
     {
@@ -81,46 +83,37 @@
                       type = lib.types.listOf lib.types.attrs;
                       default = [ ];
                     };
-                    binds.whichKey.register = lib.mkOption {
-                      type = lib.types.attrsOf lib.types.str;
-                      default = { };
-                    };
                   };
                 };
-              evalMode =
-                mode:
-                lib.evalModules {
-                  specialArgs = {
-                    inherit pkgs;
-                  };
-                  modules = [
-                    optionModule
-                    self.homeManagerModules.nvf
-                    {
-                      programs.nvf.neorg-flashcards = {
-                        enable = true;
-                        languagePresets = [ "japanese" ];
-                        setupOpts.default_kind = "japanese";
-                        keymaps = {
-                          enable = true;
-                          inherit mode;
-                        };
+              evaluated = lib.evalModules {
+                specialArgs = {
+                  inherit pkgs;
+                };
+                modules = [
+                  optionModule
+                  self.homeManagerModules.nvf
+                  {
+                    programs.nvf.neorg-flashcards = {
+                      enable = true;
+                      languagePresets = [ "japanese" ];
+                      setupOpts = {
+                        default_kind = "japanese";
+                        ui.show_shortcuts = false;
                       };
-                    }
-                  ];
-                };
-              cfg = (evalMode "hub").config.programs.nvf.settings.vim;
-              legacyCfg = (evalMode "legacy").config.programs.nvf.settings.vim;
+                      keymaps.enable = true;
+                    };
+                  }
+                ];
+              };
+              cfg = evaluated.config.programs.nvf.settings.vim;
             in
             assert builtins.length cfg.startPlugins == 1;
             assert builtins.length cfg.keymaps == 1;
             assert (builtins.head cfg.keymaps).key == "<leader>nc";
             assert (builtins.head cfg.keymaps).action == "<cmd>Flashcards<CR>";
-            assert cfg.binds.whichKey.register == { };
-            assert builtins.length legacyCfg.keymaps == 8;
-            assert builtins.hasAttr "<leader>nc" legacyCfg.binds.whichKey.register;
             assert lib.hasInfix "require(\"neorg_flashcards\").setup" cfg.luaConfigRC.neorg-flashcards;
             assert lib.hasInfix "presets.only(\"japanese\")" cfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "[\"show_shortcuts\"] = false" cfg.luaConfigRC.neorg-flashcards;
             pkgs.runCommand "luixbits-neorg-flashcards-nvf-module-eval" { } ''
               touch "$out"
             '';
@@ -130,86 +123,110 @@
 
           package = plugin;
 
-          luaSyntax = pkgs.runCommand "luixbits-neorg-flashcards-lua-syntax" {
-            nativeBuildInputs = [ pkgs.lua ];
-          } ''
-            cd ${self}
-            while IFS= read -r -d "" file; do
-              luac -p "$file"
-            done < <(find lua scripts tests -name '*.lua' -print0)
-            touch "$out"
-          '';
+          luaSyntax =
+            pkgs.runCommand "luixbits-neorg-flashcards-lua-syntax"
+              {
+                nativeBuildInputs = [ pkgs.lua ];
+              }
+              ''
+                cd ${self}
+                while IFS= read -r -d "" file; do
+                  luac -p "$file"
+                done < <(find lua scripts tests -name '*.lua' -print0)
+                touch "$out"
+              '';
 
-          luaFormat = pkgs.runCommand "luixbits-neorg-flashcards-lua-format" {
-            nativeBuildInputs = [ pkgs.stylua ];
-          } ''
-            cd ${self}
-            stylua --check lua tests
-            touch "$out"
-          '';
+          luaFormat =
+            pkgs.runCommand "luixbits-neorg-flashcards-lua-format"
+              {
+                nativeBuildInputs = [ pkgs.stylua ];
+              }
+              ''
+                cd ${self}
+                stylua --check lua tests
+                touch "$out"
+              '';
 
-          workflowLint = pkgs.runCommand "luixbits-neorg-flashcards-workflow-lint" {
-            nativeBuildInputs = [ pkgs.actionlint ];
-          } ''
-            cd ${self}
-            actionlint .github/workflows/*.yml
-            touch "$out"
-          '';
+          workflowLint =
+            pkgs.runCommand "luixbits-neorg-flashcards-workflow-lint"
+              {
+                nativeBuildInputs = [ pkgs.actionlint ];
+              }
+              ''
+                cd ${self}
+                actionlint .github/workflows/*.yml
+                touch "$out"
+              '';
 
-          documentationLint = pkgs.runCommand "luixbits-neorg-flashcards-documentation-lint" {
-            nativeBuildInputs = [ pkgs.markdownlint-cli ];
-          } ''
-            cd ${self}
-            markdownlint ./*.md
-            touch "$out"
-          '';
+          documentationLint =
+            pkgs.runCommand "luixbits-neorg-flashcards-documentation-lint"
+              {
+                nativeBuildInputs = [ pkgs.markdownlint-cli ];
+              }
+              ''
+                cd ${self}
+                markdownlint ./*.md
+                touch "$out"
+              '';
 
-          headlessTests = pkgs.runCommand "luixbits-neorg-flashcards-headless-tests" {
-            nativeBuildInputs = [
-              pkgs.lua
-              pkgs.neovim
-            ];
-          } ''
-            ${nvimEnv}
-            cd ${self}
-            nvim --headless -u NONE -i NONE -n \
-              --cmd "set rtp^=${self}" \
-              -c "luafile ${self}/tests/run.lua" \
-              -c "if !get(g:, 'neorg_flashcards_tests_passed', v:false) | cquit 1 | endif" \
-              -c "qa!"
-            touch "$out"
-          '';
+          headlessTests =
+            pkgs.runCommand "luixbits-neorg-flashcards-headless-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.lua
+                  pkgs.neovim
+                ];
+              }
+              ''
+                ${nvimEnv}
+                cd ${self}
+                nvim --headless -u NONE -i NONE -n \
+                  --cmd "set rtp^=${self}" \
+                  -c "luafile ${self}/tests/run.lua" \
+                  -c "if !get(g:, 'neorg_flashcards_tests_passed', v:false) | cquit 1 | endif" \
+                  -c "qa!"
+                touch "$out"
+              '';
 
-          neorgIntegration = pkgs.runCommand "luixbits-neorg-flashcards-neorg-integration" {
-            nativeBuildInputs = [ neorgNvim ];
-          } ''
-            ${nvimEnv}
-            nvim --headless -i NONE -n \
-              --cmd "set rtp^=${self}" \
-              -c "luafile ${self}/tests/neorg.lua" \
-              -c "if !get(g:, 'neorg_flashcards_neorg_tests_passed', v:false) | cquit 1 | endif" \
-              -c "qa!"
-            touch "$out"
-          '';
+          neorgIntegration =
+            pkgs.runCommand "luixbits-neorg-flashcards-neorg-integration"
+              {
+                nativeBuildInputs = [ neorgNvim ];
+              }
+              ''
+                ${nvimEnv}
+                nvim --headless -i NONE -n \
+                  --cmd "set rtp^=${self}" \
+                  -c "luafile ${self}/tests/neorg.lua" \
+                  -c "if !get(g:, 'neorg_flashcards_neorg_tests_passed', v:false) | cquit 1 | endif" \
+                  -c "qa!"
+                touch "$out"
+              '';
 
-          packageRequire = pkgs.runCommand "luixbits-neorg-flashcards-package-require" {
-            nativeBuildInputs = [ pkgs.neovim ];
-          } ''
-            ${nvimEnv}
-            nvim --headless -u NONE -i NONE -n \
-              --cmd "set rtp^=${plugin}" \
-              -c "lua require('neorg_flashcards').setup({})" \
-              -c "qa!"
-            touch "$out"
-          '';
+          packageRequire =
+            pkgs.runCommand "luixbits-neorg-flashcards-package-require"
+              {
+                nativeBuildInputs = [ pkgs.neovim ];
+              }
+              ''
+                ${nvimEnv}
+                nvim --headless -u NONE -i NONE -n \
+                  --cmd "set rtp^=${plugin}" \
+                  -c "lua require('neorg_flashcards').setup({})" \
+                  -c "qa!"
+                touch "$out"
+              '';
 
-          cleanInstall = pkgs.runCommand "luixbits-neorg-flashcards-clean-install" {
-            nativeBuildInputs = [ pkgs.neovim ];
-          } ''
-            ${nvimEnv}
-            ${pkgs.runtimeShell} ${self}/scripts/check-clean-install.sh
-            touch "$out"
-          '';
+          cleanInstall =
+            pkgs.runCommand "luixbits-neorg-flashcards-clean-install"
+              {
+                nativeBuildInputs = [ pkgs.neovim ];
+              }
+              ''
+                ${nvimEnv}
+                ${pkgs.runtimeShell} ${self}/scripts/check-clean-install.sh
+                touch "$out"
+              '';
         }
       );
     };

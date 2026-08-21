@@ -4,9 +4,9 @@ All notable changes to this project will be documented here.
 
 ## 0.2.0 - 2026-08-21
 
-- Added `:Flashcards` as the primary command, with overview, cards, stats,
-  review, add, open, check, migrate, and help routes. The longer
-  `:NeorgFlashcard*` commands remain compatibility aliases.
+- Replaced the command-per-action interface with one `:Flashcards` command and
+  routes for overview, cards, stats, review, add, open, check, migrate, and
+  help. Removed the old `:NeorgFlashcard*` aliases before release.
 - Rebuilt the dashboard as a responsive full-tab hub with Overview, Cards, and
   Stats pages, contextual statusline hints, generated `?` help, page shortcuts,
   and stacked or column layouts based on the available width.
@@ -20,7 +20,8 @@ All notable changes to this project will be documented here.
   seven-day forecast, tag-group sizes, and weak-card hints.
 - Made review sessions finite. Again retries each card at most once per
   session; the popup now shows queue progress, progressive `h` hints, next
-  intervals, `u` undo, `b` bury, `x` suspend, and a completion summary.
+  intervals, `u` undo, `b` bury, `x` suspend, contextual `?` help, and a
+  completion summary.
 - Added stable opaque card IDs. New cards receive IDs automatically, ratings
   backfill them when needed, and `:Flashcards migrate` performs a previewed,
   confirmed, all-source-preflight migration for legacy collections.
@@ -34,8 +35,11 @@ All notable changes to this project will be documented here.
 - Added collection health inspection for IDs, duplicate fronts, scheduling
   metadata, lifecycle values, and leeches through `:Flashcards check` and
   `:checkhealth neorg_flashcards`.
-- Changed the opt-in NVF keymap default to one exact hub mapping at
-  `<leader>nc`. `keymaps.mode = "legacy"` preserves the older suffix group.
+- Reduced the opt-in NVF keymaps to one exact hub mapping at `<leader>nc` and
+  removed the older suffix layout and which-key registration options.
+- Added contextual shortcut help to the hub, review, and add form. Persistent
+  hints are on by default and can be hidden with `ui.show_shortcuts = false`
+  without disabling mappings or `?` help.
 - Replaced sequential add prompts with a reusable editable form buffer and
   added cloze masking, UTF-8-aware typed-answer checking, due-review queues,
   next-due hints, and source context in review.

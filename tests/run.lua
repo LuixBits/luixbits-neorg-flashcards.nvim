@@ -72,6 +72,19 @@ local function assert_buffer_maps(bufnr, expected)
   end
 end
 
+local function window_footer(win)
+  local chunks = vim.api.nvim_win_get_config(win or 0).footer or {}
+  local values = {}
+  for _, chunk in ipairs(chunks) do
+    if type(chunk) == "table" then
+      table.insert(values, tostring(chunk[1] or ""))
+    else
+      table.insert(values, tostring(chunk))
+    end
+  end
+  return table.concat(values)
+end
+
 local test_root = vim.fn.tempname()
 local config = {
   flashcards_dir = test_root .. "/flashcards",
@@ -82,10 +95,12 @@ local config = {
 
 flashcards.setup(config)
 
+assert_equal(vim.fn.exists(":Flashcards"), 2, "Flashcards is registered")
 for _, command in ipairs({
-  "Flashcards",
   "NeorgFlashcardOpen",
   "NeorgFlashcardAdd",
+  "NeorgFlashcardAddJapanese",
+  "NeorgFlashcardInsertJapanese",
   "NeorgFlashcardHelp",
   "NeorgFlashcardReview",
   "NeorgFlashcardReviewDue",
@@ -96,18 +111,30 @@ for _, command in ipairs({
   "NeorgFlashcardStats",
   "NeorgFlashcardValidate",
 }) do
-  assert_equal(vim.fn.exists(":" .. command), 2, command .. " is registered")
+  assert_equal(vim.fn.exists(":" .. command), 0, command .. " is no longer registered")
 end
 assert_equal(vim.fn.maparg("<leader>ncr", "n"), "", "setup does not create global keymaps")
 
-vim.cmd("NeorgFlashcardHelp")
+do
+  local actions = require("neorg_flashcards.ui.actions")
+  local cards_footer = actions.footer("cards", 80, { suspend = true, bury = true })
+  assert_contains(cards_footer, "? keys", "Cards footer keeps contextual help visible")
+  local narrow_footer = actions.footer("cards", 40, { suspend = true, bury = true })
+  assert_true(vim.fn.strdisplaywidth(narrow_footer) <= 40, "compact shortcut hints fit a narrow pane")
+  assert_contains(narrow_footer, "? keys", "narrow shortcut hints retain help")
+  for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true })) do
+    assert_true(binding.key ~= "s", "the retired pane-switch compatibility mapping is absent")
+  end
+end
+
+vim.cmd("Flashcards help")
 local help_popup, help_text = current_popup()
 assert_contains(help_text, "Files: .norg (Neorg itself is optional)", "help explains the file and Neorg relationship")
 assert_buffer_maps(help_popup, { "q" })
 require("neorg_flashcards.help").close()
 assert_true(not vim.api.nvim_buf_is_valid(help_popup), "closing help wipes its scratch buffer")
 
-vim.cmd("NeorgFlashcardOpen")
+vim.cmd("Flashcards open")
 assert_equal(
   canonical_path(vim.api.nvim_buf_get_name(0)),
   canonical_path(config.default_file),
@@ -325,7 +352,7 @@ do
   vim.notify = function(message)
     table.insert(messages, tostring(message))
   end
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   vim.notify = notify_original
 
   assert_true(not flashcards.get_review_state().active, "file review excludes an ID duplicated in another file")
@@ -363,7 +390,7 @@ do
   vim.notify = function(message)
     table.insert(messages, tostring(message))
   end
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   vim.notify = notify_original
   parser.parse_file = parse_file_original
 
@@ -393,21 +420,21 @@ assert_equal(
   "collection labels resolve symlinked roots"
 )
 
-vim.cmd("NeorgFlashcardReviewTag chapter-02")
+vim.cmd("Flashcards review tag chapter-02")
 local tag_popup, tag_text = current_popup()
 assert_contains(tag_text, "tag:chapter-02 | 1/1", "tag command scopes the review")
 assert_contains(tag_text, "Source: course/chapter-02.norg", "tag review shows its chapter source")
 assert_contains(tag_text, "二", "tag review renders the matching card")
-assert_buffer_maps(tag_popup, { "q", "e", "n", "p", "1", "2", "3" })
+assert_buffer_maps(tag_popup, { "q", "?", "e", "j", "k", "1", "2", "3" })
 flashcards.close_review()
 assert_true(not vim.api.nvim_buf_is_valid(tag_popup), "closing review wipes its scratch buffer")
 
-vim.cmd("NeorgFlashcardReviewScore new")
+vim.cmd("Flashcards review score new")
 local _, score_text = current_popup()
 assert_contains(score_text, "score:new | 1/2", "score command reviews both unrated chapter cards")
 flashcards.close_review()
 
-vim.cmd("NeorgFlashcardReview")
+vim.cmd("Flashcards review all")
 local _, all_text = current_popup()
 assert_contains(all_text, "all | 1/2", "all command combines chapter files")
 flashcards.close_review()
@@ -420,7 +447,7 @@ local alias_cards, alias_errors = parser.collect_flashcards({
 assert_equal(#alias_errors, 0, "symlinked collection has no errors")
 assert_equal(#alias_cards, 2, "symlinked collection deduplicates loaded chapter paths")
 
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 local _, file_text = current_popup()
 assert_contains(file_text, "file | 1/1", "file command reviews only the current chapter")
 assert_contains(file_text, "Source: chapter-01.norg", "file review shows its chapter source")
@@ -530,6 +557,17 @@ local form_buf = vim.api.nvim_get_current_buf()
 assert_true(form_buf ~= form_target, "add opens the form buffer")
 assert_equal(vim.bo[form_buf].buftype, "nofile", "form is a scratch buffer")
 assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "form starts on the first field")
+assert_buffer_maps(form_buf, { "q", "?", "<CR>" })
+assert_contains(window_footer(), "Enter next", "form shows compact current shortcuts by default")
+
+form.context_help()
+do
+  local _, form_help_text = current_popup()
+  assert_contains(form_help_text, "Add form keys", "form has contextual key help")
+  assert_contains(form_help_text, "Normal or Insert mode", "form help distinguishes editing modes")
+end
+form.help_close()
+assert_equal(vim.api.nvim_get_current_buf(), form_buf, "closing form help returns to the form")
 
 local form_imaps = {}
 for _, map in ipairs(vim.api.nvim_buf_get_keymap(form_buf, "i")) do
@@ -707,7 +745,7 @@ do
 
   local before_entries, before_errors = history.read(config, { include_legacy = false })
   assert_equal(#before_errors, 0, "pending-history baseline is readable")
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "first rating is accepted in a modified source buffer")
   assert_true(review_engine.rate_current(2), "second rating is accepted in the same modified source buffer")
   assert_true(flashcards.get_review_state().completed, "modified-buffer review reaches finite completion")
@@ -746,7 +784,7 @@ do
 
   local before_entries, before_errors = history.read(config, { include_legacy = false })
   assert_equal(#before_errors, 0, "undo-cancellation history baseline is readable")
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "modified-buffer rating can be queued before undo")
   assert_true(flashcards.undo_last_rating(), "queued rating can be undone before the source is saved")
   flashcards.close_review()
@@ -776,7 +814,7 @@ do
 
   local before_entries, before_errors = history.read(config, { include_legacy = false })
   assert_equal(#before_errors, 0, "discarded-buffer history baseline is readable")
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "modified-buffer rating is queued before buffer deletion")
   flashcards.close_review()
 
@@ -810,7 +848,7 @@ do
 
   local before_entries, before_errors = history.read(config, { include_legacy = false })
   assert_equal(#before_errors, 0, "saveas history baseline is readable")
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(2), "modified-buffer rating is queued before saveas")
   flashcards.close_review()
   vim.cmd("saveas! " .. vim.fn.fnameescape(renamed_path))
@@ -841,7 +879,7 @@ do
 
   local before_entries, before_errors = history.read(config, { include_legacy = false })
   assert_equal(#before_errors, 0, "setup-reentry history baseline is readable")
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "modified-buffer rating is queued before setup reentry")
   flashcards.close_review()
 
@@ -1147,7 +1185,7 @@ vim.fn.writefile({
   "@end",
 }, collection_dir .. "/due-check.norg")
 
-vim.cmd("NeorgFlashcardReviewDue")
+vim.cmd("Flashcards review due")
 local _, due_text = current_popup()
 assert_contains(due_text, "due | 1/3", "due review keeps only due and new cards")
 assert_true(not due_text:find("未来", 1, true), "due review skips cards scheduled in the future")
@@ -1167,7 +1205,7 @@ vim.fn.writefile({
 }, requeue_path)
 vim.cmd.edit(vim.fn.fnameescape(requeue_path))
 
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 local _, requeue_initial = current_popup()
 assert_contains(requeue_initial, "file | 1/2", "requeue fixture starts with two cards")
 flashcards.rate_current(1)
@@ -1254,7 +1292,6 @@ assert_buffer_maps(overview_popup, {
   "c",
   "m",
   "R",
-  "s",
 })
 assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
 
@@ -1392,7 +1429,7 @@ assert_contains(stats_text, "Answer buttons", "stats shows rating distribution")
 assert_contains(stats_text, "Card states", "stats shows lifecycle and availability counts")
 assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
 assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
-assert_buffer_maps(stats_popup, { "q", "1", "2", "3", "d", "A", "R", "s" })
+assert_buffer_maps(stats_popup, { "q", "?", "1", "2", "3", "d", "A", "R" })
 overview.close()
 assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")
 
@@ -1406,7 +1443,7 @@ vim.fn.writefile({
 }, cloze_path)
 vim.cmd.edit(vim.fn.fnameescape(cloze_path))
 
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 local _, cloze_front = current_popup()
 assert_contains(cloze_front, "東京は[...]の首都です", "cloze is masked before the reveal")
 assert_true(not cloze_front:find("日本", 1, true), "cloze hides the answer before the reveal")
@@ -1450,7 +1487,26 @@ vim.notify = function(message)
   table.insert(notifications, tostring(message))
 end
 
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
+do
+  local review_popup = vim.api.nvim_get_current_buf()
+  assert_buffer_maps(review_popup, { "q", "?", "j", "k", "1", "2", "3" })
+  assert_contains(window_footer(), "Enter/Space reveal", "question review shows its current shortcuts")
+  local review_maps = {}
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(review_popup, "n")) do
+    review_maps[map.lhs] = true
+  end
+  assert_true(not review_maps.n and not review_maps.p, "retired review navigation aliases are absent")
+end
+
+review_engine.context_help()
+do
+  local _, question_help_text = current_popup()
+  assert_contains(question_help_text, "Review keys · question", "review help names the question state")
+  assert_contains(question_help_text, "Reveal first, then rate Good", "question help explains rating reveal gating")
+end
+review_engine.help_close()
+
 review_engine.hint()
 local _, first_hint_text = current_popup()
 assert_contains(first_hint_text, "Hint 1", "review shows the first progressive hint without revealing the answer")
@@ -1463,6 +1519,16 @@ local _, revealed_text = current_popup()
 assert_contains(revealed_text, "Choose a rating", "first rating key reveals the answer and interval choices")
 assert_contains(revealed_text, "1 Again", "revealed card previews the Again interval")
 assert_equal(flashcards.get_review_state().reviewed, 0, "reveal gating does not count an answer")
+assert_contains(window_footer(), "1/2/3 rate", "revealed review promotes rating shortcuts")
+
+review_engine.context_help()
+do
+  local _, answer_help_text = current_popup()
+  assert_contains(answer_help_text, "Review keys · answer", "review help names the revealed-answer state")
+  assert_contains(answer_help_text, "Rate Good", "revealed-answer help lists rating actions")
+  assert_true(not answer_help_text:find("progressive hint", 1, true), "revealed-answer help omits unavailable hints")
+end
+review_engine.help_close()
 
 assert_true(review_engine.rate_current(3, { require_reveal = true }), "rating succeeds after reveal")
 local _, completed_text = current_popup()
@@ -1471,6 +1537,16 @@ local completed_state = flashcards.get_review_state()
 assert_true(completed_state.completed, "finite review exposes completion state")
 assert_equal(completed_state.reviewed, 1, "completion reports the accepted rating")
 assert_equal(completed_state.remaining, 0, "completion has no implicit wraparound queue")
+assert_contains(window_footer(), "u undo", "completion footer keeps the available undo action")
+
+review_engine.context_help()
+do
+  local _, complete_help_text = current_popup()
+  assert_contains(complete_help_text, "Review keys · complete", "review help names the completion state")
+  assert_contains(complete_help_text, "Undo the last rating", "completion help includes undo")
+  assert_true(not complete_help_text:find("Rate Good", 1, true), "completion help omits finished rating actions")
+end
+review_engine.help_close()
 
 assert_true(flashcards.undo_last_rating(), "the final rating can be undone from the completion screen")
 local undo_state = flashcards.get_review_state()
@@ -1538,7 +1614,7 @@ local hint_original = vim.notify
 vim.notify = function(message)
   table.insert(hints, tostring(message))
 end
-vim.cmd("NeorgFlashcardReviewDue")
+vim.cmd("Flashcards review due")
 vim.notify = hint_original
 
 local hint_seen = false
@@ -1589,7 +1665,7 @@ do
     table.insert(failure_messages, tostring(message))
   end
 
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "source rating succeeds when history append fails")
   flashcards.close_review()
 
@@ -1651,6 +1727,7 @@ do
     default_file = old_path,
     default_kind = "japanese",
     languages = presets.only("japanese"),
+    _test_retry = { order = {} },
   }
   local new_config = {
     flashcards_dir = new_dir,
@@ -1660,6 +1737,11 @@ do
   }
   local old_history_path = history.path(old_config)
   local append_original = history.append
+  old_config.on_review_event = function(event)
+    if event.event == "rated" then
+      table.insert(old_config._test_retry.order, event.card_id)
+    end
+  end
   history.append = function(event, destination, opts)
     if history.path(destination) == old_history_path then
       return false, "old history destination remains unavailable"
@@ -1669,14 +1751,14 @@ do
 
   flashcards.setup(old_config)
   vim.cmd.edit(vim.fn.fnameescape(old_path))
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "first failed-history rating persists its source")
   assert_true(review_engine.rate_current(2), "second failed-history rating persists its source")
   flashcards.close_review()
 
   flashcards.setup(new_config)
   vim.cmd.edit(vim.fn.fnameescape(new_path))
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(review_engine.rate_current(3), "a stale history path does not block the new destination")
   flashcards.close_review()
 
@@ -1690,8 +1772,8 @@ do
   local old_entries, old_errors = history.read(old_config, { include_legacy = false })
   assert_equal(#old_errors, 0, "the recovered old destination remains readable")
   assert_equal(#old_entries, 2, "both queued events reach the recovered old destination")
-  assert_equal(old_entries[1].card_id, "fc_retry_order_one", "same-destination retry keeps first-in order")
-  assert_equal(old_entries[2].card_id, "fc_retry_order_two", "same-destination retry keeps second-in order")
+  assert_equal(old_entries[1].card_id, old_config._test_retry.order[1], "same-destination retry keeps first-in order")
+  assert_equal(old_entries[2].card_id, old_config._test_retry.order[2], "same-destination retry keeps second-in order")
 
   vim.cmd("doautocmd FocusGained")
   old_entries = history.read(old_config, { include_legacy = false })
@@ -1724,7 +1806,7 @@ do
     end,
   })
   vim.cmd.edit(vim.fn.fnameescape(alias_path))
-  vim.cmd("NeorgFlashcardReviewFile")
+  vim.cmd("Flashcards review file")
   assert_true(flashcards.suspend_current(), "review can suspend a card using the card_id alias")
 
   local suspended_event = state_events[#state_events]
@@ -1735,6 +1817,62 @@ do
     "card-state events resolve the supported card_id alias"
   )
   flashcards.close_review()
+  vim.cmd("silent! bwipeout!")
+end
+
+do
+  local hidden_dir = vim.fn.tempname()
+  local hidden_path = hidden_dir .. "/cards.norg"
+  vim.fn.mkdir(hidden_dir, "p")
+  vim.fn.writefile({
+    "@flashcard japanese",
+    "id: fc_hidden_shortcuts",
+    "japanese: 隠",
+    "english: hidden",
+    "@end",
+  }, hidden_path)
+
+  flashcards.setup({
+    flashcards_dir = hidden_dir,
+    default_file = hidden_path,
+    default_kind = "japanese",
+    languages = presets.only("japanese"),
+    ui = { show_shortcuts = false },
+  })
+
+  vim.cmd("Flashcards cards")
+  local hidden_hub_buf = vim.api.nvim_get_current_buf()
+  assert_buffer_maps(hidden_hub_buf, { "?" })
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local statusline = vim.wo[win].statusline
+    assert_true(not statusline:find("keys", 1, true), "hidden hub chrome omits shortcut labels")
+  end
+  overview.context_help()
+  local _, hidden_hub_help = current_popup()
+  assert_contains(hidden_hub_help, "Cards keys", "hub help remains available when shortcut chrome is hidden")
+  overview.help_close()
+  overview.close()
+
+  vim.cmd.edit(vim.fn.fnameescape(hidden_path))
+  vim.cmd("Flashcards review file")
+  local hidden_review_buf = vim.api.nvim_get_current_buf()
+  assert_buffer_maps(hidden_review_buf, { "?" })
+  assert_equal(util.trim(window_footer()), "", "review shortcut footer can be hidden")
+  review_engine.context_help()
+  local _, hidden_review_help = current_popup()
+  assert_contains(hidden_review_help, "Review keys · question", "review help remains available without its footer")
+  review_engine.help_close()
+  flashcards.close_review()
+
+  flashcards.add_to_default("japanese")
+  local hidden_form_buf = vim.api.nvim_get_current_buf()
+  assert_buffer_maps(hidden_form_buf, { "?" })
+  assert_equal(util.trim(window_footer()), "", "form shortcut footer can be hidden")
+  form.context_help()
+  local _, hidden_form_help = current_popup()
+  assert_contains(hidden_form_help, "Add form keys", "form help remains available without its footer")
+  form.help_close()
+  form.close()
   vim.cmd("silent! bwipeout!")
 end
 

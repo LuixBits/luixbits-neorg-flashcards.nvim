@@ -22,6 +22,9 @@ local defaults = {
   languages = vim.deepcopy(schema.default_languages),
   scheduling = vim.deepcopy(schedule.DEFAULTS),
   leech_threshold = 8,
+  ui = {
+    show_shortcuts = true,
+  },
 }
 
 local config = vim.deepcopy(defaults)
@@ -173,10 +176,6 @@ function M.add_kind(kind)
   add_card(kind)
 end
 
-function M.add_japanese()
-  M.add_kind("japanese")
-end
-
 ---Add a card straight to the default file, no matter which buffer is current.
 ---Used by the overview's `a` key. Falls back to default_kind.
 ---@param kind string|nil
@@ -201,10 +200,6 @@ function M.add_to_default(kind)
       return append_to_default(kind, values)
     end,
   })
-end
-
-function M.insert_japanese()
-  M.add_japanese()
 end
 
 function M.validate_file()
@@ -593,20 +588,19 @@ local function command_words(args)
   return vim.split(util.trim(args or ""), "%s+", { trimempty = true })
 end
 
----Single discoverable command surface. The longer NeorgFlashcard* commands
----remain compatibility aliases for existing configurations and scripts.
+---Single discoverable command surface.
 ---@param args string|nil
 function M.command(args)
   local words = command_words(args)
   local route = table.remove(words, 1) or "overview"
 
-  if route == "overview" or route == "home" then
+  if route == "overview" then
     M.overview()
-  elseif route == "cards" or route == "browse" then
+  elseif route == "cards" then
     M.cards()
-  elseif route == "stats" or route == "analytics" then
+  elseif route == "stats" then
     M.stats()
-  elseif route == "review" or route == "due" then
+  elseif route == "review" then
     local scope = table.remove(words, 1) or "due"
     if scope == "due" then
       M.review_due()
@@ -623,9 +617,9 @@ function M.command(args)
     end
   elseif route == "add" then
     M.add_kind(table.concat(words, " "))
-  elseif route == "open" or route == "source" then
+  elseif route == "open" then
     M.open_flashcards()
-  elseif route == "check" or route == "validate" then
+  elseif route == "check" then
     M.validate_collection()
   elseif route == "migrate" then
     if M.migrate_ids then
@@ -633,7 +627,7 @@ function M.command(args)
     else
       util.notify("Card ID migration is not available", vim.log.levels.WARN)
     end
-  elseif route == "help" or route == "?" then
+  elseif route == "help" then
     M.help()
   else
     util.notify("Unknown Flashcards action: " .. route .. " (try :Flashcards help)", vim.log.levels.ERROR)
@@ -916,31 +910,6 @@ function M.setup(opts)
     complete = complete_command,
     desc = "Open the flashcard hub or run a flashcard action",
   })
-
-  vim.api.nvim_create_user_command("NeorgFlashcardOpen", M.open_flashcards, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardAdd", function(opts_)
-    M.add_kind(opts_.args)
-  end, {
-    nargs = "?",
-    complete = function()
-      return vim.tbl_keys(config.languages or {})
-    end,
-  })
-  vim.api.nvim_create_user_command("NeorgFlashcardAddJapanese", M.add_japanese, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardInsertJapanese", M.insert_japanese, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardReview", M.review_all, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardReviewDue", M.review_due, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardReviewFile", M.review_file, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardReviewTag", function(opts_)
-    M.review_tag(opts_.args)
-  end, { nargs = "?" })
-  vim.api.nvim_create_user_command("NeorgFlashcardReviewScore", function(opts_)
-    M.review_score(opts_.args)
-  end, { nargs = "?" })
-  vim.api.nvim_create_user_command("NeorgFlashcardOverview", M.overview, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardStats", M.stats, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardHelp", M.help, {})
-  vim.api.nvim_create_user_command("NeorgFlashcardValidate", M.validate_file, {})
 end
 
 return M

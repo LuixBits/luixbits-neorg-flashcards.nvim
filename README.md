@@ -17,7 +17,7 @@ notes.
 - [Neorg or Plain Neovim?](#neorg-or-plain-neovim)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Chapters and Collections](#chapters-and-collections)
+- [Files and Chapters](#files-and-chapters)
 - [Commands](#commands)
 - [Review Keys](#review-keys)
 - [Card Format](#card-format)
@@ -40,7 +40,7 @@ notes.
 - Plain-text flashcards stored as Neorg `@flashcard` blocks.
 - Form-based card creation: an editable scratch buffer, one line per field
   (`<C-s>` saves, the form stays open for the next card).
-- One primary command, `:Flashcards`, opens a full-tab hub with Overview,
+- One command, `:Flashcards`, opens a full-tab hub with Overview,
   Cards, and Stats pages. Its statusline shows the useful keys for the current
   page, and `?` opens the complete local key list.
 - A searchable card browser with lifecycle, timing, and availability states;
@@ -196,11 +196,11 @@ Import the module next to your NVF/Home Manager setup:
       flashcards_dir = "~/notes/flashcards";
       default_file = "~/notes/flashcards/cards.norg";
       default_kind = "japanese";
+      ui.show_shortcuts = true;
     };
 
     keymaps = {
       enable = true;
-      mode = "hub";
       prefix = "<leader>nc";
     };
   };
@@ -208,11 +208,10 @@ Import the module next to your NVF/Home Manager setup:
 ```
 
 The module adds the plugin package to NVF, emits the Lua `setup` call, and only
-creates keymaps when `keymaps.enable = true`. The default `mode = "hub"` maps
-the exact `prefix` key to `:Flashcards`, so the example creates one global
-shortcut: `<leader>nc`. Set `mode = "legacy"` to restore the older
-command-per-suffix key group. The module does not install or configure Neorg;
-enable Neorg separately in NVF if you want its editing features.
+creates a keymap when `keymaps.enable = true`. The exact `prefix` key opens
+`:Flashcards`, so this example creates one global shortcut: `<leader>nc`. The
+module does not install or configure Neorg; enable Neorg separately in NVF if
+you want its editing features.
 
 If you do not want to import the module, use the package directly:
 
@@ -257,7 +256,7 @@ in {
 `default_file` may be nested; its parent directories are created when it is
 opened. Keeping it under `flashcards_dir` makes it part of collection reviews.
 
-## Chapters and Collections
+## Files and Chapters
 
 Use one `.norg` file per chapter and keep those files under `flashcards_dir`:
 
@@ -285,8 +284,8 @@ comma-separated tag at a time.
 
 ## Commands
 
-`:Flashcards` is the primary command. With no arguments it opens the Overview
-page; command-line completion exposes the other routes.
+`:Flashcards` is the plugin's one command. With no arguments it opens the
+Overview page; command-line completion exposes the other routes.
 
 | Command | Action |
 | --- | --- |
@@ -306,13 +305,8 @@ page; command-line completion exposes the other routes.
 
 The add form uses `Enter` to move to the next field and save from the last
 one, `Tab` / `Shift-Tab` to cycle fields, and `<C-s>` to save from anywhere.
-It stays open for the next card until `q`.
-
-The longer `:NeorgFlashcardOpen`, `:NeorgFlashcardAdd`,
-`:NeorgFlashcardReview*`, `:NeorgFlashcardOverview`,
-`:NeorgFlashcardStats`, `:NeorgFlashcardHelp`, and
-`:NeorgFlashcardValidate` commands remain as compatibility aliases. The
-Japanese add/insert aliases also remain when that preset is configured.
+It stays open for the next card until `q`. Leave Insert mode and press `?` to
+see its current shortcuts.
 
 ## Review Keys
 
@@ -320,7 +314,8 @@ These mappings exist only inside the review popup; they do not occupy global
 normal-mode keys.
 
 - `Space` / `Enter`: reveal the answer. A revealed card must be rated.
-- `j` / `k`: browse the next or previous pending card (`n` / `p` also work).
+- `j` / `k`: browse the next or previous pending card.
+- `?`: show the shortcuts available in the current review state.
 - `h`: reveal a progressively larger part of the answer as a hint.
 - `t`: type the answer and check it against the reveal fields.
 - `1`: Again; save score 1 and retry this card once later in the session.
@@ -423,9 +418,7 @@ configurable and defaults to eight lapses. Invalid schema blocks and every copy
 of a duplicate ID are excluded from review; the Cards page keeps them visible
 as `[INVALID]` rows so you can press `e` to repair the source. Other warnings do
 not make an otherwise valid card unreviewable. `:checkhealth neorg_flashcards`
-reports the same setup and collection health through Neovim's health UI. The
-compatibility command `:NeorgFlashcardValidate` still checks only the current
-buffer.
+reports the same setup and collection health through Neovim's health UI.
 
 ## Flashcard Hub and Stats
 
@@ -463,8 +456,8 @@ lowest rating. Use `d` to start due review, `A` for all active cards, or `R`
 to reload.
 
 Common hub actions include `c` for a collection check, `m` for ID migration,
-`H` for the plugin guide, `R` to reload, `s` to move between panels, and `q`
-to close the tab. `Esc` first clears a Cards search/filter, then closes.
+`H` for the plugin guide, `R` to reload, and `q` to close the tab. `Esc` first
+clears a Cards search/filter, then closes.
 
 Successfully persisted ratings are appended as versioned JSON objects to
 `reviews.jsonl` inside `flashcards_dir`. Each event can include its stable card
@@ -503,6 +496,9 @@ require("neorg_flashcards").setup({
   default_kind = nil,
   languages = {},
   leech_threshold = 8,
+  ui = {
+    show_shortcuts = true,
+  },
   scheduling = {
     again_minutes = 10,
     mid_hours = 12,
@@ -523,6 +519,7 @@ require("neorg_flashcards").setup({
 | `scheduling` | Spaced-repetition knobs; every key is optional. |
 | `history_file` | Optional path overriding `<flashcards_dir>/reviews.jsonl`. |
 | `leech_threshold` | Lapse count used by stats and health checks; defaults to 8. |
+| `ui.show_shortcuts` | Show compact hub, review, and form hints; `?` help remains available when false. |
 
 Set `flashcards_dir` and `default_file` together. Changing the directory does
 not silently rewrite the independently configured default file—configuration
@@ -615,9 +612,8 @@ global surface to one shortcut because its actions and hints are buffer-local:
 vim.keymap.set("n", "<leader>nc", "<cmd>Flashcards<CR>", { desc = "Open flashcards" })
 ```
 
-With the NVF module, `keymaps.mode = "hub"` (the default) creates that exact
-mapping. `keymaps.mode = "legacy"` restores the older `<leader>nc` prefix with
-`o/i/h/r/f/t/s/v` command suffixes and optional which-key group registration.
+With the NVF module, `keymaps.enable = true` creates that exact mapping. Change
+`keymaps.prefix` if you prefer another key.
 
 ## Lua API
 
@@ -636,7 +632,6 @@ vim.keymap.set("n", "<leader>nc", flashcards.overview, { desc = "Open flashcards
 | `open_flashcards()` | Create or open `default_file` |
 | `add_kind(kind?)` | Add-card form targeting the current `.norg` file |
 | `add_to_default(kind?)` | Add-card form targeting `default_file` |
-| `add_japanese()` / `insert_japanese()` | Compatibility aliases (`japanese` preset) |
 | `validate_file()` | Validate `@flashcard` blocks in the current buffer |
 | `validate_collection()` | Run parser, schema, ID, scheduling, and health checks |
 | `migrate_ids(opts?)` | Preview/confirm stable-ID migration; supports `dry_run` or `apply` |
@@ -751,7 +746,7 @@ lua/neorg_flashcards/identity.lua stable card ID validation and generation
 lua/neorg_flashcards/parser.lua   @flashcard parsing, collection, ID migration
 lua/neorg_flashcards/review.lua   finite review queue, hints, undo, typed answers
 lua/neorg_flashcards/overview.lua full-tab Overview, Cards, and Stats hub
-lua/neorg_flashcards/ui/actions.lua hub mappings, contextual help, footer hints
+lua/neorg_flashcards/ui/actions.lua UI mappings, contextual help, footer hints
 lua/neorg_flashcards/history.lua  versioned JSONL review event ledger
 lua/neorg_flashcards/stats.lua    retention, state, heatmap, forecast sections
 lua/neorg_flashcards/health.lua   collection inspection and :checkhealth report

@@ -28,6 +28,7 @@ language:
     default_kind = "japanese",
     languages = presets.only("japanese"),
     leech_threshold = 8,
+    ui = { show_shortcuts = true },
   })
 <
 
@@ -35,17 +36,18 @@ Use `presets.only("chinese")` for Chinese, or pass a custom `languages`
 table. Neorg is optional. Card storage and collection scans always use
 `.norg` files, but the plugin reads those files directly.
 
+`ui.show_shortcuts = true` displays compact hints in the hub, review window,
+and add form. Set it to false to hide the persistent chrome; mappings and `?`
+contextual help remain available.
+
 The repository's NVF module exposes `programs.nvf.neorg-flashcards`. Its
 keymap options are:
 
   keymaps.enable        Add module-managed keymaps when true.
-  keymaps.mode          `hub` (default) or `legacy`.
-  keymaps.prefix        Exact hub key, or prefix in legacy mode.
-  keymaps.registerWhichKey
-                        Register the command group in legacy mode.
+  keymaps.prefix        Exact key that opens the hub.
 
-With `enable = true`, `mode = "hub"`, and `prefix = "<leader>nc"`, the module
-creates one global mapping: `<leader>nc` opens |:Flashcards|.
+With `enable = true` and `prefix = "<leader>nc"`, the module creates one
+global mapping: `<leader>nc` opens |:Flashcards|.
 
 ==============================================================================
 PRIMARY COMMAND                                 *neorg-flashcards-commands*
@@ -53,7 +55,8 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
                                                         *:Flashcards*
 :Flashcards [route]
         Open the Overview page when no route is supplied. Command-line
-        completion lists routes and review scopes.
+        completion lists routes and review scopes. This is the plugin's only
+        Ex command.
 
   :Flashcards overview
   :Flashcards cards
@@ -71,7 +74,8 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
 
   :Flashcards add [kind]
         Open the add form for the current `.norg` file, or for `default_file`
-        from another buffer. Uses `default_kind` when [kind] is omitted.
+        from another buffer. Uses `default_kind` when [kind] is omitted. Leave
+        Insert mode and press `?` to see the form's current shortcuts.
 
   :Flashcards open
         Create or open `default_file`, including missing parent directories.
@@ -86,19 +90,6 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
   :Flashcards help
         Open the short in-editor guide.
 
-The older commands remain compatibility aliases, not the primary interface:
-
-  *:NeorgFlashcardOpen*          *:NeorgFlashcardAdd*
-  *:NeorgFlashcardReview*        *:NeorgFlashcardReviewDue*
-  *:NeorgFlashcardReviewFile*    *:NeorgFlashcardReviewTag*
-  *:NeorgFlashcardReviewScore*   *:NeorgFlashcardOverview*
-  *:NeorgFlashcardStats*         *:NeorgFlashcardHelp*
-  *:NeorgFlashcardValidate*
-
-`NeorgFlashcardValidate` checks only the current buffer. The Japanese
-`NeorgFlashcardAddJapanese` and `NeorgFlashcardInsertJapanese` aliases also
-remain when that preset is configured.
-
 ==============================================================================
 GLOBAL KEYMAP                                   *neorg-flashcards-keymaps*
 
@@ -109,8 +100,7 @@ The plugin itself defines no global mappings. A normal Lua setup only needs:
 <
 
 Hub, review, and form keys are buffer-local. The NVF module creates the same
-single mapping when `keymaps.enable = true` and `keymaps.mode = "hub"`.
-Set `keymaps.mode = "legacy"` to restore the old command-per-suffix group.
+single mapping when `keymaps.enable = true`.
 
 ==============================================================================
 FLASHCARD HUB                                       *neorg-flashcards-hub*
@@ -130,7 +120,6 @@ Common keys:
   d / A           review due / review all active cards
   c / m           collection check / stable-ID migration
   R               reload the collection
-  s               move to the other panel
   q               close the hub
   Esc             clear Cards search/filter first, then close
 
@@ -168,7 +157,7 @@ Review keys are local to the floating review window:
 
   Space / Enter   reveal the answer; a revealed card must be rated
   j / k           browse next / previous pending card
-  n / p           compatibility aliases for j / k
+  ?               shortcuts for the current review state
   h               show a progressively larger answer hint
   t               type and check an answer
   1               Again: save score 1 and retry once later this session
