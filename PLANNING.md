@@ -1,98 +1,112 @@
 # Planning
 
-## 0.2: One Flashcard Workspace
+The plugin is moving in small vertical slices. Each slice must leave the
+existing Japanese collection usable, keep plain-text cards as the source of
+truth, and include the UI, data path, tests, and documentation needed to make
+the feature understandable.
 
-The 0.2 design reduces the global interface to one command and, for NVF users,
-one shortcut. `:Flashcards` opens the workspace; actions inside it are local,
-visible, and contextual.
+The architectural choices behind this plan live in
+[`docs/adr/`](docs/adr/README.md).
 
-### Implemented scope
+## 0.2: Finish the unified workspace
 
-- One command router for Overview, Cards, Stats, review scopes, add, open,
-  collection check, stable-ID migration, and help.
-- A responsive full-tab hub with page tabs, contextual footer hints, and `?`
-  help generated from the same action catalogue as the actual mappings.
-- An Overview page for the due queue and tag groups.
-- A Cards page for every card and state, with search, filters, sorting, card
-  details, preview, source editing, suspend, and bury. Invalid blocks remain
-  visible for repair but are excluded from review and scheduling actions.
-- A Stats page for activity, retention, ratings, state counts, leeches, answer
-  time, estimated workload, heatmap, forecast, tag groups, and weak cards.
-- A finite review queue with reveal-before-rating, progressive hints, typed
-  answers, Again retry, interval previews, undo, bury, suspend, and completion
-  summary.
-- Stable card IDs, lifecycle/repetition/lapse metadata, availability state,
-  safe legacy migration, collection health checks, and versioned JSONL history.
-- One opt-in NVF hub mapping at `<leader>nc`, with the old suffix mappings
-  available through `keymaps.mode = "legacy"`.
-- Compatibility aliases for existing `:NeorgFlashcard*` users and scripts.
+Status: in progress
 
-### Interaction model
+The 0.2 release replaces the command-per-action interface with one workspace.
 
-The hub has three pages because they answer different questions:
+- Keep one command, `:Flashcards`, and one optional NVF shortcut.
+- Remove old `:NeorgFlashcard*` aliases, hidden route nicknames, the NVF suffix
+  keymap mode, review `n`/`p`, and the hub's obsolete `s` pane bridge.
+- Generate buffer-local mappings, persistent hints, and `?` help from one
+  action catalogue across the hub, review window, and add form.
+- Add `ui.show_shortcuts`, defaulting to `true`, to hide persistent shortcut
+  chrome without hiding the mappings or contextual help.
+- Keep the broader guide at `:Flashcards help` and hub `H`.
+- Preserve ID-less cards, old scheduling fields, schema aliases, and
+  `reviews.log` reads. Removing old UI must not make stored data unreadable.
+- Keep the finished Overview, Cards, Stats, finite review queue, stable IDs,
+  health checks, migration, and JSONL analytics from the unified-hub work.
 
-| Page | Question | Primary action |
+Release checks:
+
+1. Exercise every `:Flashcards` route and its completion.
+2. Compare installed mappings, compact hints, and `?` output in every UI state.
+3. Test visible and hidden shortcut chrome at narrow and wide widths.
+4. Run headless, clean-install, Neorg integration, formatting, documentation,
+   and Nix flake checks.
+5. Evaluate the real NVF configuration and confirm that it emits only
+   `<leader>nc`.
+
+## 0.3: Named collections
+
+Goal: Japanese and computer-science study never mix unless the user explicitly
+asks for an aggregate view.
+
+1. Normalize today's top-level setup into an implicit `default` collection.
+2. Add collection validation, canonical path resolution, and immutable
+   collection contexts.
+3. Pass that context through parser, add form, review, history, health, Cards,
+   and Stats before exposing a collection switcher.
+4. Store one history ledger per collection and add collection identity to new
+   events.
+5. Show the active collection in the hub, add local `C` selection, and add
+   `:Flashcards collection [id]` for scripts.
+6. Test two roots with separate ledgers, dirty buffers, failed history retries,
+   and identical card IDs. Reject overlapping roots and shared ledger paths.
+
+Existing `flashcards_dir`, `default_file`, `default_kind`, and `languages`
+configuration remains valid as the implicit collection during migration.
+
+## 0.4: General card types
+
+Goal: use the same engine for languages and technical subjects without making
+one universal, awkward schema.
+
+1. Make `card_types` the canonical name for today's schema registry, with a
+   temporary `languages` alias.
+2. Add built-in `question_answer`, `term_definition`, and `code_output` types.
+3. Add a type picker to the form and a type filter to Cards.
+4. Add Japanese recognition, production, kanji, and sentence presets where
+   they can reuse the same one-block/one-scheduled-card model.
+5. Record card type in new history events and show per-type counts and
+   retention.
+
+Automatic forward/reverse siblings and cloze siblings need a separate note
+identity design. They should not silently duplicate scheduling state inside
+the current card block.
+
+## 0.5: Daily study plans and scheduler adapters
+
+Goal: control workload without confusing queue selection with interval math.
+
+1. Wrap the current scheduler as `simple-v1` without changing its behavior.
+2. Add unlimited-by-default `new_per_day` and `reviews_per_day` limits per
+   collection.
+3. Build queues oldest-due first, count unique cards, and keep `review all` as
+   an explicit limit-free cram mode.
+4. Show quota progress and held-back cards in Overview and Stats.
+5. Record scheduler name/version in history so later algorithms are auditable.
+
+The present three ratings remain:
+
+| Rating | New card | Later reviews |
 | --- | --- | --- |
-| Overview | What should I study now? | Start the due queue |
-| Cards | What cards do I have, and what state are they in? | Find and act on one card |
-| Stats | How is review going over time? | Inspect trends, then start a queue |
+| `1` Again | 10 minutes | 10 minutes; lowers ease and enters relearning |
+| `2` Hard | 12 hours | Previous interval × 1.2 |
+| `3` Good | 3 days | Previous interval × ease, initially 2.5 |
 
-Only the hub shortcut is global. Page selection, search, filtering, card
-actions, review controls, form controls, and help are buffer-local.
+These defaults are configurable. FSRS is a later candidate, not a silent
+replacement: its rating scale, state migration, and dependency choice need a
+separate ADR.
 
-### State model
+## Later candidates
 
-Card state is deliberately split instead of compressed into one overloaded
-label:
+- Saved browser filters and named study plans.
+- Audio attachments, pronunciation playback, and optional TTS hooks.
+- Import and export helpers that preserve stable IDs and plain-text ownership.
+- Per-tag interval growth and retention views.
+- Explicit cross-collection analytics and study sessions.
+- FSRS after the scheduler adapter and event metadata exist.
 
-- Lifecycle: `new`, `learning`, `review`, or `relearning`.
-- Timing: `new`, `due`, `overdue`, `soon`, or `scheduled`, derived from `due`.
-- Availability: `active`, `suspended`, or `buried`; buried cards can have an
-  `available_at` time.
-
-Stable IDs connect source cards to append-only review events. Legacy cards
-remain readable before migration, while collection checks make missing and
-duplicate IDs visible. Every copy of a duplicate ID is treated as invalid so
-history and scheduling state cannot attach to the wrong block.
-
-### Compatibility and migration
-
-- Keep the `:NeorgFlashcard*` commands for compatibility, but document
-  `:Flashcards` first.
-- Generate an ID for every new card and when an ID-less card is rated.
-- Keep `:Flashcards migrate` explicit, previewed, and confirmed. Preflight all
-  source files before the first write and do not overwrite unsaved buffers.
-- Continue reading `reviews.log`; write new persisted review events to
-  `reviews.jsonl`. Queue history for modified source buffers until save, and
-  cancel the pending event when a rating is undone before save.
-- Keep the NVF legacy mapping layout as an opt-in mode rather than deleting it.
-
-### Release gate
-
-Before tagging 0.2.0:
-
-1. Run `bash scripts/test.sh`.
-2. Run `bash scripts/check-clean-install.sh`.
-3. Run `nix flake check --print-build-logs`.
-4. Smoke-test the hub in wide and narrow windows.
-5. Test ID migration on clean files and on loaded, modified buffers.
-6. Finish a review containing an Again retry, then test undo from the
-   completion screen.
-7. Confirm the NVF hub mode emits only `<leader>nc` and legacy mode still emits
-   the suffix group.
-
-## Later Candidates
-
-These are ideas, not 0.2 promises:
-
-- Saved browser filters as named study decks.
-- Daily new-card and review limits.
-- Sibling bury for related cloze cards.
-- Tag and metadata editing without leaving the Cards page.
-- A pluggable scheduler interface, with FSRS as an optional future model once
-  the history contains enough useful review data.
-- Import/export helpers that preserve stable IDs and plain-text ownership.
-- Additional history views such as per-tag retention and interval growth.
-
-Sync, accounts, and a database are still outside the core direction. The notes
-remain the source of truth.
+Sync, accounts, and a database remain outside the core direction. Notes and
+append-only review history stay local and user-owned.
