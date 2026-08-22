@@ -329,7 +329,16 @@ return function(T)
     local custom_ok, custom_message, custom_persisted = store.set_card_fields(custom_card, {
       { field = "score", value = "2" },
     })
-    assert_true(custom_ok, custom_message)
+    assert_true(
+      custom_ok,
+      string.format(
+        "%s\npath=%s\nname=%s\nautocmds=%s",
+        tostring(custom_message),
+        custom_path,
+        vim.api.nvim_buf_get_name(custom_buffer),
+        vim.inspect(vim.api.nvim_get_autocmds({ event = "BufWriteCmd" }))
+      )
+    )
     assert_equal(custom_persisted, false, "custom-write buffers remain explicitly unpersisted")
     assert_contains(custom_message, "custom-write buffer", "custom-write ownership is explained to the user")
     assert_equal(writer_calls, 0, "the plugin does not invoke an existing matching BufWriteCmd")
