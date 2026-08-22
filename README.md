@@ -41,8 +41,8 @@ notes.
 - A target-aware card composer with immutable labels, placeholders, inline
   validation, draft protection, and separate save or save-and-new actions.
 - One command, `:Flashcards`, opens a full-tab hub with Overview,
-  Cards, and Stats pages. Its statusline shows the useful keys for the current
-  page, and `?` opens the complete local key list.
+  Cards, and Stats pages. Its winbar keeps useful current-page keys visible,
+  and `?` opens the complete local key list.
 - A searchable card browser with lifecycle, timing, and availability states;
   filtering, sorting, preview, source editing, bury, and suspend actions.
 - Invalid blocks, including every copy of a duplicate stable ID, stay visible
@@ -431,8 +431,14 @@ reports the same setup and collection health through Neovim's health UI.
 `:Flashcards` opens a full-tab hub. The layout uses side-by-side panels on a
 wide screen and stacks them in a narrow Neovim window. `1`, `2`, and `3` open
 Overview, Cards, and Stats; `Tab` / `Shift-Tab` cycle pages. The winbar shows
-the active page, and the statusline shortens its action hints to fit the pane.
-Press `?` for all keys available on the current page.
+the active page and keeps a compact current-page shortcut ribbon visible even
+with a global statusline. Press `?` for all keys available on the current page.
+
+Navigation follows the pane under the cursor. In the primary Overview and
+Cards pane, `j` / `k` and the arrow keys change the selected card. In
+Stats, or while the secondary pane is focused, they scroll normally. Use
+`Ctrl-D` / `Ctrl-U` or PageDown / PageUp for half pages and `gg` / `G` for the
+top or bottom. The same keys are listed in the contextual `?` window.
 
 Overview groups cards by tag, shows due-state colors, and puts the due queue in
 the primary action. Cards with several tags appear in each group.

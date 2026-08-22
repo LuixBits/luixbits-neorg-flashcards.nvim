@@ -10,6 +10,9 @@ All notable changes to this project will be documented here.
   labels, field hints, inline validation, dirty-draft confirmation, explicit
   save and save-and-new actions, hard deletion boundaries, and failure-safe
   transactional writes.
+- Kept contextual hub shortcuts visible in the winbar under global statuslines
+  and added focus-aware line, half-page, and top/bottom navigation to both hub
+  panes.
 
 ## 0.2.0 - 2026-08-21
 

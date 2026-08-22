@@ -62,6 +62,7 @@ function M.open()
     "Open the hub: :Flashcards",
     "  1 Overview · 2 Cards · 3 Stats · Tab next page · ? keys",
     "  Enter/r review · d due · A all · a add · e source",
+    "  j/k line · Ctrl-D/U half page · gg/G top/bottom",
     "",
     "Cards: / search · f filter · o sort · x suspend · b bury",
     "Collection: c check · m migrate legacy IDs · R refresh",

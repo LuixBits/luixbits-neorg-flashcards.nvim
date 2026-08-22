@@ -117,13 +117,20 @@ FLASHCARD HUB                                       *neorg-flashcards-hub*
 
 |:Flashcards| opens a full tab with Overview, Cards, and Stats pages. Wide
 windows use two columns; narrow windows stack the panels. The winbar marks the
-active page. The statusline shows contextual key hints and shortens them when
-space is limited. Press `?` for the complete key list for the current page.
+active page and keeps compact contextual key hints visible even when Neovim
+uses a global statusline. Press `?` for the complete key list for the current
+page.
 
 Common keys:
 
   1 / 2 / 3       Overview / Cards / Stats
   Tab / Shift-Tab next / previous page
+  j / k, Up / Down
+                    select in the primary list; otherwise scroll
+  Ctrl-D / Ctrl-U  scroll the focused pane by half a page
+  PageDown / PageUp
+                    scroll the focused pane by half a page
+  gg / G            first/last item, or top/bottom of the focused pane
   ?               contextual key help
   H               full plugin guide
   d / A           review due / review all active cards
@@ -157,7 +164,8 @@ Invalid blocks, including every copy of a duplicate stable ID, appear as
 `e` to repair the source; review, suspend, and bury actions stay disabled.
 
 Stats combines activity and collection analytics. Use `d` for due review,
-`A` for an active-card cram session, or `R` to refresh its data.
+`A` for an active-card cram session, or `R` to refresh its data. Both Stats
+panes use the common scrolling keys above.
 
 ==============================================================================
 REVIEW                                             *neorg-flashcards-review*

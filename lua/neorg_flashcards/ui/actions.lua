@@ -33,11 +33,31 @@ local catalog = {
     action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
     action({ "<Tab>" }, "next_page", "Open the next page", HUB),
     action({ "<S-Tab>" }, "previous_page", "Open the previous page", HUB),
-    action({ "j", "<Down>" }, "next", "Select the next card", { "overview", "cards" }, {
+    action({ "j", "<Down>" }, "next", "Select the next item or scroll the focused pane", HUB, {
       hint_key = "j/k",
-      hints = { overview = "queue", cards = "select" },
+      hints = { overview = "navigate", cards = "navigate", stats = "scroll" },
+      essential = true,
+      descriptions = {
+        overview = "Select the next card; scroll when the side pane is focused",
+        cards = "Select the next card; scroll when the detail pane is focused",
+        stats = "Scroll the focused pane down",
+      },
     }),
-    action({ "k", "<Up>" }, "previous", "Select the previous card", { "overview", "cards" }),
+    action({ "k", "<Up>" }, "previous", "Select the previous item or scroll the focused pane", HUB, {
+      descriptions = {
+        overview = "Select the previous card; scroll when the side pane is focused",
+        cards = "Select the previous card; scroll when the detail pane is focused",
+        stats = "Scroll the focused pane up",
+      },
+    }),
+    action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
+      hint_key = "Ctrl-D/U",
+      hint_id = "page_scroll",
+      hints = { overview = "page", cards = "page", stats = "page" },
+    }),
+    action({ "<C-u>", "<PageUp>" }, "scroll_up", "Scroll the focused pane up half a page", HUB),
+    action({ "gg" }, "scroll_top", "Go to the first item or top of the focused pane", HUB),
+    action({ "G" }, "scroll_bottom", "Go to the last item or bottom of the focused pane", HUB),
     action({ "<CR>" }, "activate", "Run the primary action", HUB, {
       descriptions = {
         overview = "Review everything due now",
@@ -45,12 +65,10 @@ local catalog = {
         stats = "Open Cards",
       },
       hints = { overview = "review due", cards = "review" },
-      essential = true,
     }),
     action({ "r" }, "review", "Review the selected queue or card", HUB),
     action({ "d" }, "review_due", "Review everything due now", HUB, {
       hints = { stats = "review due" },
-      essential = true,
     }),
     action({ "A" }, "review_all", "Review the full collection", HUB, { hints = { stats = "review all" } }),
     action({ "a" }, "add", "Add a flashcard", { "overview", "cards" }, {
@@ -240,6 +258,10 @@ local function display_key(key)
     ["<Up>"] = "Up",
     ["<C-s>"] = "Ctrl-S",
     ["<C-n>"] = "Ctrl-N",
+    ["<C-d>"] = "Ctrl-D",
+    ["<C-u>"] = "Ctrl-U",
+    ["<PageDown>"] = "PageDown",
+    ["<PageUp>"] = "PageUp",
   }
   return labels[key] or key
 end

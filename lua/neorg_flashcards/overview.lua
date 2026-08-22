@@ -1173,10 +1173,18 @@ local function apply_chrome()
   local nav = tab_bar()
   for _, pane in ipairs({ state.cards, state.stats }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) then
-      vim.wo[pane.win].winbar = nav
       local footer = " "
       if show_shortcuts() then
         footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), state.capabilities)
+      end
+      -- A global statusline (for example lualine with laststatus=3) can replace
+      -- a window-local statusline after we render. Keep the page tabs in the
+      -- primary pane and use the always-visible secondary winbar as the key
+      -- ribbon. The statusline remains a useful fallback for simpler setups.
+      if pane == state.stats and show_shortcuts() then
+        vim.wo[pane.win].winbar = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
+      else
+        vim.wo[pane.win].winbar = nav
       end
       vim.wo[pane.win].statusline = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
     end
@@ -1301,23 +1309,156 @@ function M.review_selected()
   review_cards({ card }, "card", nil)
 end
 
-function M.move(delta)
+local function focused_hub_window()
+  local current = vim.api.nvim_get_current_win()
+  for _, pane in ipairs({ state.cards, state.stats }) do
+    if pane.win and vim.api.nvim_win_is_valid(pane.win) and pane.win == current then
+      return pane.win
+    end
+  end
+  if state.page == "stats" and state.stats.win and vim.api.nvim_win_is_valid(state.stats.win) then
+    return state.stats.win
+  end
+  if state.cards.win and vim.api.nvim_win_is_valid(state.cards.win) then
+    return state.cards.win
+  end
+end
+
+local function selection_for_page()
   local list, field
   if state.page == "cards" then
     list, field = state.card_entries, "card_sel"
   elseif state.page == "overview" then
     list, field = state.entries, "sel"
-  else
+  end
+  return list, field
+end
+
+local function select_index(list, field, index)
+  if not list or not field or #list == 0 then
     return
   end
-  if #list == 0 then
-    return
-  end
-  state[field] = math.max(1, math.min(#list, state[field] + delta))
+  state[field] = math.max(1, math.min(#list, index))
   if state.page == "cards" then
     state.selected_card_key = browser_entry_key(list[state.card_sel])
   end
   render()
+end
+
+local function move_window_cursor(win, delta)
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    return
+  end
+  vim.api.nvim_win_call(win, function()
+    local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    vim.api.nvim_win_set_cursor(win, { math.max(1, math.min(line_count, row + delta)), 0 })
+  end)
+end
+
+local function scroll_window(win, delta)
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    return
+  end
+  vim.api.nvim_win_call(win, function()
+    local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    local max_topline = math.max(1, line_count - height + 1)
+    local view = vim.fn.winsaveview()
+    view.lnum = math.max(1, math.min(line_count, view.lnum + delta))
+    view.topline = math.max(1, math.min(max_topline, view.topline + delta))
+    vim.fn.winrestview(view)
+  end)
+end
+
+local function scroll_window_edge(win, edge)
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    return
+  end
+  vim.api.nvim_win_call(win, function()
+    local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    local view = vim.fn.winsaveview()
+    if edge == "top" then
+      view.lnum, view.topline = 1, 1
+    else
+      view.lnum = line_count
+      view.topline = math.max(1, line_count - height + 1)
+    end
+    vim.fn.winrestview(view)
+  end)
+end
+
+local function move_selection_page(direction, win)
+  local list, field = selection_for_page()
+  if #list == 0 then
+    return
+  end
+  local index = state[field]
+  local current_line = (list[index] and list[index].line) or vim.api.nvim_win_get_cursor(win)[1]
+  local distance = math.max(1, math.floor(vim.api.nvim_win_get_height(win) / 2))
+  local target_line = current_line + direction * distance
+  local target_index = index
+  if direction > 0 then
+    for candidate = index + 1, #list do
+      target_index = candidate
+      if (list[candidate].line or current_line) >= target_line then
+        break
+      end
+    end
+  else
+    for candidate = index - 1, 1, -1 do
+      target_index = candidate
+      if (list[candidate].line or current_line) <= target_line then
+        break
+      end
+    end
+  end
+  select_index(list, field, target_index)
+end
+
+function M.move(delta)
+  local win = focused_hub_window()
+  if not win then
+    return
+  end
+  if state.page == "stats" or win == state.stats.win then
+    move_window_cursor(win, delta)
+    return
+  end
+  local list, field = selection_for_page()
+  if not list or #list == 0 then
+    return
+  end
+  select_index(list, field, state[field] + delta)
+end
+
+function M.scroll_page(direction)
+  local win = focused_hub_window()
+  if not win then
+    return
+  end
+  direction = direction < 0 and -1 or 1
+  if state.page ~= "stats" and win == state.cards.win then
+    move_selection_page(direction, win)
+    return
+  end
+  local distance = math.max(1, math.floor(vim.api.nvim_win_get_height(win) / 2))
+  scroll_window(win, direction * distance)
+end
+
+function M.scroll_edge(edge)
+  local win = focused_hub_window()
+  if not win then
+    return
+  end
+  edge = edge == "top" and "top" or "bottom"
+  if state.page ~= "stats" and win == state.cards.win then
+    local list, field = selection_for_page()
+    select_index(list, field, edge == "top" and 1 or #list)
+    return
+  end
+  scroll_window_edge(win, edge)
 end
 
 function M.peek()
@@ -1601,6 +1742,14 @@ local function dispatch(action)
     M.move(1)
   elseif action == "previous" then
     M.move(-1)
+  elseif action == "scroll_down" then
+    M.scroll_page(1)
+  elseif action == "scroll_up" then
+    M.scroll_page(-1)
+  elseif action == "scroll_top" then
+    M.scroll_edge("top")
+  elseif action == "scroll_bottom" then
+    M.scroll_edge("bottom")
   elseif action == "activate" then
     if state.page == "overview" then
       M.review_due()

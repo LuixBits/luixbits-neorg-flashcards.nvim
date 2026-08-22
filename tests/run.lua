@@ -136,11 +136,24 @@ do
   local actions = require("neorg_flashcards.ui.actions")
   local cards_footer = actions.footer("cards", 80, { suspend = true, bury = true })
   assert_contains(cards_footer, "? keys", "Cards footer keeps contextual help visible")
-  local narrow_footer = actions.footer("cards", 40, { suspend = true, bury = true })
-  assert_true(vim.fn.strdisplaywidth(narrow_footer) <= 40, "compact shortcut hints fit a narrow pane")
+  local narrow_footer = actions.footer("cards", 38, { suspend = true, bury = true })
+  assert_true(vim.fn.strdisplaywidth(narrow_footer) <= 38, "compact shortcut hints fit the narrowest pane")
   assert_contains(narrow_footer, "? keys", "narrow shortcut hints retain help")
+  assert_contains(narrow_footer, "j/k navigate", "narrow Cards hints retain focused-pane navigation")
+  local narrow_stats_footer = actions.footer("stats", 38, {})
+  assert_true(vim.fn.strdisplaywidth(narrow_stats_footer) <= 38, "Stats shortcut hints fit the narrowest pane")
+  assert_contains(narrow_stats_footer, "j/k scroll", "narrow Stats hints explain how to scroll")
+  local stats_help = table.concat(actions.help_lines("stats", {}), "\n")
+  assert_contains(stats_help, "Ctrl-D / PageDown", "Stats help exposes half-page scrolling")
+  assert_contains(stats_help, "gg", "Stats help exposes top navigation")
+  assert_contains(stats_help, "G", "Stats help exposes bottom navigation")
+  local hub_keys = {}
   for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true })) do
+    hub_keys[binding.key] = true
     assert_true(binding.key ~= "s", "the retired pane-switch compatibility mapping is absent")
+  end
+  for _, key in ipairs({ "<C-d>", "<C-u>", "<PageDown>", "<PageUp>", "gg", "G" }) do
+    assert_true(hub_keys[key], "hub scrolling mapping is registered: " .. key)
   end
 end
 
@@ -1608,6 +1621,7 @@ vim.fn.writefile({
 
 vim.cmd("Flashcards")
 local overview_popup, overview_text = current_popup()
+_G.__flashcards_hub_test = { main_win = vim.api.nvim_get_current_win() }
 assert_equal(overview.current_view(), "overview", "bare :Flashcards opens the Overview page")
 assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "dashboard opens cards and analytics panes")
 assert_contains(overview_text, "nature", "overview lists the shared tag group")
@@ -1628,6 +1642,14 @@ assert_buffer_maps(overview_popup, {
   "<Tab>",
   "j",
   "k",
+  "<Down>",
+  "<Up>",
+  "<C-D>",
+  "<C-U>",
+  "<PageDown>",
+  "<PageUp>",
+  "gg",
+  "G",
   "<CR>",
   "r",
   "d",
@@ -1650,12 +1672,44 @@ assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "
 local stats_pane_buf
 for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
   if win ~= vim.api.nvim_get_current_win() then
+    _G.__flashcards_hub_test.side_win = win
     stats_pane_buf = vim.api.nvim_win_get_buf(win)
   end
 end
 local analytics_text = table.concat(vim.api.nvim_buf_get_lines(stats_pane_buf, 0, -1, false), "\n")
 assert_contains(analytics_text, "Analytics", "dashboard shows the analytics pane")
 assert_contains(analytics_text, "Due forecast", "analytics pane shows the forecast")
+assert_contains(
+  vim.wo[_G.__flashcards_hub_test.main_win].winbar,
+  "Flashcards",
+  "primary winbar keeps page navigation visible"
+)
+assert_contains(
+  vim.wo[_G.__flashcards_hub_test.side_win].winbar,
+  "? keys",
+  "secondary winbar keeps shortcut help visible"
+)
+assert_contains(
+  vim.wo[_G.__flashcards_hub_test.side_win].winbar,
+  "j/k navigate",
+  "Overview shortcut ribbon truthfully describes focused-pane movement"
+)
+
+_G.__flashcards_hub_test.main_cursor = vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.main_win)
+vim.api.nvim_set_current_win(_G.__flashcards_hub_test.side_win)
+vim.api.nvim_win_set_cursor(_G.__flashcards_hub_test.side_win, { 1, 0 })
+overview.move(1)
+assert_equal(
+  vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.side_win)[1],
+  2,
+  "j/k movement scrolls a focused secondary pane"
+)
+assert_equal(
+  vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.main_win)[1],
+  _G.__flashcards_hub_test.main_cursor[1],
+  "scrolling the secondary pane does not change the primary selection"
+)
+overview.focus_cards()
 
 local overview_cursor = vim.api.nvim_win_get_cursor(0)
 overview.move(1)
@@ -1781,8 +1835,76 @@ assert_contains(stats_text, "Answer buttons", "stats shows rating distribution")
 assert_contains(stats_text, "Card states", "stats shows lifecycle and availability counts")
 assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
 assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
-assert_buffer_maps(stats_popup, { "q", "?", "1", "2", "3", "d", "A", "R" })
+assert_buffer_maps(stats_popup, {
+  "q",
+  "?",
+  "1",
+  "2",
+  "3",
+  "j",
+  "k",
+  "<Down>",
+  "<Up>",
+  "<C-D>",
+  "<C-U>",
+  "<PageDown>",
+  "<PageUp>",
+  "gg",
+  "G",
+  "d",
+  "A",
+  "R",
+})
+assert_contains(vim.wo[0].winbar, "? keys", "Stats keeps current shortcuts in its winbar")
+assert_contains(vim.wo[0].winbar, "j/k scroll", "Stats winbar makes line scrolling discoverable")
+
+_G.__flashcards_hub_test.laststatus = vim.o.laststatus
+vim.o.laststatus = 3
+vim.wo[0].statusline = "%#lualine_transparent#"
+assert_contains(vim.wo[0].winbar, "j/k scroll", "global statuslines do not replace the shortcut ribbon")
+vim.o.laststatus = _G.__flashcards_hub_test.laststatus
+
+overview.context_help()
+_G.__flashcards_hub_test.help_buf, _G.__flashcards_hub_test.help_text = current_popup()
+assert_contains(
+  _G.__flashcards_hub_test.help_text,
+  "Scroll the focused pane down",
+  "Stats help explains j/Down scrolling"
+)
+assert_contains(
+  _G.__flashcards_hub_test.help_text,
+  "Scroll the focused pane down half a page",
+  "Stats help explains half pages"
+)
+assert_contains(_G.__flashcards_hub_test.help_text, "top of the focused pane", "Stats help explains gg")
+assert_contains(_G.__flashcards_hub_test.help_text, "bottom of the focused pane", "Stats help explains G")
+overview.help_close()
+
+_G.__flashcards_hub_test.stats_line_count = vim.api.nvim_buf_line_count(stats_popup)
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+overview.move(1)
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 2, "Stats j/k movement advances one line")
+_G.__flashcards_hub_test.view_before = vim.fn.winsaveview()
+overview.scroll_page(1)
+_G.__flashcards_hub_test.view_after = vim.fn.winsaveview()
+assert_true(
+  _G.__flashcards_hub_test.view_after.lnum > _G.__flashcards_hub_test.view_before.lnum,
+  "Stats half-page navigation advances the cursor"
+)
+assert_true(
+  _G.__flashcards_hub_test.view_after.topline > _G.__flashcards_hub_test.view_before.topline,
+  "Stats half-page navigation scrolls the viewport"
+)
+overview.scroll_edge("bottom")
+assert_equal(
+  vim.api.nvim_win_get_cursor(0)[1],
+  _G.__flashcards_hub_test.stats_line_count,
+  "Stats G navigation reaches the bottom"
+)
+overview.scroll_edge("top")
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Stats gg navigation reaches the top")
 overview.close()
+_G.__flashcards_hub_test = nil
 assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")
 
 local cloze_path = vim.fn.tempname() .. ".norg"
@@ -2205,6 +2327,9 @@ do
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local statusline = vim.wo[win].statusline
     assert_true(not statusline:find("keys", 1, true), "hidden hub chrome omits shortcut labels")
+    local winbar = vim.wo[win].winbar
+    assert_true(not winbar:find("keys", 1, true), "hidden hub chrome omits the shortcut ribbon")
+    assert_contains(winbar, "Flashcards", "hidden shortcut chrome retains page navigation")
   end
   overview.context_help()
   local _, hidden_hub_help = current_popup()
