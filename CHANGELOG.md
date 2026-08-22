@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## Unreleased
+
+- Changed the first Hard (`2`) interval from 12 hours to 6 hours and preserved
+  quarter-day precision for sub-day scheduling.
+- Rebuilt flashcard creation as a target-aware composer with immutable virtual
+  labels, field hints, inline validation, dirty-draft confirmation, explicit
+  save and save-and-new actions, hard deletion boundaries, and failure-safe
+  transactional writes.
+
 ## 0.2.0 - 2026-08-21
 
 - Replaced the command-per-action interface with one `:Flashcards` command and

@@ -74,8 +74,17 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
 
   :Flashcards add [kind]
         Open the add form for the current `.norg` file, or for `default_file`
-        from another buffer. Uses `default_kind` when [kind] is omitted. Leave
-        Insert mode and press `?` to see the form's current shortcuts.
+        from another buffer. Uses `default_kind` when [kind] is omitted. The
+        destination is shown above value-only fields; labels, required marks,
+        placeholders, and validation errors cannot be edited. Backspace,
+        word deletion, and Delete stop at the current value's boundaries.
+
+        In Insert mode, Enter advances and saves and closes from the last
+        field; Tab / Shift-Tab cycle fields. Ctrl-S saves and closes, while
+        Ctrl-N saves and starts another card. In Normal mode, j / k select a
+        field and Enter or i edits it. q / Esc confirms before discarding a
+        changed draft, and ? shows the complete current shortcuts. Fields are
+        currently single-line.
 
   :Flashcards open
         Create or open `default_file`, including missing parent directories.
@@ -225,7 +234,7 @@ SCHEDULING                                   *neorg-flashcards-scheduling*
 Ratings use a small SM-2-style rule set:
 
   1 Again   due after `again_minutes` (default 10); ease drops by 0.2
-  2 Hard    interval grows by 1.2, starting at `mid_hours` (default 12)
+  2 Hard    interval grows by 1.2, starting at `mid_hours` (default 6)
   3 Good    interval grows by ease, starting at `good_days` (default 3)
 
 The hub presents three independent state axes:

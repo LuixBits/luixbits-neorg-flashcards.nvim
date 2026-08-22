@@ -13,6 +13,7 @@ local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
+local actions = require("neorg_flashcards.ui.actions")
 local flashcards = require("neorg_flashcards")
 
 local function assert_true(value, message)
@@ -83,6 +84,22 @@ local function window_footer(win)
     end
   end
   return table.concat(values)
+end
+
+local function decoration_text(bufnr)
+  local values = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, -1, 0, -1, { details = true })) do
+    local details = mark[4] or {}
+    for _, chunk in ipairs(details.virt_text or {}) do
+      table.insert(values, tostring(chunk[1] or ""))
+    end
+    for _, line in ipairs(details.virt_lines or {}) do
+      for _, chunk in ipairs(line) do
+        table.insert(values, tostring(chunk[1] or ""))
+      end
+    end
+  end
+  return table.concat(values, "\n")
 end
 
 local test_root = vim.fn.tempname()
@@ -188,6 +205,11 @@ assert_equal(front_value, "学习", "Chinese alias front value")
 local reveal = schema.reveal_fields(config, valid_chinese[1])
 assert_equal(reveal[1].title, "Pinyin", "Chinese pinyin is revealed first")
 assert_equal(reveal[2].title, "English", "Chinese English is revealed")
+
+local japanese_prompts = schema.prompt_fields(config, "japanese")
+assert_equal(japanese_prompts[1].title, "Japanese", "composer schema exposes the field title")
+assert_equal(japanese_prompts[1].placeholder, "e.g. 猫", "composer schema exposes field placeholders")
+assert_contains(japanese_prompts[1].help, "written in Japanese", "composer schema exposes field help")
 
 do
   local created_lines = schema.card_lines(config, "japanese", {
@@ -542,63 +564,393 @@ local updated = table.concat(vim.fn.readfile(card_path), "\n")
 assert_contains(updated, "score: 3", "score was written")
 assert_contains(updated, "reviewed: 2026-07-01", "review date was written")
 
-local prompted_path = vim.fn.tempname() .. ".norg"
-vim.cmd.edit(vim.fn.fnameescape(prompted_path))
-vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-  "* Prompt Test",
-  "",
-})
-vim.cmd.write()
-vim.api.nvim_win_set_cursor(0, { 2, 0 })
-
-local form_target = vim.api.nvim_get_current_buf()
-flashcards.add_kind("")
-local form_buf = vim.api.nvim_get_current_buf()
-assert_true(form_buf ~= form_target, "add opens the form buffer")
-assert_equal(vim.bo[form_buf].buftype, "nofile", "form is a scratch buffer")
-assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "form starts on the first field")
-assert_buffer_maps(form_buf, { "q", "?", "<CR>" })
-assert_contains(window_footer(), "Enter next", "form shows compact current shortcuts by default")
-
-form.context_help()
 do
-  local _, form_help_text = current_popup()
-  assert_contains(form_help_text, "Add form keys", "form has contextual key help")
-  assert_contains(form_help_text, "Normal or Insert mode", "form help distinguishes editing modes")
-end
-form.help_close()
-assert_equal(vim.api.nvim_get_current_buf(), form_buf, "closing form help returns to the form")
+  local prompted_path = vim.fn.tempname() .. ".norg"
+  vim.cmd.edit(vim.fn.fnameescape(prompted_path))
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+    "* Prompt Test",
+    "",
+  })
+  vim.cmd.write()
+  vim.api.nvim_win_set_cursor(0, { 2, 0 })
 
-local form_imaps = {}
-for _, map in ipairs(vim.api.nvim_buf_get_keymap(form_buf, "i")) do
-  form_imaps[map.lhs:lower()] = true -- lhs casing is canonicalized (<C-S>)
-end
-for _, lhs in ipairs({ "<c-s>", "<cr>", "<tab>", "<s-tab>" }) do
-  assert_true(form_imaps[lhs], "form maps " .. lhs .. " in insert mode")
-end
-form.next_field()
-assert_equal(vim.api.nvim_win_get_cursor(0)[1], 2, "Enter hops to the next field")
-form.cycle_field(-1)
-assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Shift-Tab hops back")
+  local form_target = vim.api.nvim_get_current_buf()
+  flashcards.add_kind("")
+  local form_buf = vim.api.nvim_get_current_buf()
+  assert_true(form_buf ~= form_target, "add opens the form buffer")
+  assert_equal(vim.bo[form_buf].buftype, "nofile", "form is a scratch buffer")
+  assert_equal(vim.bo[form_buf].filetype, "neorg_flashcards_form", "composer has a dedicated filetype")
+  assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "form starts on the first field")
+  assert_equal(vim.api.nvim_win_get_cursor(0)[2], 0, "virtual labels do not offset the value cursor")
+  assert_buffer_maps(form_buf, { "q", "?", "<CR>", "i", "j", "k", "<C-S>", "<C-N>" })
+  assert_contains(window_footer(), "Ctrl-S save", "form promotes save and return")
+  assert_contains(window_footer(), "Ctrl-N new", "form exposes repeated entry without another global key")
 
-vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, {
-  "Japanese: 机",
-  "Reading: つくえ",
-  "English: desk",
-  "Notes: noun",
-  "Tags: jlpt furniture",
-})
-form.save()
-assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "saving resets the form to the first field")
-form.close()
+  local initial_form_lines = vim.api.nvim_buf_get_lines(form_buf, 0, -1, false)
+  assert_equal(#initial_form_lines, 5, "composer keeps exactly one raw line per field")
+  for index, line in ipairs(initial_form_lines) do
+    assert_equal(line, "", "composer field " .. index .. " starts with value-only text")
+  end
 
-local prompted = table.concat(vim.fn.readfile(prompted_path), "\n")
-assert_contains(prompted, "@flashcard japanese", "form flow inserted a Japanese card")
-assert_contains(prompted, "japanese: 机", "form flow saved front field")
-assert_contains(prompted, "english: desk", "form flow saved required answer field")
-assert_contains(prompted, "tags: jlpt furniture", "form flow saved optional tags")
-assert_equal(vim.api.nvim_get_current_buf(), form_target, "closing the form returns to the card file")
-vim.cmd("silent! bwipeout!")
+  local inline_labels = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(form_buf, -1, 0, -1, { details = true })) do
+    local details = mark[4] or {}
+    if details.virt_text_pos == "inline" then
+      table.insert(inline_labels, mark)
+    end
+  end
+  table.sort(inline_labels, function(left, right)
+    return left[2] < right[2]
+  end)
+  assert_equal(#inline_labels, 5, "every composer field has one virtual label")
+  for index, mark in ipairs(inline_labels) do
+    assert_equal(mark[2], index - 1, "virtual label follows its field row")
+    assert_equal(mark[3], 0, "virtual label is anchored at value column zero")
+    assert_equal(mark[4].right_gravity, false, "typing cannot move the virtual label")
+  end
+
+  local initial_decorations = decoration_text(form_buf)
+  assert_contains(initial_decorations, "Target", "composer identifies its immutable destination")
+  assert_contains(initial_decorations, vim.fn.fnamemodify(prompted_path, ":t"), "composer shows the destination file")
+  assert_contains(initial_decorations, "Japanese", "composer renders field labels outside the buffer")
+  assert_contains(initial_decorations, "e.g. 猫", "composer renders schema placeholders")
+  assert_contains(initial_decorations, "Word or expression", "composer renders help for the active field")
+
+  local form_action_ids = {}
+  for _, binding in ipairs(actions.available_bindings("form")) do
+    form_action_ids[binding.mode .. ":" .. binding.key] = binding.action
+  end
+  assert_equal(form_action_ids["n:<C-s>"], "save_close", "normal Ctrl-S saves and closes")
+  assert_equal(form_action_ids["i:<C-s>"], "save_close", "insert Ctrl-S saves and closes")
+  assert_equal(form_action_ids["n:<C-n>"], "save_new", "normal Ctrl-N saves and starts another")
+  assert_equal(form_action_ids["i:<C-n>"], "save_new", "insert Ctrl-N saves and starts another")
+  assert_equal(form_action_ids["i:<CR>"], "next_or_save", "insert Enter advances or saves")
+  assert_equal(form_action_ids["n:<CR>"], "edit_field", "normal Enter edits the selected value")
+
+  form.context_help()
+  do
+    local _, form_help_text = current_popup()
+    assert_contains(form_help_text, "Add form keys", "form has contextual key help")
+    assert_contains(form_help_text, "Normal or Insert mode", "form help distinguishes editing modes")
+    assert_contains(form_help_text, "Save the card and return", "form help explains save and close")
+    assert_contains(form_help_text, "Save and start another", "form help explains repeated entry")
+  end
+  form.help_close()
+  assert_equal(vim.api.nvim_get_current_buf(), form_buf, "closing form help returns to the form")
+
+  local form_imaps = {}
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(form_buf, "i")) do
+    form_imaps[map.lhs:lower()] = true -- lhs casing is canonicalized (<C-S>)
+  end
+  for _, lhs in ipairs({
+    "<c-s>",
+    "<c-n>",
+    "<cr>",
+    "<tab>",
+    "<s-tab>",
+    "<esc>",
+    "<bs>",
+    "<c-h>",
+    "<del>",
+    "<c-w>",
+  }) do
+    assert_true(form_imaps[lhs], "form maps " .. lhs .. " in insert mode")
+  end
+  form.goto_field(1)
+  assert_equal(form.masked_backspace(), "", "Backspace stops at the start of a masked value")
+  assert_equal(form.masked_word_backspace(), "", "word deletion stops at the start of a masked value")
+  assert_equal(form.masked_delete(), "", "Delete stops at the end of an empty masked value")
+  assert_equal(vim.api.nvim_buf_line_count(form_buf), 5, "masked deletion cannot join field rows")
+
+  vim.cmd("stopinsert")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i<BS><Esc>", true, false, true), "xt", false)
+  assert_equal(vim.api.nvim_buf_line_count(form_buf), 5, "actual Backspace input cannot join masked field rows")
+  assert_contains(decoration_text(form_buf), "Japanese", "actual Backspace input cannot remove a virtual label")
+
+  vim.api.nvim_buf_set_lines(form_buf, 0, 1, false, { "ab" })
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  assert_equal(form.masked_delete(), "<Del>", "Delete remains available inside a masked value")
+  vim.api.nvim_win_set_cursor(0, { 1, 1 })
+  assert_equal(form.masked_backspace(), "<BS>", "Backspace remains available inside a masked value")
+  vim.api.nvim_buf_set_lines(form_buf, 0, 1, false, { "" })
+  form.next_field()
+  assert_equal(vim.api.nvim_win_get_cursor(0)[1], 2, "Enter hops to the next field")
+  form.cycle_field(-1)
+  assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Shift-Tab hops back")
+
+  assert_true(not form.save(), "required-field validation prevents an empty save")
+  assert_true(form.is_open(), "validation keeps the composer open")
+  assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "validation focuses the first invalid field")
+  local validation_text = decoration_text(form_buf)
+  assert_contains(validation_text, "Japanese is required", "validation is shown beside the front field")
+  assert_contains(validation_text, "English is required", "all missing required fields are marked together")
+
+  vim.api.nvim_buf_set_lines(form_buf, 0, 1, false, { "机" })
+  vim.wait(30, function()
+    return false
+  end, 5)
+  assert_equal(vim.api.nvim_buf_get_lines(form_buf, 0, 1, false)[1], "机", "raw field contains only its value")
+
+  vim.api.nvim_buf_set_lines(form_buf, 1, 1, false, { "unexpected extra row" })
+  assert_true(
+    vim.wait(200, function()
+      return vim.api.nvim_buf_line_count(form_buf) == 5
+    end),
+    "composer repairs structural line insertion"
+  )
+  assert_equal(
+    vim.api.nvim_buf_get_lines(form_buf, 0, 1, false)[1],
+    "机",
+    "structural repair restores the last valid draft"
+  )
+  assert_contains(decoration_text(form_buf), "single-line", "structural repair explains the field constraint")
+
+  vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, {
+    "机",
+    "つくえ",
+    "desk",
+    "noun",
+    "jlpt furniture",
+  })
+  assert_true(form.save(), "save and return accepts a valid card")
+  assert_true(not form.is_open(), "normal save closes the composer")
+
+  local prompted = table.concat(vim.fn.readfile(prompted_path), "\n")
+  assert_contains(prompted, "@flashcard japanese", "form flow inserted a Japanese card")
+  assert_contains(prompted, "japanese: 机", "form flow saved front field")
+  assert_contains(prompted, "english: desk", "form flow saved required answer field")
+  assert_contains(prompted, "tags: jlpt furniture", "form flow saved optional tags")
+  assert_true(not prompted:find("japanese: Japanese:", 1, true), "virtual labels never leak into card storage")
+  assert_equal(vim.api.nvim_get_current_buf(), form_target, "closing the form returns to the card file")
+
+  flashcards.add_kind("")
+  local dirty_form_buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(dirty_form_buf, 0, 1, false, { "草" })
+  local select_original = vim.ui.select
+  local close_choices, close_callback
+  vim.ui.select = function(items, _, callback)
+    close_choices = items
+    close_callback = callback
+  end
+  assert_true(not form.close(), "dirty close waits for confirmation")
+  assert_true(form.is_open(), "dirty composer remains open while confirmation is pending")
+  assert_equal(close_choices[1], "Keep editing", "dirty close offers the safe choice first")
+  assert_equal(close_choices[2], "Discard draft", "dirty close offers explicit discard")
+  close_callback("Keep editing", 1)
+  assert_true(form.is_open(), "keeping a draft returns to the composer")
+  form.close()
+  close_callback("Discard draft", 2)
+  vim.ui.select = select_original
+  assert_true(not form.is_open(), "discarding a draft closes the composer")
+  assert_equal(vim.api.nvim_get_current_buf(), form_target, "discard returns to the original target")
+
+  local add_anchor_namespace = vim.api.nvim_create_namespace("neorg_flashcards_add_anchor")
+  flashcards.add_kind("")
+  local native_dirty_form = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(native_dirty_form, 0, 1, false, { "native close draft" })
+  local native_select_original = vim.ui.select
+  local native_close_choices, native_close_callback
+  vim.ui.select = function(items, _, callback)
+    native_close_choices = items
+    native_close_callback = callback
+  end
+  vim.cmd("q")
+  assert_true(
+    vim.wait(200, function()
+      return native_close_callback ~= nil
+    end),
+    "native close routes a dirty draft through confirmation"
+  )
+  assert_true(form.is_open(), "native close reopens the dirty composer")
+  assert_equal(
+    vim.api.nvim_buf_get_lines(native_dirty_form, 0, 1, false)[1],
+    "native close draft",
+    "native close preserves the draft values"
+  )
+  assert_equal(native_close_choices[1], "Keep editing", "native close keeps the safe choice first")
+  native_close_callback("Keep editing", 1)
+  assert_true(form.is_open(), "keeping a native-close draft returns to the composer")
+
+  native_close_choices, native_close_callback = nil, nil
+  vim.cmd("q")
+  assert_true(
+    vim.wait(200, function()
+      return native_close_callback ~= nil
+    end),
+    "a repeated native close asks before discarding again"
+  )
+  native_close_callback("Discard draft", 2)
+  vim.ui.select = native_select_original
+  assert_true(not form.is_open(), "discarding the recovered draft closes the composer")
+  assert_equal(
+    #vim.api.nvim_buf_get_extmarks(form_target, add_anchor_namespace, 0, -1, {}),
+    0,
+    "discarding the recovered draft releases the insertion anchor"
+  )
+
+  flashcards.add_kind("")
+  assert_equal(
+    #vim.api.nvim_buf_get_extmarks(form_target, add_anchor_namespace, 0, -1, {}),
+    1,
+    "an open composer owns one insertion anchor"
+  )
+  vim.cmd("q")
+  assert_true(not form.is_open(), "native close finalizes a clean composer")
+  assert_equal(
+    #vim.api.nvim_buf_get_extmarks(form_target, add_anchor_namespace, 0, -1, {}),
+    0,
+    "native window close releases the insertion anchor"
+  )
+
+  local failed_context
+  assert_true(
+    form.open(config, "japanese", {
+      target_path = prompted_path,
+      target_label = "prompted-card-test",
+      on_save = function(_, context)
+        failed_context = context
+        return { ok = false, persisted = false, message = "forced composer failure" }
+      end,
+    }),
+    "composer opens with a structured save callback"
+  )
+  local failed_form_buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(failed_form_buf, 0, -1, false, { "雨", "あめ", "rain", "", "weather" })
+  assert_true(not form.save(), "structured save failure is rejected")
+  assert_true(form.is_open(), "failed save retains the composer draft")
+  assert_equal(failed_context.kind, "japanese", "save callback receives immutable kind context")
+  assert_equal(failed_context.mode, "close", "save callback receives the requested mode")
+  assert_equal(failed_context.target.path, prompted_path, "save callback receives the captured target")
+  assert_contains(decoration_text(failed_form_buf), "forced composer failure", "save failure is visible in the form")
+  assert_equal(vim.api.nvim_buf_get_lines(failed_form_buf, 0, 1, false)[1], "雨", "failed save preserves field values")
+  form.close({ force = true })
+
+  local teardown_closes = 0
+  assert_true(
+    form.open(config, "japanese", {
+      target_path = prompted_path,
+      on_save = function()
+        return { ok = true, persisted = true, path = prompted_path }
+      end,
+      on_close = function()
+        teardown_closes = teardown_closes + 1
+        error("forced form on_close failure")
+      end,
+    }),
+    "composer opens for teardown regression"
+  )
+  local teardown_form_buf = vim.api.nvim_get_current_buf()
+  local teardown_form_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_buf_set_lines(teardown_form_buf, 0, -1, false, { "風", "かぜ", "wind", "", "weather" })
+  local teardown_group = vim.api.nvim_create_augroup("NeorgFlashcardsTeardownRegression", { clear = true })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = teardown_group,
+    pattern = tostring(teardown_form_win),
+    once = true,
+    callback = function()
+      error("forced form close hook failure")
+    end,
+  })
+  local set_current_win_original = vim.api.nvim_set_current_win
+  vim.api.nvim_set_current_win = function()
+    error("forced form focus hook failure")
+  end
+  local teardown_notifications = {}
+  local teardown_notify_original = vim.notify
+  vim.notify = function(message)
+    table.insert(teardown_notifications, tostring(message))
+  end
+  local teardown_ok, teardown_saved = pcall(form.save)
+  vim.notify = teardown_notify_original
+  vim.api.nvim_set_current_win = set_current_win_original
+  pcall(vim.api.nvim_del_augroup_by_id, teardown_group)
+  assert_true(teardown_ok, teardown_saved)
+  assert_true(teardown_saved, "successful save survives close and focus hook failures")
+  assert_true(not form.is_open(), "teardown hook failures cannot retain a retryable composer")
+  assert_equal(teardown_closes, 1, "teardown hook failures still run on_close exactly once")
+  assert_contains(
+    table.concat(teardown_notifications, "\n"),
+    "UI cleanup hook failed",
+    "best-effort teardown reports its warning"
+  )
+  form.close({ force = true })
+  assert_equal(teardown_closes, 1, "later close calls do not repeat on_close")
+
+  local original_columns, original_lines = vim.o.columns, vim.o.lines
+  vim.o.columns = 40
+  vim.o.lines = 10
+  local narrow_ok, narrow_error = pcall(function()
+    assert_true(
+      form.open(config, "japanese", {
+        target_path = prompted_path,
+        target_label = "a/very/long/target/path/cards.norg",
+      }),
+      "composer opens in a narrow editor"
+    )
+    local narrow_window = vim.api.nvim_get_current_win()
+    local narrow_config = vim.api.nvim_win_get_config(narrow_window)
+    assert_true(narrow_config.width <= vim.o.columns - 4, "narrow composer width stays inside the editor")
+    assert_true(narrow_config.height <= vim.o.lines - 4, "narrow composer height stays inside the editor")
+    assert_true(narrow_config.row >= 0, "narrow composer row is non-negative")
+    assert_true(narrow_config.col >= 0, "narrow composer column is non-negative")
+    assert_true(
+      vim.fn.strdisplaywidth(window_footer(narrow_window)) <= narrow_config.width,
+      "narrow composer footer fits its window"
+    )
+    form.goto_field(5)
+    assert_equal(vim.api.nvim_win_get_cursor(narrow_window)[1], 5, "every field remains reachable in a short window")
+    form.close({ force = true })
+  end)
+  if form.is_open() then
+    form.close({ force = true })
+  end
+  vim.o.columns = original_columns
+  vim.o.lines = original_lines
+  assert_true(narrow_ok, narrow_error)
+  vim.cmd("silent! bwipeout!")
+
+  local dirty_add_path = vim.fn.tempname() .. ".norg"
+  vim.fn.writefile({ "* Dirty add target", "" }, dirty_add_path)
+  vim.cmd.edit(vim.fn.fnameescape(dirty_add_path))
+  vim.api.nvim_buf_set_lines(0, 1, 1, false, { "unsaved source text" })
+  vim.api.nvim_win_set_cursor(0, { 2, 0 })
+  local dirty_add_target = vim.api.nvim_get_current_buf()
+  flashcards.add_kind("")
+  local dirty_add_form = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(dirty_add_form, 0, -1, false, { "犬", "いぬ", "dog", "", "animals" })
+  assert_true(form.save(), "composer accepts a card into a modified target buffer")
+  assert_equal(vim.api.nvim_get_current_buf(), dirty_add_target, "modified-target save returns to its source buffer")
+  assert_true(vim.bo[dirty_add_target].modified, "adding does not clear unrelated unsaved target edits")
+  local dirty_add_buffer_text = table.concat(vim.api.nvim_buf_get_lines(dirty_add_target, 0, -1, false), "\n")
+  local dirty_add_disk_text = table.concat(vim.fn.readfile(dirty_add_path), "\n")
+  assert_contains(dirty_add_buffer_text, "unsaved source text", "candidate insertion preserves unsaved source text")
+  assert_contains(dirty_add_buffer_text, "japanese: 犬", "candidate insertion updates the loaded target")
+  assert_true(not dirty_add_disk_text:find("unsaved source text", 1, true), "dirty target is not written automatically")
+  assert_true(not dirty_add_disk_text:find("japanese: 犬", 1, true), "new card waits for the dirty target to be saved")
+  vim.cmd.write()
+  vim.cmd("silent! bwipeout!")
+
+  local post_add_path = vim.fn.tempname() .. ".norg"
+  vim.fn.writefile({ "* Post-write add target", "" }, post_add_path)
+  vim.cmd.edit(vim.fn.fnameescape(post_add_path))
+  vim.api.nvim_win_set_cursor(0, { 2, 0 })
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    buffer = 0,
+    once = true,
+    callback = function()
+      error("forced add post-write failure")
+    end,
+  })
+  flashcards.add_kind("")
+  local post_add_form = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(post_add_form, 0, -1, false, { "鳥", "とり", "bird", "", "animals" })
+  assert_true(form.save(), "post-write hook failure still accepts a committed card")
+  assert_true(not form.is_open(), "committed post-write failure cannot leave a retryable draft")
+  local post_add_text = table.concat(vim.fn.readfile(post_add_path), "\n")
+  local _, post_add_count = post_add_text:gsub("@flashcard japanese", "")
+  assert_equal(post_add_count, 1, "post-write hook failure commits exactly one card")
+  vim.cmd("silent! bwipeout!")
+end
 
 local modified_path = vim.fn.tempname() .. ".norg"
 vim.fn.writefile({
@@ -924,12 +1276,12 @@ assert_equal(grown.interval, "7.5", "good rating multiplies the interval by ease
 
 local mid_updates, mid_due = schedule.review_updates({ values = {} }, 2, fixed_now)
 local mid_map = updates_map(mid_updates)
-assert_equal(mid_map.interval, "0.5", "first mid rating uses the twelve-hour interval")
+assert_equal(mid_map.interval, "0.25", "first mid rating preserves the six-hour interval")
 assert_equal(mid_map.ease, "2.5", "mid rating keeps the starting ease")
-assert_equal(mid_due, fixed_now + 12 * 3600, "mid rating is due twelve hours out")
+assert_equal(mid_due, fixed_now + 6 * 3600, "mid rating is due six hours out")
 
-local mid_grown = updates_map(schedule.review_updates({ values = { interval = "0.5" } }, 2, fixed_now))
-assert_equal(mid_grown.interval, "0.6", "mid rating grows the interval slowly")
+local mid_grown = updates_map(schedule.review_updates({ values = { interval = "0.25" } }, 2, fixed_now))
+assert_equal(mid_grown.interval, "0.3", "mid rating grows the interval slowly")
 
 local bad_updates, bad_due = schedule.review_updates({ values = {} }, 1, fixed_now)
 local bad_map = updates_map(bad_updates)
@@ -1576,15 +1928,22 @@ vim.cmd("silent! bwipeout!")
 flashcards.add_to_default("")
 local default_form_buf = vim.api.nvim_get_current_buf()
 assert_equal(vim.bo[default_form_buf].buftype, "nofile", "add_to_default opens the form")
+assert_contains(decoration_text(default_form_buf), "inbox/cards.norg", "dashboard add shows the default destination")
 vim.api.nvim_buf_set_lines(default_form_buf, 0, -1, false, {
-  "Japanese: 猫",
-  "Reading: ねこ",
-  "English: cat",
-  "Notes: ",
-  "Tags: animals",
+  "猫",
+  "ねこ",
+  "cat",
+  "",
+  "animals",
 })
-form.save()
-form.close()
+assert_true(form.save_new(), "save-and-new accepts a valid dashboard card")
+assert_true(form.is_open(), "save-and-new keeps the composer open")
+assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "save-and-new returns to the first field")
+for index, line in ipairs(vim.api.nvim_buf_get_lines(default_form_buf, 0, -1, false)) do
+  assert_equal(line, "", "save-and-new resets value " .. index)
+end
+assert_contains(decoration_text(default_form_buf), "Flashcard saved", "save-and-new keeps visible success feedback")
+assert_true(form.close(), "a clean save-and-new form closes without confirmation")
 
 local default_text = table.concat(vim.fn.readfile(config.default_file), "\n")
 assert_contains(default_text, "* Flashcards", "default file keeps its heading")
@@ -1868,9 +2227,17 @@ do
   local hidden_form_buf = vim.api.nvim_get_current_buf()
   assert_buffer_maps(hidden_form_buf, { "?" })
   assert_equal(util.trim(window_footer()), "", "form shortcut footer can be hidden")
+  local hidden_form_imaps = {}
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(hidden_form_buf, "i")) do
+    hidden_form_imaps[map.lhs:lower()] = true
+  end
+  assert_true(hidden_form_imaps["<c-s>"], "hidden form chrome keeps save mapping")
+  assert_true(hidden_form_imaps["<c-n>"], "hidden form chrome keeps save-and-new mapping")
+  assert_contains(decoration_text(hidden_form_buf), "Target", "hidden shortcuts do not hide composer context")
   form.context_help()
   local _, hidden_form_help = current_popup()
   assert_contains(hidden_form_help, "Add form keys", "form help remains available without its footer")
+  assert_contains(hidden_form_help, "Save and start another", "hidden form help still exposes save-and-new")
   form.help_close()
   form.close()
   vim.cmd("silent! bwipeout!")

@@ -38,8 +38,8 @@ notes.
 ## Features
 
 - Plain-text flashcards stored as Neorg `@flashcard` blocks.
-- Form-based card creation: an editable scratch buffer, one line per field
-  (`<C-s>` saves, the form stays open for the next card).
+- A target-aware card composer with immutable labels, placeholders, inline
+  validation, draft protection, and separate save or save-and-new actions.
 - One command, `:Flashcards`, opens a full-tab hub with Overview,
   Cards, and Stats pages. Its statusline shows the useful keys for the current
   page, and `?` opens the complete local key list.
@@ -303,10 +303,16 @@ Overview page; command-line completion exposes the other routes.
 | `:Flashcards migrate` | Preview and confirm stable IDs for legacy cards |
 | `:Flashcards help` | Open the in-editor guide |
 
-The add form uses `Enter` to move to the next field and save from the last
-one, `Tab` / `Shift-Tab` to cycle fields, and `<C-s>` to save from anywhere.
-It stays open for the next card until `q`. Leave Insert mode and press `?` to
-see its current shortcuts.
+The composer shows the destination file before anything is saved. Labels,
+required markers, placeholders, and validation errors are UI decorations, so
+only field values can be edited. Backspace, word deletion, and Delete stop at
+the current value's boundaries instead of joining field rows. In Insert mode,
+`Enter` moves to the next field and saves and closes from the last;
+`Tab` / `Shift-Tab` cycle fields.
+Use `<C-s>` to save and close from anywhere, or `<C-n>` to save and start
+another card. In Normal mode, `j` / `k` select fields and `Enter` or `i`
+returns to editing. `q` / `Esc` asks before discarding a changed draft, and
+`?` shows every current shortcut. Composer fields are currently single-line.
 
 ## Review Keys
 
@@ -381,8 +387,8 @@ Ratings schedule the next review with a small SM-2-style rule set:
   becomes due again after `scheduling.again_minutes` (default 10 minutes). Its
   ease drops by 0.2, never below `min_ease` (default 1.3).
 - `2` (mid): the interval grows slowly (`×1.2`), starting at
-  `scheduling.mid_hours` (default 12 hours), so a mid card appears at least
-  twice a day. Ease stays unchanged.
+  `scheduling.mid_hours` (default 6 hours), so a mid card can appear again
+  later the same day. Ease stays unchanged.
 - `3` (good): the interval multiplies by the card's ease, starting at
   `scheduling.good_days` (default 3 days). Ease rises by 0.05, up to
   `max_ease` (default 2.8).
@@ -501,7 +507,7 @@ require("neorg_flashcards").setup({
   },
   scheduling = {
     again_minutes = 10,
-    mid_hours = 12,
+    mid_hours = 6,
     good_days = 3,
     starting_ease = 2.5,
     min_ease = 1.3,
@@ -545,7 +551,9 @@ telepathy remains out of scope.
 ```
 
 Fields with `required = true` must exist before a card can be reviewed. Fields
-with `reveal = true` appear after you reveal the answer.
+with `reveal = true` appear after you reveal the answer. Optional `title`,
+`placeholder`, and `help` values control the composer's virtual label, empty
+field example, and selected-field hint without changing the stored card.
 
 ## Language Presets
 

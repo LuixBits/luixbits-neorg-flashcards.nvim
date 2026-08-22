@@ -145,7 +145,7 @@ local catalog = {
     action({ "q", "<Esc>" }, "close", "Cancel the add form (Normal mode)", { "form" }, {
       modes = { "n" },
       hint_key = "q",
-      hints = { form = "cancel" },
+      hints = { form = "close" },
       essential = true,
     }),
     action({ "?" }, "context_help", "Show form keys (Normal mode)", { "form" }, {
@@ -153,17 +153,21 @@ local catalog = {
       hints = { form = "keys" },
       essential = true,
     }),
-    action({ "<C-s>" }, "save", "Save the card (Normal or Insert mode)", { "form" }, {
+    action({ "<C-s>" }, "save_close", "Save the card and return (Normal or Insert mode)", { "form" }, {
       modes = { "n", "i" },
       hint_key = "Ctrl-S",
       hints = { form = "save" },
+      essential = true,
     }),
-    action({ "<CR>" }, "save", "Save the card (Normal mode)", { "form" }, { modes = { "n" } }),
-    action({ "<CR>" }, "next_field", "Move to the next field; save from the last (Insert mode)", { "form" }, {
+    action({ "<C-n>" }, "save_new", "Save and start another card (Normal or Insert mode)", { "form" }, {
+      modes = { "n", "i" },
+      hint_key = "Ctrl-N",
+      hints = { form = "new" },
+    }),
+    action({ "<CR>" }, "next_or_save", "Move next; save and return from the last field (Insert mode)", { "form" }, {
       modes = { "i" },
       hint_key = "Enter",
-      hints = { form = "next" },
-      essential = true,
+      hints = { form = "next/save" },
     }),
     action({ "<Tab>" }, "next_form_field", "Move to the next field (Insert mode)", { "form" }, {
       modes = { "i" },
@@ -172,6 +176,20 @@ local catalog = {
     }),
     action({ "<S-Tab>" }, "previous_form_field", "Move to the previous field (Insert mode)", { "form" }, {
       modes = { "i" },
+    }),
+    action({ "<Esc>" }, "leave_insert", "Leave the field and return to Normal mode", { "form" }, {
+      modes = { "i" },
+    }),
+    action({ "j" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
+      modes = { "n" },
+      hint_key = "j/k",
+      hints = { form = "fields" },
+    }),
+    action({ "k" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
+      modes = { "n" },
+    }),
+    action({ "<CR>", "i" }, "edit_field", "Edit the selected field (Normal mode)", { "form" }, {
+      modes = { "n" },
     }),
   },
 }
@@ -221,6 +239,7 @@ local function display_key(key)
     ["<Down>"] = "Down",
     ["<Up>"] = "Up",
     ["<C-s>"] = "Ctrl-S",
+    ["<C-n>"] = "Ctrl-N",
   }
   return labels[key] or key
 end

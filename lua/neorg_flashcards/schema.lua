@@ -85,11 +85,20 @@ function M.prompt_fields(config, kind)
 
   for _, field in ipairs((language and language.fields) or {}) do
     if field.prompt ~= false then
+      local label = field.label or (field.key .. ": ")
+      local title = field.title
+      if util.isempty(title) then
+        title = util.trim(tostring(label):gsub(":%s*$", ""))
+      end
       table.insert(prompts, {
         key = field.key,
-        label = field.label or (field.key .. ": "),
+        label = label,
+        title = title,
         default = field.default or "",
         required = field.required or false,
+        placeholder = field.placeholder or "",
+        help = field.help or "",
+        input = field.input or "text",
       })
     end
   end

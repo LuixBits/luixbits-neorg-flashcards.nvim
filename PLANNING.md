@@ -19,6 +19,9 @@ The 0.2 release replaces the command-per-action interface with one workspace.
   keymap mode, review `n`/`p`, and the hub's obsolete `s` pane bridge.
 - Generate buffer-local mappings, persistent hints, and `?` help from one
   action catalogue across the hub, review window, and add form.
+- Replace the prefix-based add buffer with a target-aware composer: immutable
+  virtual labels, field hints, inline validation, dirty-draft protection,
+  explicit save and save-and-new actions, and transactional persistence.
 - Add `ui.show_shortcuts`, defaulting to `true`, to hide persistent shortcut
   chrome without hiding the mappings or contextual help.
 - Keep the broader guide at `:Flashcards help` and hub `H`.
@@ -32,9 +35,11 @@ Release checks:
 1. Exercise every `:Flashcards` route and its completion.
 2. Compare installed mappings, compact hints, and `?` output in every UI state.
 3. Test visible and hidden shortcut chrome at narrow and wide widths.
-4. Run headless, clean-install, Neorg integration, formatting, documentation,
+4. Exercise the composer on Neovim 0.10 with Unicode labels, structural edits,
+   dirty targets, failed writes, and save-and-new entry.
+5. Run headless, clean-install, Neorg integration, formatting, documentation,
    and Nix flake checks.
-5. Evaluate the real NVF configuration and confirm that it emits only
+6. Evaluate the real NVF configuration and confirm that it emits only
    `<leader>nc`.
 
 ## 0.3: Named collections
@@ -92,7 +97,7 @@ The present three ratings remain:
 | Rating | New card | Later reviews |
 | --- | --- | --- |
 | `1` Again | 10 minutes | 10 minutes; lowers ease and enters relearning |
-| `2` Hard | 12 hours | Previous interval × 1.2 |
+| `2` Hard | 6 hours | Previous interval × 1.2 |
 | `3` Good | 3 days | Previous interval × ease, initially 2.5 |
 
 These defaults are configurable. FSRS is a later candidate, not a silent

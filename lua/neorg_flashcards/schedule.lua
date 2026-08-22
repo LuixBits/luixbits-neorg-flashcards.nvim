@@ -7,7 +7,7 @@ local M = {}
 
 M.DEFAULTS = {
   again_minutes = 10, -- score 1: see again very soon
-  mid_hours = 12, -- score 2: at least twice a day
+  mid_hours = 6, -- score 2: first retry later the same day
   good_days = 3, -- score 3: every few days
   starting_ease = 2.5,
   min_ease = 1.3,
@@ -314,7 +314,11 @@ function M.review_updates(card, score, now, opts)
     ease = math.min(option(opts, "max_ease"), state.ease + 0.05)
   end
 
-  interval = round(interval, 1)
+  -- Sub-day intervals need two decimals so a six-hour interval remains 0.25
+  -- days instead of being rounded up to 0.3 days (7.2 hours). Keep the
+  -- existing one-decimal storage for intervals of at least a day.
+  local interval_decimals = interval < 1 and 2 or 1
+  interval = round(interval, interval_decimals)
   ease = round(ease, 2)
 
   local due
@@ -328,7 +332,7 @@ function M.review_updates(card, score, now, opts)
     { field = "score", value = tostring(score) },
     { field = "reviewed", value = os.date("%Y-%m-%d", now) },
     { field = "due", value = M.format_due(due) },
-    { field = "interval", value = format_number(interval, 1) },
+    { field = "interval", value = format_number(interval, interval_decimals) },
     { field = "ease", value = format_number(ease, 2) },
   }
 

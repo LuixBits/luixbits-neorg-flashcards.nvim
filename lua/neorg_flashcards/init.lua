@@ -29,6 +29,8 @@ local defaults = {
 
 local config = vim.deepcopy(defaults)
 local pending_history = {}
+local add_anchor_ns = vim.api.nvim_create_namespace("neorg_flashcards_add_anchor")
+local active_add_anchor = nil
 -- Failed persisted events are kept in independent FIFO queues per history
 -- destination. A stale or read-only path must not block reviews after setup()
 -- switches the plugin to another collection.
@@ -54,6 +56,114 @@ local function ensure_default_file_dir()
   vim.fn.mkdir(vim.fn.fnamemodify(config.default_file, ":h"), "p")
 end
 
+local function clear_add_anchor(expected)
+  local anchor = active_add_anchor
+  if expected and anchor ~= expected then
+    return
+  end
+  active_add_anchor = nil
+  if not anchor or not anchor.bufnr or not anchor.mark_id or not vim.api.nvim_buf_is_valid(anchor.bufnr) then
+    return
+  end
+  pcall(vim.api.nvim_buf_del_extmark, anchor.bufnr, add_anchor_ns, anchor.mark_id)
+end
+
+local function capture_add_target(path, opts)
+  opts = opts or {}
+  clear_add_anchor()
+
+  path = vim.fs.normalize(vim.fn.expand(path))
+  local anchor = {
+    mode = opts.append and "end" or "row",
+    row = opts.row,
+    bufnr = opts.bufnr,
+  }
+
+  if anchor.mode == "row" and anchor.bufnr and vim.api.nvim_buf_is_valid(anchor.bufnr) then
+    local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, anchor.bufnr, add_anchor_ns, anchor.row, 0, {
+      right_gravity = true,
+    })
+    if ok then
+      anchor.mark_id = mark_id
+    end
+  end
+
+  active_add_anchor = anchor
+  return {
+    path = path,
+    label = util.path_label(path, config.flashcards_dir),
+    create_with_heading = opts.create_with_heading == true,
+    anchor = anchor,
+  }
+end
+
+local function resolve_add_row(target, lines, bufnr)
+  local anchor = target.anchor
+  if anchor.mode == "end" then
+    return #lines
+  end
+
+  local row = anchor.row or #lines
+  if
+    anchor.mark_id
+    and anchor.bufnr == bufnr
+    and vim.api.nvim_buf_is_valid(anchor.bufnr)
+    and vim.api.nvim_buf_is_loaded(anchor.bufnr)
+  then
+    local ok, position = pcall(vim.api.nvim_buf_get_extmark_by_id, anchor.bufnr, add_anchor_ns, anchor.mark_id, {})
+    if ok and position and #position > 0 then
+      row = position[1]
+    end
+  end
+
+  return math.max(0, math.min(row, #lines))
+end
+
+local function advance_add_anchor(target, row, count, bufnr)
+  local anchor = target.anchor
+  if anchor.mode == "end" then
+    return
+  end
+
+  anchor.row = row + count
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
+
+  local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, add_anchor_ns, anchor.row, 0, {
+    id = anchor.bufnr == bufnr and anchor.mark_id or nil,
+    right_gravity = true,
+  })
+  if ok then
+    anchor.bufnr = bufnr
+    anchor.mark_id = mark_id
+  end
+end
+
+local function add_result(target, ok, persisted, message)
+  return {
+    ok = ok == true,
+    persisted = persisted == true,
+    path = target.path,
+    message = message,
+  }
+end
+
+local function notify_add_result(result)
+  local level = vim.log.levels.ERROR
+  if result.ok then
+    level = result.persisted and vim.log.levels.INFO or vim.log.levels.WARN
+  end
+  pcall(util.notify, result.message, level)
+end
+
+local function refresh_after_add()
+  local ok, err = pcall(overview.refresh)
+  if not ok then
+    pcall(util.notify, "Flashcard saved, but the overview could not refresh: " .. tostring(err), vim.log.levels.WARN)
+  end
+end
+
 local function current_buffer_is_norg()
   local path = vim.api.nvim_buf_get_name(0)
   return path ~= "" and path:match("%.norg$")
@@ -68,65 +178,61 @@ local function ensure_editable_flashcard_buffer()
   return true
 end
 
----Insert a card into a .norg buffer and persist it.
+---Build and commit a card insertion through the buffer-aware store.
 ---@param kind string
 ---@param values table<string, string>
----@param append boolean append at the end instead of above the cursor
----@param target_buf number|nil
-local function insert_card(kind, values, append, target_buf)
-  target_buf = target_buf or vim.api.nvim_get_current_buf()
-
-  local row
-  local win = vim.fn.bufwinid(target_buf)
-  if append or win == -1 then
-    row = vim.api.nvim_buf_line_count(target_buf)
-  else
-    row = vim.api.nvim_win_get_cursor(win)[1] - 1
+---@param target table
+---@param card_config table
+---@return table result
+local function insert_card(kind, values, target, card_config)
+  if target.create_with_heading then
+    vim.fn.mkdir(vim.fn.fnamemodify(target.path, ":h"), "p")
   end
 
-  vim.api.nvim_buf_set_lines(target_buf, row, row, false, schema.card_lines(config, kind, values))
-  vim.api.nvim_buf_call(target_buf, function()
-    vim.cmd("silent write")
-  end)
-  util.notify("Flashcard saved")
-  overview.refresh()
-end
-
----Append a card to the default file, creating it when missing.
----@return boolean ok
-local function append_to_default(kind, values)
-  ensure_default_file_dir()
-
-  local path = config.default_file
-  if vim.fn.filereadable(path) == 0 and not util.loaded_buffer(path) then
-    vim.fn.writefile({ "* Flashcards", "" }, path)
+  local lines, bufnr, err = store.read_lines(target.path)
+  if
+    not lines
+    and target.create_with_heading
+    and vim.fn.filereadable(target.path) == 0
+    and not util.loaded_buffer(target.path)
+  then
+    lines = { "* Flashcards", "" }
+    bufnr = nil
+    err = nil
   end
-
-  local lines, bufnr, err = store.read_lines(path)
   if not lines then
-    util.notify(err, vim.log.levels.ERROR)
-    return false
+    local result = add_result(target, false, false, "Could not save flashcard: " .. tostring(err))
+    notify_add_result(result)
+    return result
   end
 
-  local card_lines = schema.card_lines(config, kind, values)
-  if #lines > 0 and lines[#lines] == "" and card_lines[1] == "" then
+  local candidate = vim.deepcopy(lines)
+  local card_lines = schema.card_lines(card_config, kind, values)
+  local row = resolve_add_row(target, candidate, bufnr)
+  if row == #candidate and #candidate > 0 and candidate[#candidate] == "" and card_lines[1] == "" then
     table.remove(card_lines, 1)
   end
-  vim.list_extend(lines, card_lines)
+  for index, line in ipairs(card_lines) do
+    table.insert(candidate, row + index, line)
+  end
 
-  local ok, write_err = store.write_lines(path, bufnr, lines)
+  local ok, write_err, persisted = store.write_lines(target.path, bufnr, candidate)
   if not ok then
-    util.notify(tostring(write_err), vim.log.levels.ERROR)
-    return false
+    local result = add_result(target, false, false, "Could not save flashcard: " .. tostring(write_err))
+    notify_add_result(result)
+    return result
   end
 
-  if write_err then
-    util.notify(write_err, vim.log.levels.WARN)
-  else
-    util.notify("Flashcard saved to " .. vim.fn.fnamemodify(path, ":t"))
-  end
-  overview.refresh()
-  return true
+  advance_add_anchor(target, row, #card_lines, bufnr)
+  local message = write_err or ("Flashcard saved to " .. target.label)
+  local result = add_result(target, true, persisted, message)
+
+  -- Persistence is already committed at this point. UI hooks are deliberately
+  -- best effort so an error cannot leave a filled form that duplicates the
+  -- card when the user retries.
+  notify_add_result(result)
+  refresh_after_add()
+  return result
 end
 
 local function add_card(kind)
@@ -135,14 +241,36 @@ local function add_card(kind)
     return
   end
 
+  if form.is_open() then
+    util.notify("Finish or discard the open flashcard first", vim.log.levels.WARN)
+    return
+  end
+
   local append = ensure_editable_flashcard_buffer()
   local target_buf = vim.api.nvim_get_current_buf()
+  local target_path = vim.api.nvim_buf_get_name(target_buf)
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+  local target = capture_add_target(target_path, {
+    append = append,
+    bufnr = target_buf,
+    row = row,
+    create_with_heading = append and target_path == config.default_file,
+  })
+  local card_config = config
 
-  form.open(config, kind, {
+  local opened = form.open(card_config, kind, {
+    target_label = target.label,
+    target_path = target.path,
+    on_close = function()
+      clear_add_anchor(target.anchor)
+    end,
     on_save = function(values)
-      insert_card(kind, values, append, target_buf)
+      return insert_card(kind, values, target, card_config)
     end,
   })
+  if not opened then
+    clear_add_anchor()
+  end
 end
 
 function M.open_flashcards()
@@ -195,11 +323,29 @@ function M.add_to_default(kind)
     return
   end
 
-  form.open(config, kind, {
+  if form.is_open() then
+    util.notify("Finish or discard the open flashcard first", vim.log.levels.WARN)
+    return
+  end
+
+  local target = capture_add_target(config.default_file, {
+    append = true,
+    create_with_heading = true,
+  })
+  local card_config = config
+  local opened = form.open(card_config, kind, {
+    target_label = target.label,
+    target_path = target.path,
+    on_close = function()
+      clear_add_anchor(target.anchor)
+    end,
     on_save = function(values)
-      return append_to_default(kind, values)
+      return insert_card(kind, values, target, card_config)
     end,
   })
+  if not opened then
+    clear_add_anchor()
+  end
 end
 
 function M.validate_file()
