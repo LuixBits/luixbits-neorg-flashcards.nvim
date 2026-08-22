@@ -15,6 +15,8 @@ All notable changes to this project will be documented here.
   practical troubleshooting steps.
 - Added the canonical `:help neorg-flashcards` entry and made the shorter `H`
   window identify itself as a quick guide with current shortcuts.
+- Moved the identical source and history token-lock lifecycle into one tested
+  helper while keeping their path validation and write policies separate.
 
 ## 0.2.0 - 2026-08-22
 

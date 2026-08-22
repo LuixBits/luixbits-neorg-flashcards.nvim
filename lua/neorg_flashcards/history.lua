@@ -1,6 +1,7 @@
 -- Versioned, append-only review history. Corrupt lines are reported and
 -- skipped independently, so one interrupted append never hides good history.
 
+local fs_lock = require("neorg_flashcards.fs_lock")
 local identity = require("neorg_flashcards.identity")
 local schedule = require("neorg_flashcards.schedule")
 local util = require("neorg_flashcards.util")
@@ -168,74 +169,6 @@ local function new_destination(path, root)
   return captured
 end
 
-local function lock_token(path)
-  local ok_read, lines = pcall(vim.fn.readfile, path)
-  if not ok_read or #lines ~= 1 then
-    return nil
-  end
-  return lines[1]
-end
-
-local function release_lock(lock)
-  local uv = vim.uv or vim.loop
-  if lock.fd then
-    pcall(uv.fs_close, lock.fd)
-  end
-  if lock_token(lock.path) == lock.token then
-    pcall(uv.fs_unlink, lock.path)
-  end
-end
-
-local function create_lock(path)
-  local uv = vim.uv or vim.loop
-  local fd, open_err, open_code = uv.fs_open(path, "wx", 384)
-  if not fd then
-    return nil, open_err, open_code
-  end
-  local token = string.format("%s:%s", vim.fn.getpid(), uv.hrtime())
-  local written, write_err = uv.fs_write(fd, token, 0)
-  if not written then
-    pcall(uv.fs_close, fd)
-    pcall(uv.fs_unlink, path)
-    return nil, write_err
-  end
-  pcall(uv.fs_fsync, fd)
-  return { fd = fd, path = path, token = token }
-end
-
-local function remove_dead_owner_lock(path)
-  local uv = vim.uv or vim.loop
-  local token = lock_token(path)
-  local owner = token and tonumber(token:match("^(%d+):")) or nil
-  if not owner then
-    return false
-  end
-  local _, _, kill_code = uv.kill(owner, 0)
-  if kill_code ~= "ESRCH" or lock_token(path) ~= token then
-    return false
-  end
-  local removed = uv.fs_unlink(path)
-  return removed ~= nil or lock_token(path) == nil
-end
-
--- Only one process may reap a dead owner's lock. The reaper keeps the original
--- pathname in place until it has confirmed the same dead-owner token twice;
--- no successor can acquire the original lock during that check.
-local function recover_dead_lock(lock_path)
-  local reaper_path = lock_path .. ".reap"
-  local reaper, _, reaper_code = create_lock(reaper_path)
-  if not reaper and reaper_code == "EEXIST" and remove_dead_owner_lock(reaper_path) then
-    reaper = create_lock(reaper_path)
-  end
-  if not reaper then
-    return false
-  end
-
-  local recovered = remove_dead_owner_lock(lock_path)
-  release_lock(reaper)
-  return recovered
-end
-
 -- JSONL updates use a small cross-process lock file. All plugin instances
 -- resolve the destination before deriving this path, so symlink aliases share
 -- the same lock. Each holder writes a unique token and only removes that exact
@@ -246,30 +179,15 @@ local function acquire_lock(path, label)
     return nil, parent_err
   end
 
-  local uv = vim.uv or vim.loop
   local lock_path = path .. ".lock"
-  local deadline = uv.hrtime() + LOCK_WAIT_MS * 1000000
-  while true do
-    local lock, open_err, open_code = create_lock(lock_path)
-    if lock then
-      return lock
-    end
-    if open_code ~= "EEXIST" then
-      return nil, string.format("could not lock %s: %s", label, tostring(open_err))
-    end
-    if recover_dead_lock(lock_path) then
-      -- Retry acquisition immediately after removing the confirmed dead owner.
-    elseif uv.hrtime() >= deadline then
-      return nil,
-        string.format(
-          "timed out waiting for %s lock; remove %s only if no Neovim instance is using it",
-          label,
-          lock_path
-        )
-    else
-      uv.sleep(2)
-    end
+  local lock, lock_err, reason = fs_lock.acquire(lock_path, { wait_ms = LOCK_WAIT_MS })
+  if lock then
+    return lock
+  elseif reason == "timeout" then
+    return nil,
+      string.format("timed out waiting for %s lock; remove %s only if no Neovim instance is using it", label, lock_path)
   end
+  return nil, string.format("could not lock %s: %s", label, tostring(lock_err))
 end
 
 local function with_lock(path, label, callback, destination)
@@ -283,11 +201,11 @@ local function with_lock(path, label, callback, destination)
   end
   path_ok, path_err = validate_captured_path(path, destination)
   if not path_ok then
-    release_lock(lock)
+    fs_lock.release(lock)
     return false, path_err
   end
   local ok, result, detail = pcall(callback)
-  release_lock(lock)
+  fs_lock.release(lock)
   if not ok then
     return false, string.format("could not update %s: %s", label, tostring(result))
   end
