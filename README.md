@@ -1021,11 +1021,13 @@ lua/neorg_flashcards/parser.lua   @flashcard parsing and collection discovery
 lua/neorg_flashcards/review.lua   finite review queue, hints, undo, typed answers
 lua/neorg_flashcards/overview.lua full-tab Overview, Cards, and Stats hub
 lua/neorg_flashcards/ui/actions.lua UI mappings, contextual help, footer hints
+lua/neorg_flashcards/highlights.lua theme-linked groups and theme restoration
 lua/neorg_flashcards/history.lua  versioned JSONL review event ledger
 lua/neorg_flashcards/stats.lua    retention, state, heatmap, forecast sections
 lua/neorg_flashcards/health.lua   collection inspection and :checkhealth report
 lua/neorg_flashcards/form.lua     protected add/edit card composer
 lua/neorg_flashcards/store.lua    safe metadata writeback, deletion, and undo
+lua/neorg_flashcards/fs_lock.lua  shared owner-token file-lock lifecycle
 lua/neorg_flashcards/schedule.lua scheduling plus lifecycle/availability state
 lua/neorg_flashcards/help.lua     short guide popup
 lua/neorg_flashcards/popup.lua    shared floating window helper
