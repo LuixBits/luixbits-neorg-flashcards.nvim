@@ -313,13 +313,12 @@ return function(T)
     vim.fn.writefile(custom_lines, custom_path)
     vim.cmd.edit(vim.fn.fnameescape(custom_path))
     local custom_buffer = vim.api.nvim_get_current_buf()
-    local custom_pattern = vim.api.nvim_buf_get_name(custom_buffer)
     local custom_card = parser.parse_buffer(custom_buffer)[1]
     local writer_calls = 0
     local custom_group = vim.api.nvim_create_augroup("neorg_flashcards_test_custom_writer", { clear = true })
     vim.api.nvim_create_autocmd("BufWriteCmd", {
       group = custom_group,
-      pattern = custom_pattern,
+      pattern = "*.norg",
       callback = function(args)
         writer_calls = writer_calls + 1
         vim.fn.writefile(vim.api.nvim_buf_get_lines(args.buf, 0, -1, false), custom_path)
