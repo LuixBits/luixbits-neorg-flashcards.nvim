@@ -57,8 +57,9 @@ return function(T)
     }
     vim.fn.writefile(race_lines, race_path)
     local race_card = parser.parse_file(race_path)[1]
-    local race_directory = vim.fn.fnamemodify(race_path, ":h")
-    local race_basename = vim.fn.fnamemodify(race_path, ":t")
+    local race_destination = T.canonical_path(race_path)
+    local race_directory = vim.fn.fnamemodify(race_destination, ":h")
+    local race_basename = vim.fn.fnamemodify(race_destination, ":t")
     local race_temporary_prefix = race_directory .. "/." .. race_basename .. ".neorg-flashcards-"
     local original_writefile = vim.fn.writefile
     local raced = false

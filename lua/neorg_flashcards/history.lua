@@ -159,8 +159,12 @@ local function new_destination(path, root)
   local root_key = captured.root
       and table.concat({ captured.root.canonical or "", captured.root.dev or "", captured.root.ino or "" }, ":")
     or ""
-  captured.key =
-    vim.fn.sha256(table.concat({ destination, root_key, parent, captured.dev or "", captured.ino or "" }, "\0"))
+  local key_parts = { destination, root_key, parent, captured.dev or "", captured.ino or "" }
+  for index, value in ipairs(key_parts) do
+    value = tostring(value)
+    key_parts[index] = string.format("%d:%s", #value, value)
+  end
+  captured.key = vim.fn.sha256(table.concat(key_parts, "|"))
   return captured
 end
 
