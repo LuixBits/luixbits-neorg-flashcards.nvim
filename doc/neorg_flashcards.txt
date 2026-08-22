@@ -525,7 +525,8 @@ open_flashcards()         Create or open `default_file`.
 add_kind({kind})          Card form targeting the current `.norg` file.
 add_to_default({kind})    Card form targeting `default_file`.
 validate_file()           Return ok, valid cards, and current-buffer errors.
-validate_collection()     Return ok, cards, health issues, and parse errors.
+validate_collection()     Return ok, cards, health issues, and parser/history
+                          diagnostics.
 review_all()              Review all active, valid collection cards.
 review_due()              Review due and new active cards, oldest first.
 review_file()             Review the current file.

@@ -467,16 +467,17 @@ function M.validate_collection()
   local cards, errors = parser.collect_flashcards(config)
   local issues = health.inspect(config, cards)
   local counts = health.counts(issues)
-  local messages = vim.deepcopy(errors)
+  local diagnostics = vim.deepcopy(errors)
   local _, history_errors = history.read(config)
-  vim.list_extend(messages, history_errors)
+  vim.list_extend(diagnostics, history_errors)
+  local messages = vim.deepcopy(diagnostics)
   for _, item in ipairs(issues) do
     table.insert(messages, health.format(config, item))
   end
 
   if #messages == 0 then
     util.notify(string.format("Collection healthy: %d valid flashcard(s)", #cards))
-    return true, cards, issues, errors
+    return true, cards, issues, diagnostics
   end
 
   local level = (#errors > 0 or counts.error > 0) and vim.log.levels.ERROR or vim.log.levels.WARN
@@ -498,7 +499,7 @@ function M.validate_collection()
   vim.fn.setqflist({}, " ", { title = "Flashcards collection health", items = items })
   vim.cmd("copen")
   util.notify(string.format("Flashcard health: %d issue(s) opened in the quickfix list", #items), level)
-  return level ~= vim.log.levels.ERROR, cards, issues, errors
+  return level ~= vim.log.levels.ERROR, cards, issues, diagnostics
 end
 
 function M.review_all()

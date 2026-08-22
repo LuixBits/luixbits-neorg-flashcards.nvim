@@ -886,7 +886,7 @@ Return values use four small contracts:
 | `add_kind(kind?)` | Add-card form targeting the current `.norg` file |
 | `add_to_default(kind?)` | Add-card form targeting `default_file` |
 | `validate_file()` | Return `ok, valid_cards, errors` for the current buffer |
-| `validate_collection()` | Return `ok, cards, issues, parse_errors` for the collection |
+| `validate_collection()` | Return `ok, cards, health_issues, diagnostics`; diagnostics include parser and history errors |
 | `review_all()` | Review every active, valid card under `flashcards_dir` |
 | `review_due()` | Review due and new cards, oldest due first |
 | `review_file()` | Review the current file |

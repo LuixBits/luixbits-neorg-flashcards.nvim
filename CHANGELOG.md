@@ -19,7 +19,7 @@ All notable changes to this project will be documented here.
   helper while keeping their path validation and write policies separate.
 - Made the public Lua API return stable booleans, validation data, and
   `ok, message, persisted` mutation results. `command()` now preserves routed
-  return values.
+  return values. Collection validation includes history diagnostics.
 - Added Luacheck to local and Nix validation and fixed the complete initial
   warning set without broad per-file suppressions.
 
