@@ -165,6 +165,17 @@
                 touch "$out"
               '';
 
+          luaLint =
+            pkgs.runCommand "luixbits-neorg-flashcards-lua-lint"
+              {
+                nativeBuildInputs = [ pkgs.luaPackages.luacheck ];
+              }
+              ''
+                cd ${self}
+                luacheck lua tests scripts
+                touch "$out"
+              '';
+
           workflowLint =
             pkgs.runCommand "luixbits-neorg-flashcards-workflow-lint"
               {

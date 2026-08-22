@@ -299,7 +299,7 @@ return function(T)
     native_close_callback("Keep editing", 1)
     assert_true(form.is_open(), "keeping a native-close draft returns to the composer")
 
-    native_close_choices, native_close_callback = nil, nil
+    native_close_callback = nil
     vim.cmd("q")
     assert_true(
       vim.wait(200, function()

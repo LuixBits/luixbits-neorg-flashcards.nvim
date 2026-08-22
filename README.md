@@ -956,14 +956,15 @@ NVIM=/path/to/nvim bash scripts/test.sh
 NVIM=/path/to/nvim bash scripts/check-clean-install.sh
 ```
 
-Run every Nix package, module, formatting, workflow, headless, and isolated
-Neorg-integration check:
+Run every Nix package, module, Lua lint, formatting, workflow, headless, and
+isolated Neorg-integration check:
 
 ```sh
 nix flake check --print-build-logs
 ```
 
-If `stylua` is installed, `scripts/test.sh` also checks formatting.
+If StyLua or Luacheck is installed, `scripts/test.sh` also runs that check. The
+Nix check always runs both tools.
 
 Regenerate the deterministic README tour from its asciicast source:
 

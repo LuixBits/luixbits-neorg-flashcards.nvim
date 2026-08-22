@@ -22,7 +22,7 @@ local function resolve_destination(path, opts)
     return nil, "source destination is not a regular file"
   end
 
-  local destination = path
+  local destination
   if opts.follow_symlink ~= false then
     local resolved = uv.fs_realpath(path)
     if path_stat and path_stat.type == "link" then

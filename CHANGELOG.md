@@ -20,6 +20,8 @@ All notable changes to this project will be documented here.
 - Made the public Lua API return stable booleans, validation data, and
   `ok, message, persisted` mutation results. `command()` now preserves routed
   return values.
+- Added Luacheck to local and Nix validation and fixed the complete initial
+  warning set without broad per-file suppressions.
 
 ## 0.2.0 - 2026-08-22
 

@@ -4,7 +4,6 @@ return function(T)
   local parser = require("neorg_flashcards.parser")
   local presets = require("neorg_flashcards.presets")
   local schema = require("neorg_flashcards.schema")
-  local actions = require("neorg_flashcards.ui.actions")
   local flashcards = require("neorg_flashcards")
 
   local assert_true = T.assert_true

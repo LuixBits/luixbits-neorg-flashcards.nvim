@@ -96,32 +96,32 @@ end
 
 local function validate_captured_identity(path, captured_identity)
   local destination = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path), ":p"))
-  local identity = captured_identity or captured_destinations[destination]
-  if not identity then
+  local captured = captured_identity or captured_destinations[destination]
+  if not captured then
     return true
   end
 
-  if identity.root then
-    local _, root_err = util.resolve_pinned_directory(identity.root)
+  if captured.root then
+    local _, root_err = util.resolve_pinned_directory(captured.root)
     if root_err then
       return false, root_err
     end
   end
 
   local parent = canonical_path(vim.fn.fnamemodify(destination, ":h"))
-  if parent ~= identity.parent then
+  if parent ~= captured.parent then
     return false, "review history parent changed since it was captured; run setup again"
   end
   local stat = (vim.uv or vim.loop).fs_stat(parent)
   if stat and stat.type ~= "directory" then
     return false, "review history parent is no longer a directory"
-  elseif identity.dev ~= nil and identity.ino ~= nil then
-    if not stat or stat.dev ~= identity.dev or stat.ino ~= identity.ino then
+  elseif captured.dev ~= nil and captured.ino ~= nil then
+    if not stat or stat.dev ~= captured.dev or stat.ino ~= captured.ino then
       return false, "review history parent was replaced since it was captured; run setup again"
     end
   elseif stat then
-    identity.dev = stat.dev
-    identity.ino = stat.ino
+    captured.dev = stat.dev
+    captured.ino = stat.ino
   end
   return true
 end
@@ -359,12 +359,12 @@ function M.capture(source)
     return nil, path_err
   end
   if type(source) == "string" then
-    local identity = captured_destinations[path]
-    local destination = new_destination(path, identity and identity.root or nil)
-    if identity then
-      destination.parent = identity.parent
-      destination.dev = identity.dev
-      destination.ino = identity.ino
+    local captured = captured_destinations[path]
+    local destination = new_destination(path, captured and captured.root or nil)
+    if captured then
+      destination.parent = captured.parent
+      destination.dev = captured.dev
+      destination.ino = captured.ino
     end
     return destination
   end

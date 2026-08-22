@@ -4,7 +4,6 @@
 local history = require("neorg_flashcards.history")
 local highlights = require("neorg_flashcards.highlights")
 local schedule = require("neorg_flashcards.schedule")
-local util = require("neorg_flashcards.util")
 
 local M = {}
 
@@ -187,9 +186,9 @@ local function percentage(value, fallback)
   return value and (tostring(value) .. "%") or (fallback or "—")
 end
 
-local function span_all(lines, highlights)
+local function span_all(lines, highlight_map)
   local spans = {}
-  for line, hl in pairs(highlights or {}) do
+  for line, hl in pairs(highlight_map or {}) do
     table.insert(spans, { line = line, start_col = 0, end_col = -1, hl = hl })
   end
   return lines, spans

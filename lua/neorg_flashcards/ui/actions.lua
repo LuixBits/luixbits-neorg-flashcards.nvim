@@ -322,7 +322,7 @@ local function keys_for_help(item)
   return table.concat(keys, " / ")
 end
 
-function M.title(context, capabilities)
+function M.title(context, _)
   return context_titles[context] or "Flashcard keys"
 end
 

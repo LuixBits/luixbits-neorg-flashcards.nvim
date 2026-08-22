@@ -33,10 +33,10 @@ end
 
 ---Inspect valid cards for collection-level and scheduling health problems.
 ---Parser/schema errors remain the caller's responsibility.
----@param config table
+---@param card_config table
 ---@param cards table[]
 ---@return table[] issues
-function M.inspect(config, cards)
+function M.inspect(card_config, cards)
   local issues = {}
   local ids = {}
   local fronts = {}
@@ -51,7 +51,7 @@ function M.inspect(config, cards)
       ids[id] = card
     end
 
-    local _, front = schema.front(config, card)
+    local _, front = schema.front(card_config, card)
     local front_key = card.kind .. "\0" .. util.trim(front):lower():gsub("%s+", " ")
     if front_key ~= card.kind .. "\0" then
       if fronts[front_key] then
@@ -91,7 +91,7 @@ function M.inspect(config, cards)
       table.insert(issues, issue("error", "invalid_availability", "unknown availability: " .. availability, card))
     end
 
-    local leech_threshold = tonumber(config.leech_threshold) or 8
+    local leech_threshold = tonumber(card_config.leech_threshold) or 8
     if (tonumber(card.values.lapses) or 0) >= leech_threshold then
       table.insert(
         issues,
@@ -113,8 +113,8 @@ function M.inspect(config, cards)
   return issues
 end
 
-function M.format(config, item)
-  return string.format("%s: [%s] %s", label(item.card, config.flashcards_dir), item.severity, item.message)
+function M.format(card_config, item)
+  return string.format("%s: [%s] %s", label(item.card, card_config.flashcards_dir), item.severity, item.message)
 end
 
 function M.counts(issues)
