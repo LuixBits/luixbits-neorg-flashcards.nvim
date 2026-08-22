@@ -10,7 +10,7 @@
     "studio": "remotion studio src/index.ts"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.494",
+    "@remotion/cli": "4.0.513",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.494"
