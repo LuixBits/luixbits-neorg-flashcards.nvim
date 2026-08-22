@@ -10,6 +10,7 @@ return function(T)
   local assert_contains = T.assert_contains
   local current_popup = T.current_popup
   local assert_buffer_maps = T.assert_buffer_maps
+  local assert_buffer_maps_absent = T.assert_buffer_maps_absent
   local window_footer = T.window_footer
   local decoration_text = T.decoration_text
   local fixed_now = T.fixed_now
@@ -101,6 +102,7 @@ return function(T)
     local review_popup = vim.api.nvim_get_current_buf()
     assert_equal(#semantic_rating_marks(review_popup), 0, "rating words in card text are not colored before reveal")
     assert_buffer_maps(review_popup, { "q", "?", "j", "k", "1", "2", "3" })
+    assert_buffer_maps_absent(review_popup, { "n", "p" })
     assert_contains(window_footer(), "Enter/Space reveal", "question review shows its current shortcuts")
 
     vim.cmd("Flashcards add")

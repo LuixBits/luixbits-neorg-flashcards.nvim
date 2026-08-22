@@ -92,7 +92,19 @@ return function(T)
   }) do
     assert_equal(vim.fn.exists(":" .. command), 0, command .. " is no longer registered")
   end
-  assert_equal(vim.fn.maparg("<leader>ncr", "n"), "", "setup does not create global keymaps")
+  for _, lhs in ipairs({
+    "<leader>nc",
+    "<leader>nco",
+    "<leader>nci",
+    "<leader>nch",
+    "<leader>ncr",
+    "<leader>ncf",
+    "<leader>nct",
+    "<leader>ncs",
+    "<leader>ncv",
+  }) do
+    assert_equal(vim.fn.maparg(lhs, "n"), "", "plugin setup does not create global mapping " .. lhs)
+  end
 
   do
     local actions = require("neorg_flashcards.ui.actions")

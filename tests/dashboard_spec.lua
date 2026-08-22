@@ -10,6 +10,7 @@ return function(T)
   local current_popup = T.current_popup
   local current_tab_text = T.current_tab_text
   local assert_buffer_maps = T.assert_buffer_maps
+  local assert_buffer_maps_absent = T.assert_buffer_maps_absent
   local collection_dir = T.collection_dir
 
   local invalid_ui_path = collection_dir .. "/invalid-ui.norg"
@@ -81,6 +82,7 @@ return function(T)
     "c",
     "R",
   })
+  assert_buffer_maps_absent(overview_popup, { "s" })
   assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
 
   vim.cmd("Flashcards add")

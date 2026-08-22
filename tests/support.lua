@@ -57,6 +57,17 @@ function M.assert_buffer_maps(bufnr, expected)
   end
 end
 
+function M.assert_buffer_maps_absent(bufnr, unexpected)
+  local maps = {}
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(bufnr, "n")) do
+    maps[map.lhs] = true
+  end
+
+  for _, lhs in ipairs(unexpected) do
+    M.assert_true(not maps[lhs], "obsolete popup-local mapping returned: " .. lhs)
+  end
+end
+
 function M.window_footer(win)
   local chunks = vim.api.nvim_win_get_config(win or 0).footer or {}
   local values = {}
