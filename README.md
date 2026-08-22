@@ -867,13 +867,19 @@ local flashcards = require("neorg_flashcards")
 vim.keymap.set("n", "<leader>nc", flashcards.overview, { desc = "Open flashcards" })
 ```
 
-Return values use four small contracts:
+Return values follow a few small contracts:
 
-- `setup()` and UI/action functions return a boolean. With `vim.ui` prompts,
-  `true` means the prompt was launched; the callback receives the later answer.
-- Source mutations return `ok, message, persisted`. A successful result with
-  `persisted = false` changed an open modified buffer that still needs saving.
-  Failed mutations always return `persisted = false`.
+- `setup()` returns `true` after valid configuration and raises an error for
+  invalid options.
+- UI and session functions return a boolean. `true` means the synchronous
+  request was accepted; `false` means it was rejected or had no effect. With
+  `vim.ui` prompts, `true` only means the prompt was launched; the callback
+  receives the later answer.
+- Source mutations return `ok, message, persisted`. `ok` reports whether the
+  change was accepted. `message` is `nil` when nothing needs explaining;
+  otherwise it describes the result, warning, or error. A successful result
+  with `persisted = false` changed an open modified buffer that still needs
+  saving. Failed mutations always return `persisted = false`.
 - Queries return their data. Validation functions return a status followed by
   the cards and diagnostics they computed.
 - `command()` returns every value from the routed function. The `:Flashcards`
@@ -884,7 +890,7 @@ Return values use four small contracts:
 | `setup(opts)` | Configure the plugin and return `true`; invalid options raise an error (see [Configuration](#configuration)) |
 | `command(args?)` | Dispatch the same routes as `:Flashcards` and return the routed result |
 | `open_flashcards()` | Create or open `default_file` |
-| `add_kind(kind?)` | Add-card form targeting the current `.norg` file |
+| `add_kind(kind?)` | Add in the current collection `.norg`, or in `default_file` from a non-`.norg` buffer or the hub |
 | `add_to_default(kind?)` | Add-card form targeting `default_file` |
 | `validate_file()` | Return `ok, valid_cards, errors` for the current buffer |
 | `validate_collection()` | Return `ok, cards, health_issues, diagnostics`; diagnostics include parser and history errors |

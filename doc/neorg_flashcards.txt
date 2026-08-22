@@ -509,9 +509,15 @@ The primary entry points are public functions on the plugin module:
 
 Result contracts:
 
-- setup() and UI/action functions return a boolean. For `vim.ui` prompts,
-  true means the prompt started; its callback receives the later answer.
-- Source mutations return `ok, message, persisted`. A successful false
+- setup() returns true after valid configuration and errors on invalid
+  options.
+- UI and session functions return a boolean. True means the synchronous
+  request was accepted; false means it was rejected or had no effect. For
+  `vim.ui` prompts, true only means the prompt started; its callback receives
+  the later answer.
+- Source mutations return `ok, message, persisted`. `ok` says whether the
+  change was accepted. `message` is nil when nothing needs explaining;
+  otherwise it describes the result, warning, or error. A successful false
   `persisted` value means an open modified buffer still needs to be saved.
   Failed mutations always return `persisted = false`.
 - Queries return data. Validation returns status, cards, and diagnostics.
@@ -523,7 +529,8 @@ setup({opts})             Configure and return true; invalid options error.
                           See |neorg-flashcards-setup|.
 command({args})           Dispatch |:Flashcards| routes and return the result.
 open_flashcards()         Create or open `default_file`.
-add_kind({kind})          Card form targeting the current `.norg` file.
+add_kind({kind})          Add in the current collection `.norg`, or in
+                          `default_file` from a non-`.norg` buffer or the hub.
 add_to_default({kind})    Card form targeting `default_file`.
 validate_file()           Return ok, valid cards, and current-buffer errors.
 validate_collection()     Return ok, cards, health issues, and parser/history
