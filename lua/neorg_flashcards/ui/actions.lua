@@ -27,6 +27,13 @@ local catalog = {
       hints = { overview = "keys", cards = "keys", stats = "keys" },
       essential = true,
     }),
+    -- Keep destructive discovery near `?` so the Cards ribbon retains it in
+    -- the normal 54-column detail pane. It still drops before core navigation
+    -- in the narrowest stacked layout.
+    action({ "D" }, "delete_card", "Delete the selected card after confirmation", { "cards" }, {
+      hints = { cards = "delete" },
+      capability = "delete",
+    }),
     action({ "H" }, "plugin_help", "Open the full plugin guide", HUB, { capability = "help" }),
     action({ "1" }, "overview", "Open Overview", HUB),
     action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),

@@ -456,9 +456,18 @@ Cards is a complete browser rather than a second command list:
 - `o`: cycle due, front, state, and source sorting; `X` clears search/filter.
 - `Enter` / `r`: review the selected active card.
 - `x`: suspend or resume; `b`: bury until tomorrow or unbury.
+- `D`: confirm and delete the selected source block.
 - `p`: preview; `e`: edit the source; `j` / `k`: change selection.
 - Invalid blocks are searchable and available through the `invalid` filter.
-  They can be opened with `e`, but review and scheduling actions are disabled.
+  They can be opened with `e` or deleted with `D`, but review and scheduling
+  actions are disabled.
+
+Deletion removes only the selected `@flashcard` block. It works for malformed
+and duplicate-ID rows because it targets the exact source range shown in the
+Cards page, checks that the file has not changed, and asks before writing. If
+the source is already open with unsaved edits, the block is removed in that
+buffer and remains unsaved for you to inspect. Existing `reviews.jsonl` events
+are historical records and are not erased with the card.
 
 Stats combines total and today's reviews, streak, 7/30/90-day retention,
 30-day answer distribution, lifecycle and availability counts, leeches,
@@ -668,6 +677,7 @@ vim.keymap.set("n", "<leader>nc", flashcards.overview, { desc = "Open flashcards
 | `suspend_current()` | Suspend the current review card |
 | `get_review_state()` | Return a copy of the active review session state |
 | `toggle_suspend(card)` | Suspend or resume a card |
+| `delete_card(card)` | Delete one parsed card's exact source block; no confirmation at this low-level API |
 | `bury_card(card)` / `toggle_bury(card)` | Bury a card until tomorrow or toggle burial |
 | `open_card(card)` | Open a parsed card at its source block |
 | `help()` | Short in-editor guide |

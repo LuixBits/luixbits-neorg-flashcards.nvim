@@ -907,6 +907,9 @@ local function build_card_detail()
     add_line(lines, spans, "")
     add_line(lines, spans, " Repair", HIGHLIGHTS.title)
     add_line(lines, spans, "  Press e to open the block, fix the errors, then R to refresh.", HIGHLIGHTS.accent)
+    if state.capabilities.delete then
+      add_line(lines, spans, "  Press D to delete this exact invalid block after confirmation.", HIGHLIGHTS.muted)
+    end
     return lines, spans
   end
   local status = card_status(card, os.time())
@@ -969,6 +972,11 @@ local function build_card_detail()
   add_line(lines, spans, "")
   add_line(lines, spans, " Hint", HIGHLIGHTS.title)
   add_line(lines, spans, "  " .. truncate(detail_hint(status), math.max(20, side_width() - 4)), HIGHLIGHTS.accent)
+  if state.capabilities.delete then
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Actions", HIGHLIGHTS.title)
+    add_line(lines, spans, "  Press D to delete this card after confirmation.", HIGHLIGHTS.muted)
+  end
   return lines, spans
 end
 
@@ -1656,6 +1664,57 @@ function M.bury()
   end
 end
 
+local function delete_source(entry)
+  if entry.invalid then
+    return invalid_source(entry)
+  end
+  local card = entry.card or {}
+  local source = card_source(card)
+  if card.start_line then
+    source = source .. ":" .. tostring(card.start_line)
+  end
+  return source
+end
+
+function M.delete_selected()
+  if state.page ~= "cards" or not state.capabilities.delete then
+    return false
+  end
+
+  -- Capture the physical browser entry before opening an asynchronous picker.
+  -- In particular, duplicate-ID invalid cards must not be resolved by ID after
+  -- the user confirms because the selection may have moved in the meantime.
+  local entry = selected_card_entry()
+  if not entry or not entry.card then
+    util.notify("No card selected", vim.log.levels.WARN)
+    return false
+  end
+
+  local card = entry.card
+  local source = delete_source(entry)
+  local front = card_front(card)
+  if front == "" then
+    front = "@flashcard " .. tostring(card.kind or "unknown")
+  end
+  local prompt = string.format("Delete “%s” from %s?", truncate(front, 42), source)
+  local context = {
+    invalid = entry.invalid == true,
+    messages = vim.deepcopy(entry.messages or {}),
+    source = source,
+  }
+
+  vim.ui.select({ "Cancel", "Delete card" }, { prompt = prompt }, function(choice)
+    if choice ~= "Delete card" or not M.is_open() then
+      return
+    end
+    local handled, deleted = call_handler("on_delete_card", card, context)
+    if handled and deleted == true and M.is_open() then
+      M.refresh()
+    end
+  end)
+  return true
+end
+
 function M.refresh()
   if not provider or not M.is_open() then
     return
@@ -1784,6 +1843,8 @@ local function dispatch(action)
     M.toggle_suspend()
   elseif action == "bury" then
     M.bury()
+  elseif action == "delete_card" then
+    M.delete_selected()
   elseif action == "peek" then
     M.peek()
   elseif action == "open_source" then
@@ -1904,6 +1965,7 @@ function M.open(collect, opts)
     migrate = type(handlers.on_migrate) == "function",
     suspend = type(handlers.on_toggle_suspend) == "function",
     bury = type(handlers.on_bury) == "function",
+    delete = type(handlers.on_delete_card) == "function",
   }
   if not M.is_open() then
     vim.cmd("tabnew")

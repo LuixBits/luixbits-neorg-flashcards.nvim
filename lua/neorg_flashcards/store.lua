@@ -246,6 +246,77 @@ function M.unset_card_fields(card, fields, opts)
   return M.restore_card_fields(card, {}, fields, opts)
 end
 
+-- Delete one physical flashcard block. Card IDs are deliberately not used as
+-- the target: duplicate IDs make a card invalid, but users must still be able
+-- to remove either duplicate safely. The source fingerprint and exact cached
+-- range protect the asynchronous confirmation flow from deleting a block
+-- after its file changed underneath the hub.
+function M.delete_card(card)
+  if type(card) ~= "table" or util.isempty(card.path) then
+    return false, "Cannot delete a flashcard without a saved source file", false
+  end
+
+  local lines, bufnr, err = source_lines(card.path)
+  if not lines then
+    return false, err, false
+  end
+
+  if card.source_version and card.source_version ~= util.lines_fingerprint(lines) then
+    return false, "Source changed since this card was selected; refresh before deleting it.", false
+  end
+
+  local start_line = tonumber(card.start_line)
+  local end_line = tonumber(card.end_line)
+  if
+    not start_line
+    or not end_line
+    or start_line ~= math.floor(start_line)
+    or end_line ~= math.floor(end_line)
+    or start_line < 1
+    or end_line < start_line
+    or end_line > #lines
+  then
+    return false, "Flashcard source range is invalid; refresh before deleting it.", false
+  end
+
+  local source_kind = lines[start_line] and lines[start_line]:match("^%s*@flashcard%s+([%w_-]+)%s*$")
+  if not source_kind or (not util.isempty(card.kind) and source_kind ~= card.kind) then
+    return false, "Flashcard no longer starts at the selected source line; refresh before deleting it.", false
+  end
+
+  if card.closed == false then
+    if end_line ~= #lines or lines[end_line]:match("^%s*@end%s*$") then
+      return false, "Unclosed flashcard range changed; refresh before deleting it.", false
+    end
+  elseif not lines[end_line]:match("^%s*@end%s*$") then
+    return false, "Flashcard no longer ends at the selected source line; refresh before deleting it.", false
+  end
+
+  local candidate = vim.deepcopy(lines)
+  for _ = start_line, end_line do
+    table.remove(candidate, start_line)
+  end
+
+  -- A normally formatted block has a blank line on either side. Removing the
+  -- block would leave two adjacent separators, so collapse only that join and
+  -- leave all unrelated prose and file headings untouched.
+  if
+    start_line > 1
+    and candidate[start_line - 1]
+    and candidate[start_line]
+    and util.trim(candidate[start_line - 1]) == ""
+    and util.trim(candidate[start_line]) == ""
+  then
+    table.remove(candidate, start_line)
+  end
+
+  local ok, message, persisted = write_source_lines(card.path, bufnr, candidate)
+  if not ok then
+    return false, "Could not delete flashcard: " .. tostring(message), false
+  end
+  return true, message, persisted
+end
+
 -- Buffer-aware file access shared with the add-card flow: reads go through a
 -- loaded buffer when one exists, writes persist unless that buffer has unsaved
 -- edits.

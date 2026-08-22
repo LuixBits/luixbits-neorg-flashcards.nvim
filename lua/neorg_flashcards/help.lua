@@ -64,7 +64,7 @@ function M.open()
     "  Enter/r review · d due · A all · a add · e source",
     "  j/k line · Ctrl-D/U half page · gg/G top/bottom",
     "",
-    "Cards: / search · f filter · o sort · x suspend · b bury",
+    "Cards: / search · f filter · o sort · x suspend · b bury · D delete",
     "Collection: c check · m migrate legacy IDs · R refresh",
     "Form: Enter next · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",

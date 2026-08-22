@@ -11,3 +11,4 @@ record is a design target and may change before implementation.
 | [0003](0003-scope-state-and-history-to-a-collection.md) | Proposed | Scope identity, history, and analytics to a collection |
 | [0004](0004-separate-study-limits-from-scheduling.md) | Proposed | Keep workload limits separate from scheduling |
 | [0005](0005-value-only-card-composer.md) | Accepted | Keep form chrome out of editable values and commit additions transactionally |
+| [0006](0006-confirm-source-range-card-deletion.md) | Accepted | Confirm deletion and target exact source ranges while retaining history |

@@ -157,11 +157,17 @@ Cards is a searchable browser for the entire collection:
   Enter / r       review the selected active card
   x               suspend or resume the selected card
   b               bury until tomorrow or unbury the selected card
+  D               confirm and delete the selected source block
   p / e           preview / edit the selected card
 
 Invalid blocks, including every copy of a duplicate stable ID, appear as
 `[INVALID]` rows. They remain searchable and have an `invalid` filter. Press
-`e` to repair the source; review, suspend, and bury actions stay disabled.
+`e` to repair the source or `D` to delete that exact block; review, suspend,
+and bury actions stay disabled.
+
+Deletion checks that the parsed source has not changed and works through a
+loaded buffer when present. A dirty source remains dirty and must be written
+manually. Historical review events are retained in `reviews.jsonl`.
 
 Stats combines activity and collection analytics. Use `d` for due review,
 `A` for an active-card cram session, or `R` to refresh its data. Both Stats
@@ -348,6 +354,8 @@ bury_current()            Bury the current review card until tomorrow.
 suspend_current()         Suspend the current review card.
 get_review_state()        Return a copy of the review session state.
 toggle_suspend({card})    Suspend or resume a parsed card.
+delete_card({card})       Delete the parsed card's exact source block. The
+                          low-level Lua call does not ask for confirmation.
 bury_card({card})         Bury a card until tomorrow.
 toggle_bury({card})       Bury or unbury a card.
 open_card({card})         Open a parsed card at its source block.

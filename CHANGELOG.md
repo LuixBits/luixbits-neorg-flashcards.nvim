@@ -13,6 +13,9 @@ All notable changes to this project will be documented here.
 - Kept contextual hub shortcuts visible in the winbar under global statuslines
   and added focus-aware line, half-page, and top/bottom navigation to both hub
   panes.
+- Added confirmed `D` deletion to the Cards page, including malformed and
+  duplicate-ID blocks, with stale-source and unsaved-buffer protection while
+  retaining append-only review history.
 
 ## 0.2.0 - 2026-08-21
 

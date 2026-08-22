@@ -143,18 +143,24 @@ do
   local narrow_stats_footer = actions.footer("stats", 38, {})
   assert_true(vim.fn.strdisplaywidth(narrow_stats_footer) <= 38, "Stats shortcut hints fit the narrowest pane")
   assert_contains(narrow_stats_footer, "j/k scroll", "narrow Stats hints explain how to scroll")
+  local delete_footer = actions.footer("cards", 54, { delete = true })
+  assert_contains(delete_footer, "D delete", "standard Cards ribbon exposes confirmed deletion")
+  local delete_help = table.concat(actions.help_lines("cards", { delete = true }), "\n")
+  assert_contains(delete_help, "D", "Cards help shows the deletion key")
+  assert_contains(delete_help, "Delete the selected card after confirmation", "Cards help explains safe deletion")
   local stats_help = table.concat(actions.help_lines("stats", {}), "\n")
   assert_contains(stats_help, "Ctrl-D / PageDown", "Stats help exposes half-page scrolling")
   assert_contains(stats_help, "gg", "Stats help exposes top navigation")
   assert_contains(stats_help, "G", "Stats help exposes bottom navigation")
   local hub_keys = {}
-  for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true })) do
+  for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true, delete = true })) do
     hub_keys[binding.key] = true
     assert_true(binding.key ~= "s", "the retired pane-switch compatibility mapping is absent")
   end
   for _, key in ipairs({ "<C-d>", "<C-u>", "<PageDown>", "<PageUp>", "gg", "G" }) do
     assert_true(hub_keys[key], "hub scrolling mapping is registered: " .. key)
   end
+  assert_true(hub_keys.D, "Cards deletion mapping is registered when supported")
 end
 
 vim.cmd("Flashcards help")
@@ -576,6 +582,126 @@ assert_true(ok, message)
 local updated = table.concat(vim.fn.readfile(card_path), "\n")
 assert_contains(updated, "score: 3", "score was written")
 assert_contains(updated, "reviewed: 2026-07-01", "review date was written")
+
+do
+  local delete_path = vim.fn.tempname() .. ".norg"
+  local delete_lines = {
+    "* Delete cards safely",
+    "",
+    "@flashcard japanese",
+    "id: fc_delete_first",
+    "japanese: 一",
+    "english: one",
+    "@end",
+    "",
+    "@flashcard japanese",
+    "id: fc_delete_middle",
+    "japanese: 二",
+    "english: two",
+    "@end",
+    "",
+    "@flashcard japanese",
+    "id: fc_delete_last",
+    "japanese: 三",
+    "english: three",
+    "@end",
+  }
+  vim.fn.writefile(delete_lines, delete_path)
+  local delete_cards = parser.parse_file(delete_path)
+  local delete_ok, delete_message, delete_persisted = store.delete_card(delete_cards[2])
+  assert_true(delete_ok, delete_message)
+  assert_true(delete_persisted, "deleting from an unloaded source persists immediately")
+  assert_equal(
+    table.concat(vim.fn.readfile(delete_path), "\n"),
+    table.concat({
+      "* Delete cards safely",
+      "",
+      "@flashcard japanese",
+      "id: fc_delete_first",
+      "japanese: 一",
+      "english: one",
+      "@end",
+      "",
+      "@flashcard japanese",
+      "id: fc_delete_last",
+      "japanese: 三",
+      "english: three",
+      "@end",
+    }, "\n"),
+    "deletion removes exactly the selected physical block and one doubled separator"
+  )
+
+  local stale_card = parser.parse_file(delete_path)[1]
+  vim.fn.writefile(vim.list_extend({ "* changed after confirmation" }, vim.fn.readfile(delete_path)), delete_path)
+  local stale_delete_ok, stale_delete_message = store.delete_card(stale_card)
+  assert_true(not stale_delete_ok, "deletion refuses a source changed after selection")
+  assert_contains(stale_delete_message, "refresh before deleting", "stale deletion explains how to recover")
+
+  local duplicate_path = vim.fn.tempname() .. ".norg"
+  vim.fn.writefile({
+    "@flashcard japanese",
+    "id: fc_duplicate_delete",
+    "japanese: 前",
+    "english: first",
+    "@end",
+    "",
+    "@flashcard japanese",
+    "id: fc_duplicate_delete",
+    "japanese: 後",
+    "english: second",
+    "@end",
+  }, duplicate_path)
+  local duplicate_cards = parser.parse_file(duplicate_path)
+  local duplicate_ok, duplicate_message = store.delete_card(duplicate_cards[2])
+  assert_true(duplicate_ok, duplicate_message)
+  local duplicate_text = table.concat(vim.fn.readfile(duplicate_path), "\n")
+  assert_contains(duplicate_text, "japanese: 前", "duplicate deletion keeps the other physical card")
+  assert_true(not duplicate_text:find("japanese: 後", 1, true), "duplicate deletion removes the selected range")
+
+  local unclosed_path = vim.fn.tempname() .. ".norg"
+  vim.fn.writefile({
+    "* Broken card",
+    "",
+    "@flashcard japanese",
+    "japanese: 未完",
+    "english: unfinished",
+  }, unclosed_path)
+  local unclosed_card = parser.parse_file(unclosed_path)[1]
+  assert_equal(unclosed_card.closed, false, "fixture is an unclosed invalid block")
+  local unclosed_ok, unclosed_message = store.delete_card(unclosed_card)
+  assert_true(unclosed_ok, unclosed_message)
+  assert_equal(
+    table.concat(vim.fn.readfile(unclosed_path), "\n"),
+    "* Broken card\n",
+    "unclosed EOF blocks can be removed safely"
+  )
+
+  local dirty_path = vim.fn.tempname() .. ".norg"
+  vim.fn.writefile({
+    "@flashcard japanese",
+    "id: fc_dirty_delete",
+    "japanese: 消す",
+    "english: delete",
+    "@end",
+  }, dirty_path)
+  vim.cmd.edit(vim.fn.fnameescape(dirty_path))
+  vim.api.nvim_buf_set_lines(0, -1, -1, false, { "", "* unrelated unsaved note" })
+  local dirty_card = parser.parse_buffer(0)[1]
+  local dirty_ok, dirty_message, dirty_persisted = store.delete_card(dirty_card)
+  assert_true(dirty_ok, dirty_message)
+  assert_equal(dirty_persisted, false, "deletion in a dirty source waits for the user to save")
+  assert_contains(dirty_message, "open modified buffer", "dirty deletion warns that it is not persisted")
+  local dirty_buffer_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  assert_contains(dirty_buffer_text, "unrelated unsaved note", "dirty deletion preserves unrelated buffer edits")
+  assert_true(not dirty_buffer_text:find("@flashcard", 1, true), "dirty deletion removes the block in memory")
+  assert_contains(
+    table.concat(vim.fn.readfile(dirty_path), "\n"),
+    "japanese: 消す",
+    "dirty deletion leaves the on-disk source unchanged"
+  )
+  assert_true(vim.bo.modified, "dirty deletion keeps the source buffer modified")
+  vim.cmd("silent! bwipeout!")
+end
 
 do
   local prompted_path = vim.fn.tempname() .. ".norg"
@@ -1661,6 +1787,7 @@ assert_buffer_maps(overview_popup, {
   "X",
   "x",
   "b",
+  "D",
   "p",
   "e",
   "c",
@@ -1738,6 +1865,12 @@ assert_contains(cards_text, "[INVALID]", "Cards page keeps invalid blocks visibl
 assert_contains(cards_text, "3 invalid", "Cards page counts invalid blocks separately from reviewable cards")
 assert_contains(current_tab_text(), "duplicate id", "invalid card details explain duplicate identities")
 assert_contains(cards_text, "source:", "invalid rows include their source location")
+assert_contains(
+  current_tab_text(),
+  "Press D to delete this exact invalid block",
+  "invalid details expose safe deletion"
+)
+assert_contains(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "D delete", "Cards ribbon exposes deletion")
 
 local invalid_disk_before = table.concat(vim.fn.readfile(invalid_ui_path), "\n")
 local invalid_messages = {}
@@ -1756,6 +1889,49 @@ assert_equal(
   invalid_disk_before,
   "blocked invalid-card actions do not rewrite the source"
 )
+
+_G.__flashcards_hub_test.select_original = vim.ui.select
+vim.ui.select = function(items, opts, callback)
+  _G.__flashcards_hub_test.delete_choices = items
+  _G.__flashcards_hub_test.delete_prompt = opts.prompt
+  _G.__flashcards_hub_test.delete_callback = callback
+end
+assert_true(overview.delete_selected(), "Cards opens deletion confirmation for an invalid block")
+assert_equal(_G.__flashcards_hub_test.delete_choices[1], "Cancel", "destructive confirmation defaults to Cancel")
+assert_equal(
+  _G.__flashcards_hub_test.delete_choices[2],
+  "Delete card",
+  "destructive confirmation requires an exact Delete card choice"
+)
+assert_contains(_G.__flashcards_hub_test.delete_prompt, "壱", "deletion confirmation names the captured card")
+assert_contains(
+  _G.__flashcards_hub_test.delete_prompt,
+  "invalid-ui.norg:1",
+  "deletion confirmation names the exact invalid source block"
+)
+_G.__flashcards_hub_test.delete_callback("Cancel")
+assert_equal(
+  table.concat(vim.fn.readfile(invalid_ui_path), "\n"),
+  invalid_disk_before,
+  "cancelling deletion leaves the source untouched"
+)
+
+assert_true(overview.delete_selected(), "Cards can request deletion again after cancellation")
+overview.move(1)
+_G.__flashcards_hub_test.delete_callback("Delete card")
+vim.ui.select = _G.__flashcards_hub_test.select_original
+_G.__flashcards_hub_test.invalid_after_delete = table.concat(vim.fn.readfile(invalid_ui_path), "\n")
+assert_true(
+  not _G.__flashcards_hub_test.invalid_after_delete:find("japanese: 壱", 1, true),
+  "confirmation deletes the originally captured invalid block"
+)
+assert_contains(
+  _G.__flashcards_hub_test.invalid_after_delete,
+  "japanese: 弐",
+  "moving selection while confirmation is open does not delete the newly selected block"
+)
+assert_true(not current_tab_text():find("壱", 1, true), "successful deletion refreshes the Cards browser")
+
 vim.fn.delete(invalid_ui_path)
 overview.refresh()
 local _, repaired_cards_text = current_popup()
@@ -1813,6 +1989,7 @@ overview.context_help()
 local _, cards_help_text = current_popup()
 assert_contains(cards_help_text, "Search cards", "context help is generated from Cards actions")
 assert_contains(cards_help_text, "Suspend or unsuspend", "context help includes enabled state actions")
+assert_contains(cards_help_text, "Delete the selected card after confirmation", "context help exposes safe deletion")
 overview.help_close()
 
 overview.peek()

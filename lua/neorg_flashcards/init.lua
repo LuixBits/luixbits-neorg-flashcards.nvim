@@ -720,6 +720,22 @@ function M.toggle_bury(card, context)
   return M.bury_card(card, context)
 end
 
+---Delete the exact source block represented by a collected card.
+---Review history is intentionally retained as an append-only record.
+function M.delete_card(card)
+  local ok, message, persisted = store.delete_card(card)
+  if not ok then
+    util.notify(message or "Could not delete flashcard", vim.log.levels.ERROR)
+    return false, message, false
+  end
+  if message then
+    util.notify(message, vim.log.levels.WARN)
+  elseif persisted then
+    util.notify("Flashcard deleted")
+  end
+  return true, message, persisted
+end
+
 function M.open_card(card)
   if not card or util.isempty(card.path) then
     M.open_flashcards()
@@ -1046,6 +1062,7 @@ function M.setup(opts)
     on_help = M.help,
     on_toggle_suspend = M.toggle_suspend,
     on_bury = M.toggle_bury,
+    on_delete_card = M.delete_card,
   })
   review.setup(review_config)
 
