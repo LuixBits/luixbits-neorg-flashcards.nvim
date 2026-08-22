@@ -12,6 +12,8 @@ return function(T)
   local canonical_path = T.canonical_path
   local current_popup = T.current_popup
   local assert_buffer_maps = T.assert_buffer_maps
+  local assert_buffer_maps_absent = T.assert_buffer_maps_absent
+  local window_footer = T.window_footer
 
   local test_root = vim.fn.tempname()
   local config = {
@@ -139,7 +141,11 @@ return function(T)
   vim.cmd("Flashcards help")
   local help_popup, help_text = current_popup()
   assert_contains(help_text, "Files: .norg (Neorg itself is optional)", "help explains the file and Neorg relationship")
+  assert_contains(help_text, "/ find", "quick guide explains native search")
+  assert_contains(window_footer(), "/ find", "quick guide keeps search visible")
   assert_buffer_maps(help_popup, { "q" })
+  assert_buffer_maps_absent(help_popup, { "/", "n", "N" })
+  assert_true(vim.fn.search("Full manual") > 0, "native search works in the quick guide")
   require("neorg_flashcards.help").close()
   assert_true(not vim.api.nvim_buf_is_valid(help_popup), "closing help wipes its scratch buffer")
 

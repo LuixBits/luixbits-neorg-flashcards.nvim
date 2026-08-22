@@ -212,7 +212,7 @@ FLASHCARD HUB                                       *neorg-flashcards-hub*
 windows use two columns; narrow windows stack the panels. The winbar marks the
 active page and keeps compact contextual key hints visible even when Neovim
 uses a global statusline. Press `?` for the complete key list for the current
-page.
+page. Inside that list, `/` finds text and `n` / `N` move between matches.
 
 Common keys:
 

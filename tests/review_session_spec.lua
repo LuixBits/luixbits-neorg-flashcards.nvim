@@ -118,9 +118,12 @@ return function(T)
 
   review_engine.context_help()
   do
-    local _, question_help_text = current_popup()
+    local question_help_buf, question_help_text = current_popup()
     assert_contains(question_help_text, "Review keys · question", "review help names the question state")
     assert_contains(question_help_text, "Reveal first, then rate Good", "question help explains rating reveal gating")
+    assert_contains(window_footer(), "/ find", "review help advertises native search")
+    assert_buffer_maps_absent(question_help_buf, { "/", "n", "N" })
+    assert_true(vim.fn.search("progressive hint") > 0, "native search finds a current review action")
   end
   review_engine.help_close()
 

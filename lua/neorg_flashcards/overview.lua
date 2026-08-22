@@ -387,7 +387,6 @@ local function build_overview()
   local lines, spans, entries = {}, {}, {}
 
   add_line(lines, spans, " Flashcards", HIGHLIGHTS.heading)
-  add_line(lines, spans, " A calm place to decide what to study next.", HIGHLIGHTS.muted)
   add_line(lines, spans, "")
   add_line(lines, spans, " TODAY", HIGHLIGHTS.title)
   local action = string.format("  ▸  REVIEW DUE   %d ready", counts.ready)
@@ -921,7 +920,6 @@ local function build_stats_insights()
   local counts = count_states(state.all_cards, now)
   local lines, spans = {}, {}
   add_line(lines, spans, " Study health", HIGHLIGHTS.heading)
-  add_line(lines, spans, " A useful overview of the collection you have today.", HIGHLIGHTS.muted)
   add_line(lines, spans, "")
   add_line(lines, spans, " Queue", HIGHLIGHTS.title)
   add_line(
@@ -1462,7 +1460,7 @@ end
 function M.context_help()
   popup.open(key_help, {
     title = " " .. state.page:sub(1, 1):upper() .. state.page:sub(2) .. " keys ",
-    footer = " q/Esc close ",
+    footer = actions.help_footer(),
     min_width = 48,
     max_width = 72,
     min_height = 12,

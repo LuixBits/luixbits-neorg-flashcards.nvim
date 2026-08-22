@@ -4,6 +4,8 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+- Removed the generic Overview and Stats subtitles. Help popups now advertise
+  their native `/` search and `n`/`N` match navigation.
 - Centralized every plugin highlight group and restored them after colorscheme
   changes. Rating and heatmap colors can be overridden when a theme needs it.
 - Replaced the fixed-green, color-only heatmap with theme-linked levels,

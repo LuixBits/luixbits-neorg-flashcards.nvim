@@ -28,6 +28,8 @@ not have stable IDs, and its schema presets accepted aliased field names.
 - Actions inside the hub, review window, and card form are buffer-local.
 - `?` shows the shortcuts that work in the current window and state.
   `:Flashcards help` and hub `H` open the broader guide.
+- Help popups keep Neovim's native `/` search and `n`/`N` match navigation;
+  their footer makes those keys visible.
 - Mappings, compact hints, and contextual help come from one action catalogue.
 - Persistent hints are visible by default. `ui.show_shortcuts = false` hides
   that chrome without disabling mappings or `?` help.

@@ -8,6 +8,7 @@ return function(T)
   local assert_contains = T.assert_contains
   local current_popup = T.current_popup
   local assert_buffer_maps = T.assert_buffer_maps
+  local assert_buffer_maps_absent = T.assert_buffer_maps_absent
   local window_footer = T.window_footer
   local decoration_text = T.decoration_text
   local config = T.config
@@ -132,11 +133,14 @@ return function(T)
 
     form.context_help()
     do
-      local _, form_help_text = current_popup()
+      local form_help_buf, form_help_text = current_popup()
       assert_contains(form_help_text, "Card form keys", "form has contextual key help")
       assert_contains(form_help_text, "Normal or Insert mode", "form help distinguishes editing modes")
       assert_contains(form_help_text, "Save the card and return", "form help explains save and close")
       assert_contains(form_help_text, "Save and start another", "form help explains repeated entry")
+      assert_contains(window_footer(), "/ find", "form help advertises native search")
+      assert_buffer_maps_absent(form_help_buf, { "/", "n", "N" })
+      assert_true(vim.fn.search("Save and start another") > 0, "native search finds a form action")
     end
     form.help_close()
     assert_equal(vim.api.nvim_get_current_buf(), form_buf, "closing form help returns to the form")

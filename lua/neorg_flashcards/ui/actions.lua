@@ -421,8 +421,14 @@ function M.help_lines(context, capabilities)
     end
   end
   table.insert(lines, "")
+  table.insert(lines, "  /                 find text in this help window")
+  table.insert(lines, "  n / N             next / previous match")
   table.insert(lines, "  q / Esc / ?       close this help window")
   return lines
+end
+
+function M.help_footer()
+  return " / find · n/N matches · q/Esc/? close "
 end
 
 function M.description(surface, name, context)

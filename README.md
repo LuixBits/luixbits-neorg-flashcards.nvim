@@ -329,6 +329,7 @@ available; `<leader>nc` also opens it when `keymaps.enable = true`.
 5. Press `Enter` on Overview. New cards are included in the due queue.
 6. Reveal with `Space` or `Enter`, then press `1`, `2`, or `3` to rate the card.
 7. Press `?` anywhere in the hub, review, or form for current shortcuts. Use
+   `/` to find an action and `n`/`N` to move between matches. Use
    `:help neorg-flashcards` for the complete manual.
 
 `default_file` may be nested, and its parent directories are created when it is
@@ -426,7 +427,8 @@ the current value's boundaries instead of joining field rows. In Insert mode,
 Use `<C-s>` to save and close from anywhere, or `<C-n>` to save and start
 another card. In Normal mode, `j` / `k` select fields and `Enter` or `i`
 returns to editing. `q` / `Esc` asks before discarding a changed draft, and
-`?` shows every current shortcut. Composer fields are currently single-line.
+`?` shows every current shortcut. Search that list with `/`, then use `n` or
+`N` for the next or previous match. Composer fields are currently single-line.
 An add target outside the configured collection root is rejected before the
 form opens.
 
@@ -570,7 +572,8 @@ reports the same setup and collection health through Neovim's health UI.
 wide screen and stacks them in a narrow Neovim window. `1`, `2`, and `3` open
 Overview, Cards, and Stats; `Tab` / `Shift-Tab` cycle pages. The winbar shows
 the active page and keeps a compact current-page shortcut ribbon visible even
-with a global statusline. Press `?` for all keys available on the current page.
+with a global statusline. Press `?` for all keys available on the current page;
+use `/` to find one and `n`/`N` to move between matches.
 
 Navigation follows the pane under the cursor. Press `<C-w>w` (`Ctrl-W`, then
 `w`), or click a pane, to move focus. In the primary

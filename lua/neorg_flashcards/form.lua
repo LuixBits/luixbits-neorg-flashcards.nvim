@@ -463,7 +463,7 @@ function M.context_help()
   end
   popup.open(key_help, {
     title = " " .. actions.title("form", form_capabilities()) .. " ",
-    footer = " q/Esc/? close ",
+    footer = actions.help_footer(),
     min_width = 56,
     max_width = 76,
     min_height = 12,

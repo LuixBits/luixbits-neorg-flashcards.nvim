@@ -39,7 +39,7 @@ end
 function M.open()
   local opened = popup.open(state, {
     title = " Flashcards Quick Guide ",
-    footer = " q close ",
+    footer = " / find · n/N matches · q/Esc close ",
     min_width = 62,
     max_width = 78,
     min_height = 20,
@@ -81,6 +81,7 @@ function M.open()
     "Command routes: :Flashcards overview|cards|stats|review|add",
     "                open|check|help",
     "",
+    "Inside this guide: / find · n/N next/previous match",
     "Full manual: :help neorg-flashcards",
   })
   return rendered == true

@@ -534,7 +534,7 @@ function M.context_help()
   local context = review_context()
   popup.open(key_help, {
     title = " " .. actions.title(context) .. " ",
-    footer = " q/Esc/? close ",
+    footer = actions.help_footer(),
     min_width = 52,
     max_width = 76,
     min_height = 12,

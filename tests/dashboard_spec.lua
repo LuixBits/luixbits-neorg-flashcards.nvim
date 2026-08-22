@@ -11,6 +11,7 @@ return function(T)
   local current_tab_text = T.current_tab_text
   local assert_buffer_maps = T.assert_buffer_maps
   local assert_buffer_maps_absent = T.assert_buffer_maps_absent
+  local window_footer = T.window_footer
   local collection_dir = T.collection_dir
 
   local invalid_ui_path = collection_dir .. "/invalid-ui.norg"
@@ -170,12 +171,15 @@ return function(T)
   assert_contains(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "D delete", "Cards ribbon exposes deletion")
 
   overview.context_help()
-  local _, invalid_help_text = current_popup()
+  local invalid_help_buf, invalid_help_text = current_popup()
   assert_true(
     not invalid_help_text:find("Review the selected card", 1, true),
     "invalid-card help does not advertise a blocked review action"
   )
   assert_contains(invalid_help_text, "Edit the selected card", "invalid-card help retains its repair action")
+  assert_contains(window_footer(), "/ find", "hub help advertises native search")
+  assert_buffer_maps_absent(invalid_help_buf, { "/", "n", "N" })
+  assert_true(vim.fn.search("Edit the selected card") > 0, "native search finds a current hub action")
   overview.help_close()
 
   local invalid_disk_before = table.concat(vim.fn.readfile(invalid_ui_path), "\n")
