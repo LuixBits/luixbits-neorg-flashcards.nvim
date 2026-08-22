@@ -456,7 +456,12 @@ local function write_source_lines(path, bufnr, lines, opts)
     local prepared_destination, prepared_err = resolve_destination(path, destination_opts)
     if not prepared_destination or not same_destination(prepared_destination, current_destination) then
       return restore_failure(
-        prepared_err or "source changed while preparing this update; retry against the latest file"
+        prepared_err
+          or string.format(
+            "source changed while preparing this update (%s -> %s); retry against the latest file",
+            tostring(current_destination),
+            tostring(prepared_destination)
+          )
       )
     end
     local buffer_matches, _, buffer_err = buffer_matches_destination(bufnr, current_destination, destination_opts)
@@ -488,7 +493,12 @@ local function write_source_lines(path, bufnr, lines, opts)
     prepared_destination, prepared_err = resolve_destination(path, destination_opts)
     if not prepared_destination or not same_destination(prepared_destination, current_destination) then
       return restore_failure(
-        prepared_err or "source changed while preparing this update; retry against the latest file"
+        prepared_err
+          or string.format(
+            "source changed while preparing this update (%s -> %s); retry against the latest file",
+            tostring(current_destination),
+            tostring(prepared_destination)
+          )
       )
     end
     buffer_matches, _, buffer_err = buffer_matches_destination(bufnr, current_destination, destination_opts)
@@ -525,7 +535,12 @@ local function write_source_lines(path, bufnr, lines, opts)
           or not same_destination(checked_destination, current_destination)
           or not checked_buffer
         then
-          write_error = checked_err or "source changed while preparing this update; retry against the latest file"
+          write_error = checked_err
+            or string.format(
+              "source changed while preparing this update (%s -> %s); retry against the latest file",
+              tostring(current_destination),
+              tostring(checked_destination)
+            )
           if
             checked_destination
             and same_destination(checked_destination, current_destination)
