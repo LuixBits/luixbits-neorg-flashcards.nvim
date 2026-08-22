@@ -1,11 +1,11 @@
 #!/usr/bin/env sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 APP_ID="luixbits-flashcards-real-demo"
 TITLE="LuixBits Flashcards Demo"
-OUTPUT="${1:-DP-2}"
+OUTPUT="${1:-}"
 RAW="$TMP/review-real.mp4"
 DEST="$ROOT/docs/demo/review.gif"
 
@@ -21,6 +21,9 @@ cat > "$TMP/flashcards/cards.norg" <<'CARDS'
 CARDS
 
 niri_output="$(niri msg -j outputs)"
+if [ -z "$OUTPUT" ]; then
+  OUTPUT="$(printf '%s' "$niri_output" | jq -r 'to_entries | min_by(.value.logical.x) | .key')"
+fi
 output_geometry="$(printf '%s' "$niri_output" | jq -r --arg output "$OUTPUT" '.[$output].logical | "\(.x),\(.y) \(.width)x\(.height)"')"
 if [ -z "$output_geometry" ] || [ "$output_geometry" = "null,null nullxnull" ]; then
   echo "Could not determine output geometry for $OUTPUT" >&2
@@ -39,7 +42,7 @@ kitty \
   --override initial_window_width=140c \
   --override initial_window_height=40c \
   --detach \
-  bash -lc "cd '$ROOT' && sleep 1.4 && exec nvim '$TMP/flashcards/cards.norg' -S '$ROOT/scripts/real-demo.lua'"
+  bash -lc "cd '$ROOT' && sleep 1.4 && exec nvim --cmd 'set runtimepath^=$ROOT' '$TMP/flashcards/cards.norg' -S '$ROOT/scripts/real-demo.lua'"
 
 window_id=""
 for _ in $(seq 1 80); do

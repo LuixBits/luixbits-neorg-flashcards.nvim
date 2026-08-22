@@ -54,7 +54,7 @@ export const SCENES: readonly SceneDefinition[] = [
     eyebrow: "FOCUS MODE",
     title: "Study only the chapter you are reading.",
     narration:
-      "Open chapter two and run Neorg Flashcard Review File. Only cards from the current file enter the session, so revision stays aligned with the chapter in front of you.",
+      "Open chapter two and run colon Flashcards review file. Only cards from the current file enter the session, so revision stays aligned with the chapter in front of you.",
   },
   {
     id: "collection",
@@ -62,7 +62,7 @@ export const SCENES: readonly SceneDefinition[] = [
     eyebrow: "COLLECTION MODE",
     title: "Or combine every chapter recursively.",
     narration:
-      "Run Neorg Flashcard Review to scan every dot norg file below the collection root. Nested courses and chapters become one review session without merging the source files.",
+      "Run colon Flashcards review all to scan every dot norg file below the collection root. Nested courses and chapters become one review session without merging the source files.",
   },
   {
     id: "tags",

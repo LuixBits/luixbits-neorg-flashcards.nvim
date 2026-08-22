@@ -10,7 +10,7 @@ local state = {
 local config = {}
 
 local function configured_kinds()
-  local kinds = vim.tbl_keys(config.languages or {})
+  local kinds = vim.tbl_keys(config.schemas or {})
   table.sort(kinds)
 
   if #kinds == 0 then
@@ -40,11 +40,11 @@ function M.open()
   popup.open(state, {
     title = " Flashcards Help ",
     footer = " q close ",
-    min_width = 56,
-    max_width = 72,
-    min_height = 16,
-    max_height = 20,
-    height_ratio = 0.36,
+    min_width = 62,
+    max_width = 78,
+    min_height = 20,
+    max_height = 28,
+    height_ratio = 0.58,
     maps = {
       { "q", M.close, "Close help" },
       { "<Esc>", M.close, "Close help" },
@@ -59,15 +59,23 @@ function M.open()
     "Default kind: " .. default_kind(),
     "Kinds: " .. configured_kinds(),
     "",
-    "Make: :NeorgFlashcardOpen, then :NeorgFlashcardAdd [kind]",
-    "Review all: :NeorgFlashcardReview",
-    "Review file: :NeorgFlashcardReviewFile",
-    "Filter: :NeorgFlashcardReviewTag tag",
-    "Score mode: :NeorgFlashcardReviewScore bad|mid|good|new",
+    "Open the hub: :Flashcards",
+    "  1 Overview · 2 Cards · 3 Stats · Tab next page · ? keys",
+    "  Ctrl-W W switch pane · Enter/r review · d due · A all",
+    "  a add · e edit",
+    "  j/k line · Ctrl-D/U half page · gg/G top/bottom",
     "",
-    "Keys: Space reveal/next, n next, p back",
-    "Score: 1 bad, 2 mid, 3 good",
-    "Edit: e source, q close",
+    "Cards: / search · f filter · o sort · x suspend · b bury · D delete",
+    "Collection: c open problems · R refresh",
+    "Card form: Enter next · Ctrl-S save · Ctrl-N save+new while adding",
+    "  Tab fields · Esc then ? keys · q cancel",
+    "",
+    "Review: Enter/Space reveal · h hint · t type answer",
+    "  1 Again · 2 Hard · 3 Good · j/k browse · u undo",
+    "  b bury · x suspend · e edit · ? keys · q close",
+    "",
+    "Command routes: :Flashcards overview|cards|stats|review|add",
+    "                open|check|help",
   })
 end
 

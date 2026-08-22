@@ -52,67 +52,23 @@ let
     else
       throw "Cannot render ${valueType} as Lua";
 
-  presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.languagePresets;
+  presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.schemaPresets;
 
   setupLua = ''
     local opts = ${toLua cfg.setupOpts}
-    ${optionalString (cfg.languagePresets != [ ]) ''
+    ${optionalString (cfg.schemaPresets != [ ]) ''
       local presets = require("neorg_flashcards.presets")
-      opts.languages = vim.tbl_deep_extend("force", presets.only(${presetArgs}), opts.languages or {})
+      opts.schemas = vim.tbl_deep_extend("force", presets.only(${presetArgs}), opts.schemas or {})
     ''}
     require("neorg_flashcards").setup(opts)
   '';
 
-  key = suffix: "${cfg.keymaps.prefix}${suffix}";
-
   keymaps = [
     {
       mode = "n";
-      key = key "o";
-      action = "<cmd>NeorgFlashcardOpen<CR>";
+      key = cfg.keymaps.prefix;
+      action = "<cmd>Flashcards<CR>";
       desc = "Open flashcards";
-    }
-    {
-      mode = "n";
-      key = key "i";
-      action = "<cmd>NeorgFlashcardAdd<CR>";
-      desc = "Add flashcard";
-    }
-    {
-      mode = "n";
-      key = key "h";
-      action = "<cmd>NeorgFlashcardHelp<CR>";
-      desc = "Flashcard help";
-    }
-    {
-      mode = "n";
-      key = key "r";
-      action = "<cmd>NeorgFlashcardReview<CR>";
-      desc = "Review flashcards";
-    }
-    {
-      mode = "n";
-      key = key "f";
-      action = "<cmd>NeorgFlashcardReviewFile<CR>";
-      desc = "Review file flashcards";
-    }
-    {
-      mode = "n";
-      key = key "t";
-      action = "<cmd>NeorgFlashcardReviewTag<CR>";
-      desc = "Review flashcards by tag";
-    }
-    {
-      mode = "n";
-      key = key "s";
-      action = "<cmd>NeorgFlashcardReviewScore<CR>";
-      desc = "Review flashcards by score";
-    }
-    {
-      mode = "n";
-      key = key "v";
-      action = "<cmd>NeorgFlashcardValidate<CR>";
-      desc = "Validate flashcards";
     }
   ];
 in
@@ -129,7 +85,9 @@ in
 
     setupOpts = mkOption {
       type = types.attrsOf types.anything;
-      default = { };
+      default = {
+        default_kind = "japanese";
+      };
       example = {
         flashcards_dir = "~/notes/flashcards";
         default_file = "~/notes/flashcards/cards.norg";
@@ -137,21 +95,24 @@ in
       };
       description = ''
         Options passed to `require("neorg_flashcards").setup(...)`.
-        Use `languagePresets` for bundled Lua presets, or set `languages`
-        directly for custom schemas.
+        The default selects the bundled Japanese schema so enabling the module
+        is immediately usable. Use `schemaPresets` for other bundled Lua
+        presets, or set `schemas` directly for custom schemas.
       '';
     };
 
-    languagePresets = mkOption {
+    schemaPresets = mkOption {
       type = types.listOf types.str;
-      default = [ ];
+      default = [ "japanese" ];
       example = [
         "japanese"
         "chinese"
       ];
       description = ''
-        Bundled language presets to merge into `setupOpts.languages` via
-        `require("neorg_flashcards.presets").only(...)`.
+        Bundled schema presets to merge into `setupOpts.schemas` via
+        `require("neorg_flashcards.presets").only(...)`. Japanese is enabled
+        by default; set this to an empty list when supplying only custom
+        schemas.
       '';
     };
 
@@ -161,13 +122,7 @@ in
       prefix = mkOption {
         type = types.str;
         default = "<leader>nc";
-        description = "Prefix used when `keymaps.enable` is true.";
-      };
-
-      registerWhichKey = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Register the keymap prefix with NVF's which-key bindings.";
+        description = "Exact key used to open the flashcard hub.";
       };
     };
   };
@@ -177,9 +132,6 @@ in
       startPlugins = [ cfg.package ];
       luaConfigRC.neorg-flashcards = setupLua;
       keymaps = mkIf cfg.keymaps.enable keymaps;
-      binds.whichKey.register = mkIf (cfg.keymaps.enable && cfg.keymaps.registerWhichKey) {
-        ${cfg.keymaps.prefix} = "+Cards";
-      };
     };
   };
 }

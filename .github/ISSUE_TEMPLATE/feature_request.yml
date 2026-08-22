@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose a focused change to the flashcard workflow
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is difficult today, and where in the workflow does it happen?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed interaction
+      description: Describe the command, key, screen, or configuration you expect to use.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Storage and scheduling impact
+      description: Would this change card fields, IDs, review history, collection boundaries, or interval behavior?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include any current workflow or external tool you tried.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I checked the README and existing issues for this feature.
+          required: true
+        - label: I understand that sync, accounts, and a database are outside the current core scope.
+          required: true

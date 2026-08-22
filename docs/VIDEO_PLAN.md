@@ -43,13 +43,13 @@ Neorg is an optional editing layer, not a runtime dependency.
 
 ### 00:29–00:40 — Current chapter
 
-> Open chapter two and run Neorg Flashcard Review File. Only cards from the
+> Open chapter two and run colon Flashcards review file. Only cards from the
 > current file enter the session, so revision stays aligned with the chapter
 > in front of you.
 
 ### 00:40–00:52 — Every chapter
 
-> Run Neorg Flashcard Review to scan every dot norg file below the collection
+> Run colon Flashcards review all to scan every dot norg file below the collection
 > root. Nested courses and chapters become one review session without merging
 > the source files.
 
@@ -80,11 +80,11 @@ Neorg is an optional editing layer, not a runtime dependency.
 | Time | Clip | Visual | On-screen proof | Edit notes |
 | --- | --- | --- | --- | --- |
 | 00:00–00:06 | `01-hook` | Three chapter notes converge into one flashcard. | Notes already contain the answers. | Start on the first spoken word; no logo pre-roll. |
-| 00:06–00:16 | `02-storage` | Annotated `@flashcard` block beside portable/inspectable/versionable callouts. | Prompt, answer, tags, score, and date are plain text. | Let each field enter as it is named. |
+| 00:06–00:16 | `02-storage` | Annotated `@flashcard` block beside portable/inspectable/versionable callouts. | Stable ID, prompt, answer, tags, score, and date are plain text. | Let each field enter as it is named. |
 | 00:16–00:29 | `03-chapters` | File tree with `chapter-02.norg` highlighted. | File = chapter; folder = collection. | Hold the tree long enough to read nested `course-b/`. |
-| 00:29–00:40 | `04-current-file` | Chapter source and review popup side by side. | `:NeorgFlashcardReviewFile` and `FILE · 1/23`. | Optional live insert: open the real chapter and run the command. |
-| 00:40–00:52 | `05-collection` | Three chapter counts merge into a 56-card session. | `:NeorgFlashcardReview`, recursive scan, sources stay separate. | Animate toward the result; do not imply file merging. |
-| 00:52–01:02 | `06-tags` | `#grammar` lights up in three files. | `:NeorgFlashcardReviewTag grammar`. | Amber is reserved for the selected tag. |
+| 00:29–00:40 | `04-current-file` | Chapter source and review popup side by side. | `:Flashcards review file` and `FILE · 1/23`. | Optional live insert: open the real chapter and run the command. |
+| 00:40–00:52 | `05-collection` | Three chapter counts merge into a 56-card session. | `:Flashcards review all`, recursive scan, sources stay separate. | Animate toward the result; do not imply file merging. |
+| 00:52–01:02 | `06-tags` | `#grammar` lights up in three files. | `:Flashcards review tag grammar`. | Amber is reserved for the selected tag. |
 | 01:02–01:12 | `07-compatibility` | Plain Neovim and Neorg panels share one `.norg` badge. | Both modes support flashcards; only Neorg adds note rendering. | This is the key compatibility answer—leave the badge visible. |
 | 01:12–01:21 | `08-scoring` | Card reveals, rating keys appear, source fields update. | `score: 3` and `reviewed: 2026-07-19`. | Time the writeback to the word “written”. |
 | 01:21–01:30 | `09-outro` | Three review commands and the project name. | Current file, all files, or tag. | End on the repository name for at least two seconds. |
@@ -96,8 +96,8 @@ is useful, record three silent 2880×1800 clips and replace or overlay the
 matching conceptual shots:
 
 1. `04-current-file-live.mp4`: open `chapter-02.norg`, then run
-   `:NeorgFlashcardReviewFile`.
-2. `05-collection-live.mp4`: run `:NeorgFlashcardReview` and show the source
+   `:Flashcards review file`.
+2. `05-collection-live.mp4`: run `:Flashcards review all` and show the source
    label changing as cards advance.
 3. `08-rating-live.mp4`: reveal a card, press `3`, close the popup, and show the
    updated `score:` and `reviewed:` lines.

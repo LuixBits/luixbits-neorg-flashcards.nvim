@@ -272,6 +272,8 @@ const HookScene: React.FC = () => {
                 <br />
                 @flashcard japanese
                 <br />
+                id: fc_chapter_0{index + 1}_language
+                <br />
                 japanese: 言語
                 <br />
                 english: language
@@ -300,6 +302,7 @@ const StorageScene: React.FC = () => {
   const {fps} = useVideoConfig();
   const lines = [
     ["@flashcard japanese", theme.purple],
+    ["id: fc_chapter_language", theme.muted],
     ["japanese: 言語", theme.text],
     ["reading: げんご", theme.text],
     ["english: language", theme.text],
@@ -426,6 +429,8 @@ const CurrentFileScene: React.FC = () => {
               <br />
               <span style={{color: theme.purple}}>@flashcard japanese</span>
               <br />
+              id: fc_chapter_particle
+              <br />
               japanese: まで
               <br />
               english: until
@@ -435,7 +440,7 @@ const CurrentFileScene: React.FC = () => {
               <span style={{color: theme.purple}}>@end</span>
             </div>
           </Panel>
-          <Command>:NeorgFlashcardReviewFile</Command>
+          <Command>:Flashcards review file</Command>
         </div>
         <div style={{opacity: showPopup ? 1 : 0, ...rise(frame, fps, 82)}}>
           <Flashcard source="chapter-02.norg" />
@@ -476,7 +481,7 @@ const CollectionScene: React.FC = () => {
         </div>
         <div style={{color: theme.mint, fontSize: 82, opacity: merge, transform: `scaleX(${merge})`}}>⟹</div>
         <div style={{width: 760, display: "grid", gap: 24, ...rise(frame, fps, 95)}}>
-          <Command>:NeorgFlashcardReview</Command>
+          <Command>:Flashcards review all</Command>
           <Panel accent={theme.mint} style={{padding: 38, textAlign: "center"}}>
             <div style={{fontFamily: fonts.sans, fontSize: 118, color: theme.text, fontWeight: 850}}>56</div>
             <div style={{fontFamily: fonts.mono, fontSize: 25, color: theme.mint}}>ALL · 1 / 56</div>
@@ -531,7 +536,7 @@ const TagsScene: React.FC = () => {
           ))}
         </div>
         <div style={{display: "grid", gap: 22, width: 770, ...rise(frame, fps, 82)}}>
-          <Command>:NeorgFlashcardReviewTag grammar</Command>
+          <Command>:Flashcards review tag grammar</Command>
           <Panel accent={theme.amber} style={{padding: 38, textAlign: "center"}}>
             <Badge color={theme.amber}>TAG: GRAMMAR</Badge>
             <div style={{fontFamily: fonts.sans, color: theme.text, fontSize: 76, fontWeight: 850, marginTop: 28}}>3 chapters</div>
@@ -603,9 +608,9 @@ const ScoringScene: React.FC = () => {
           <Flashcard answer={revealed} />
           <div style={{display: "flex", gap: 14, justifyContent: "center"}}>
             {[
-              ["1", "bad", theme.red],
-              ["2", "mid", theme.amber],
-              ["3", "good", theme.mint],
+              ["1", "Again", theme.red],
+              ["2", "Hard", theme.amber],
+              ["3", "Good", theme.mint],
             ].map(([key, label, color]) => (
               <div key={key} style={{border: `2px solid ${color}`, color, borderRadius: 13, padding: "12px 20px", fontFamily: fonts.mono, fontSize: 23}}>
                 {key} · {label}
@@ -636,9 +641,9 @@ const OutroScene: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const commands = [
-    [":NeorgFlashcardReviewFile", "current chapter"],
-    [":NeorgFlashcardReview", "every chapter"],
-    [":NeorgFlashcardReviewTag grammar", "one topic everywhere"],
+    [":Flashcards review file", "current chapter"],
+    [":Flashcards review all", "every chapter"],
+    [":Flashcards review tag grammar", "one topic everywhere"],
   ] as const;
 
   return (

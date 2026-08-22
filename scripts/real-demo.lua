@@ -1,3 +1,14 @@
+local demo_file = vim.api.nvim_buf_get_name(0)
+local demo_root = vim.fn.fnamemodify(demo_file, ":h")
+local presets = require("neorg_flashcards.presets")
+
+require("neorg_flashcards").setup({
+  flashcards_dir = demo_root,
+  default_file = demo_file,
+  default_kind = "japanese",
+  schemas = presets.only("japanese"),
+})
+
 local clock = 900
 
 local function later(delay, callback)
@@ -51,7 +62,7 @@ later(800, function()
   pcall(vim.cmd, "NvimTreeClose")
 end)
 
-command("NeorgFlashcardAdd")
+command("Flashcards add")
 later(950, function() end)
 answer("言語")
 answer("げんご")
@@ -60,7 +71,7 @@ answer("noun")
 answer("demo vocab")
 
 later(700, function() end)
-command("NeorgFlashcardAdd")
+command("Flashcards add")
 later(950, function() end)
 answer("リナックス")
 answer("")
@@ -69,7 +80,7 @@ answer("katakana loanword")
 answer("demo tech")
 
 later(1000, function() end)
-command("NeorgFlashcardReviewFile")
+command("Flashcards review file")
 later(350, function()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_config(win).relative == "" then
@@ -94,7 +105,7 @@ later(1000, function() end)
 press("q")
 
 later(700, function() end)
-command("NeorgFlashcardReviewScore good")
+command("Flashcards review score good")
 later(1200, function() end)
 press("<Space>")
 later(1300, function() end)

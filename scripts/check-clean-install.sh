@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/neorg-flashcards-clean.XXXXXX")"
 NVIM_BIN="${NVIM:-nvim}"
 trap 'rm -rf "$TMP"' EXIT
@@ -17,10 +17,11 @@ require("neorg_flashcards").setup({
   flashcards_dir = "$TMP/notes/flashcards",
   default_file = "$TMP/notes/flashcards/cards.norg",
   default_kind = "japanese",
-  languages = presets.only("japanese"),
+  schemas = presets.only("japanese"),
 })
 
-vim.cmd("NeorgFlashcardOpen")
+assert(vim.fn.exists(":Flashcards") == 2, "unified command was not registered")
+vim.cmd("Flashcards open")
 
 local current_file = vim.api.nvim_buf_get_name(0)
 local expected_file = vim.fs.normalize(vim.fn.resolve("$TMP/notes/flashcards/cards.norg"))
@@ -39,12 +40,13 @@ end
 
 vim.api.nvim_buf_set_lines(0, 0, -1, false, {
   "@flashcard japanese",
+  "id: fc_clean_install",
   "japanese: 素",
   "english: plain",
   "@end",
 })
 vim.cmd.write()
-vim.cmd("NeorgFlashcardReviewFile")
+vim.cmd("Flashcards review file")
 
 local popup = vim.api.nvim_get_current_buf()
 if vim.bo[popup].buftype ~= "nofile" or vim.bo[popup].filetype ~= "norg" then
