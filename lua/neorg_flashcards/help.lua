@@ -20,9 +20,9 @@ local function configured_kinds()
   return table.concat(kinds, ", ")
 end
 
-local function default_kind()
-  if config.default_kind and config.default_kind ~= "" then
-    return config.default_kind
+local function default_card_type()
+  if config.default_card_type and config.default_card_type ~= "" then
+    return config.default_card_type
   end
 
   return "not set"
@@ -58,9 +58,10 @@ function M.open()
   local rendered = popup.set_lines(state, {
     "* Flashcards",
     "",
-    "Folder: " .. (config.flashcards_dir or ""),
+    "Collection: " .. (config.label or config.id or ""),
+    "Folder: " .. (config.path or ""),
     "Files: .norg (Neorg itself is optional)",
-    "Default kind: " .. default_kind(),
+    "Default card type: " .. default_card_type(),
     "Kinds: " .. configured_kinds(),
     "",
     "Hub: 1 Overview · 2 Cards · 3 Stats · Tab pages · ? keys",
@@ -70,7 +71,7 @@ function M.open()
     "  x suspend · b bury · D delete · p preview · e edit",
     "Stats: d due · A all · R refresh",
     "",
-    "Collection: c open problems · H quick guide · R refresh",
+    "Collection: C switch · c open problems · H quick guide · R refresh",
     "Card form: Enter next/save · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",
     "",
@@ -79,7 +80,7 @@ function M.open()
     "  b bury · x suspend · e edit · ? keys · q close",
     "",
     "Command routes: :Flashcards overview|cards|stats|review|add",
-    "                open|check|help",
+    "                open|check|help|collection",
     "",
     "Inside this guide: / find · n/N next/previous match",
     "Full manual: :help neorg-flashcards",

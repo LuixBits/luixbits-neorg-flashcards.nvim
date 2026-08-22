@@ -86,7 +86,7 @@ return function(T)
   assert_buffer_maps_absent(overview_popup, { "s" })
   assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
 
-  vim.cmd("Flashcards add")
+  vim.cmd("Flashcards add japanese")
   assert_true(form.is_open(), "the hub routes command-line add into the protected composer")
   form.close({ force = true })
   assert_true(overview.is_open(), "closing a hub composer returns to the intact hub")
@@ -291,9 +291,9 @@ return function(T)
   end
   overview.choose_filter()
   vim.ui.select = select_original
-  assert_equal(filter_prompt, "Card state filter", "Cards filtering names the state dimension")
+  assert_equal(filter_prompt, "Card view", "Cards filtering covers states and card types")
   local _, filtered_text = current_popup()
-  assert_contains(filtered_text, "filter: new", "Cards browser renders the active lifecycle filter")
+  assert_contains(filtered_text, "filter: New", "Cards browser renders the active lifecycle filter")
   overview.clear_browser()
 
   overview.toggle_suspend()
@@ -452,7 +452,7 @@ return function(T)
   vim.cmd.edit(vim.fn.fnameescape(background_target))
   vim.cmd("Flashcards")
   vim.cmd("tabprevious")
-  vim.cmd("Flashcards add")
+  vim.cmd("Flashcards add japanese")
   assert_true(form.is_open(), "add still opens from a normal file while the hub exists in another tab")
   assert_contains(
     T.decoration_text(vim.api.nvim_get_current_buf()),

@@ -3,13 +3,18 @@ vim.opt.runtimepath:prepend(root)
 
 local support = dofile(root .. "/tests/support.lua")
 local suites = {
+  "collections_workspace_spec.lua",
+  "workspace_ux_spec.lua",
   "setup_schema_spec.lua",
   "api_contract_spec.lua",
   "collection_spec.lua",
   "store_spec.lua",
+  "multiline_spec.lua",
   "form_spec.lua",
   "persistence_spec.lua",
   "schedule_analytics_spec.lua",
+  "insights_spec.lua",
+  "insights_ui_spec.lua",
   "review_queue_spec.lua",
   "dashboard_spec.lua",
   "review_session_spec.lua",

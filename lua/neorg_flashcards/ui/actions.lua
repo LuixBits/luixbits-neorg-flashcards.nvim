@@ -35,6 +35,10 @@ local catalog = {
       capability = "delete",
     }),
     action({ "H" }, "plugin_help", "Open the quick plugin guide", HUB, { capability = "help" }),
+    action({ "C" }, "collection", "Switch collection", HUB, {
+      hints = { overview = "collection", cards = "collection", stats = "collection" },
+      capability = "collection",
+    }),
     action({ "1" }, "overview", "Open Overview", HUB),
     action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),
     action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
@@ -90,7 +94,7 @@ local catalog = {
     action({ "/" }, "search", "Search cards", { "cards" }, {
       hints = { cards = "search" },
     }),
-    action({ "f" }, "filter", "Choose a card state filter", { "cards" }, { hints = { cards = "filter" } }),
+    action({ "f" }, "filter", "Choose a card view or type", { "cards" }, { hints = { cards = "view" } }),
     action({ "o" }, "sort", "Cycle card sorting", { "cards" }, { hints = { cards = "sort" } }),
     action({ "X" }, "clear", "Clear search and filter", { "cards" }),
     action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "cards" }, {
@@ -146,6 +150,7 @@ local catalog = {
     }),
     action({ "t" }, "type_answer", "Type and check the answer", { "review_question" }, {
       hints = { review_question = "type" },
+      capability = "type_answer",
     }),
     action({ "1" }, "rate_again", "Rate Again", REVIEW_ACTIVE, {
       descriptions = {

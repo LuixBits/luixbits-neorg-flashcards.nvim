@@ -275,7 +275,7 @@ return function(T)
       { field = "score", value = "3" },
     }, { allowed_root = symlink_dir })
     assert_true(not escape_ok, "source updates refuse a symlink target outside allowed_root")
-    assert_contains(escape_message, "flashcards_dir", "outside-root source refusal names the collection boundary")
+    assert_contains(escape_message, "path", "outside-root source refusal names the collection boundary")
     assert_equal(
       table.concat(vim.fn.readfile(outside_target), "\n"),
       table.concat(outside_lines, "\n"),
@@ -296,7 +296,7 @@ return function(T)
     assert_true(swapped, "runtime boundary fixture redirects its source: " .. tostring(swap_error))
     local swap_ok, swap_message = store.delete_card(swap_card, { allowed_root = symlink_dir })
     assert_true(not swap_ok, "deletion rechecks the source boundary after collection")
-    assert_contains(swap_message, "flashcards_dir", "runtime boundary refusal explains the collection constraint")
+    assert_contains(swap_message, "path", "runtime boundary refusal explains the collection constraint")
     assert_equal(
       table.concat(vim.fn.readfile(outside_target), "\n"),
       table.concat(outside_lines, "\n"),

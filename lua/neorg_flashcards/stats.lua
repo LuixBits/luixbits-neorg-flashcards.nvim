@@ -33,27 +33,8 @@ local function day_key(epoch)
   return os.date("%Y-%m-%d", epoch)
 end
 
--- Undo is kept in the append-only history as a compensating event. Collapse
--- it for user-facing analytics without mutating or rewriting the ledger.
 function M.effective_entries(entries)
-  local active = {}
-  for _, entry in ipairs(entries or {}) do
-    if entry.event == "undo" then
-      for index = #active, 1, -1 do
-        local candidate = active[index]
-        local same_event = entry.undo_of ~= nil and candidate.event_id == entry.undo_of
-        local same_card = entry.card_id == nil or candidate.card_id == entry.card_id
-        local same_rating = entry.rating == nil or candidate.rating == entry.rating
-        if same_event or (entry.undo_of == nil and same_card and same_rating) then
-          table.remove(active, index)
-          break
-        end
-      end
-    elseif entry.type == "review" then
-      table.insert(active, entry)
-    end
-  end
-  return active
+  return history.effective_entries(entries)
 end
 
 function M.read_history()

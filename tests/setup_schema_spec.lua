@@ -17,13 +17,13 @@ return function(T)
 
   local test_root = vim.fn.tempname()
   local config = {
-    flashcards_dir = test_root .. "/flashcards",
+    path = test_root .. "/flashcards",
     default_file = test_root .. "/flashcards/inbox/cards.norg",
-    default_kind = "japanese",
+    default_card_type = "japanese",
     schemas = presets.only("japanese", "chinese"),
   }
 
-  flashcards.setup(config)
+  T.setup(config)
 
   local function highlight_link(name)
     return vim.api.nvim_get_hl(0, { name = name, link = true }).link
@@ -34,7 +34,7 @@ return function(T)
   local highlighted_config = vim.tbl_deep_extend("force", vim.deepcopy(config), {
     ui = { rating_highlights = { hard = { link = "Special" } } },
   })
-  flashcards.setup(highlighted_config)
+  T.setup(highlighted_config)
   assert_equal(highlight_link("NeorgFlashcardsHard"), "Special", "rating highlight overrides are applied")
   assert_equal(
     highlight_link("NeorgFlashcardsAgain"),
@@ -50,7 +50,7 @@ return function(T)
       },
     },
   })
-  flashcards.setup(exact_color_config)
+  T.setup(exact_color_config)
   local exact_again = vim.api.nvim_get_hl(0, { name = "NeorgFlashcardsAgain" })
   assert_equal(exact_again.fg, tonumber("ff5f5f", 16), "exact rating colors can override a theme")
   assert_true(exact_again.bold, "exact rating color attributes are applied")
@@ -74,7 +74,7 @@ return function(T)
     end
   end
   vim.cmd("colorscheme default")
-  flashcards.setup(config)
+  T.setup(config)
 
   assert_equal(vim.fn.exists(":Flashcards"), 2, "Flashcards is registered")
   for _, command in ipairs({
@@ -264,8 +264,18 @@ return function(T)
     assert_true(not non_table_ok, "setup rejects non-table options")
     assert_contains(non_table_error, "options must be a table", "non-table setup errors are explicit")
 
-    local function rejected_setup(overrides, expected)
-      local candidate = vim.deepcopy(config)
+    local function rejected_collection(overrides, expected)
+      local candidate = T.workspace(config)
+      for key, value in pairs(overrides) do
+        candidate.collections.test[key] = vim.deepcopy(value)
+      end
+      local ok, err = pcall(flashcards.setup, candidate)
+      assert_true(not ok, "setup rejects " .. expected)
+      assert_contains(err, expected, "setup explains the invalid configuration")
+    end
+
+    local function rejected_workspace(overrides, expected)
+      local candidate = T.workspace(config)
       for key, value in pairs(overrides) do
         candidate[key] = vim.deepcopy(value)
       end
@@ -274,23 +284,26 @@ return function(T)
       assert_contains(err, expected, "setup explains the invalid configuration")
     end
 
-    rejected_setup({ default_file = test_root .. "/outside.norg" }, "default_file must be inside flashcards_dir")
-    rejected_setup(
-      { history_file = test_root .. "/outside.jsonl" },
-      "review history destination must be inside flashcards_dir"
+    rejected_collection(
+      { default_file = test_root .. "/outside.norg" },
+      "default_file must be inside the collection path"
     )
-    rejected_setup(
+    rejected_collection(
+      { history_file = test_root .. "/outside.jsonl" },
+      "review history destination must be inside the collection path"
+    )
+    rejected_collection(
       { history_file = config.default_file },
       "review history destination must be a .jsonl file separate from card sources"
     )
-    rejected_setup(
-      { history_file = config.flashcards_dir .. "/history.txt" },
+    rejected_collection(
+      { history_file = config.path .. "/history.txt" },
       "review history destination must be a .jsonl file separate from card sources"
     )
-    local linked_history = config.flashcards_dir .. "/reviews-link.jsonl"
+    local linked_history = config.path .. "/reviews-link.jsonl"
     local linked, link_error = (vim.uv or vim.loop).fs_symlink(config.default_file, linked_history)
     assert_true(linked, "history collision symlink is created: " .. tostring(link_error))
-    rejected_setup(
+    rejected_collection(
       { history_file = linked_history },
       "review history destination must be a .jsonl file separate from card sources"
     )
@@ -303,8 +316,8 @@ return function(T)
       default_collision_root .. "/reviews.jsonl"
     )
     assert_true(default_linked, "default history collision symlink is created: " .. tostring(default_link_error))
-    rejected_setup({
-      flashcards_dir = default_collision_root,
+    rejected_collection({
+      path = default_collision_root,
       default_file = default_collision_cards,
     }, "review history destination must be a .jsonl file separate from card sources")
     local hardlink_root = test_root .. "/hardlink-history-collision"
@@ -313,54 +326,54 @@ return function(T)
     vim.fn.writefile({ "* cards" }, hardlink_cards)
     local hardlinked, hardlink_error = (vim.uv or vim.loop).fs_link(hardlink_cards, hardlink_root .. "/reviews.jsonl")
     assert_true(hardlinked, "history collision hard link is created: " .. tostring(hardlink_error))
-    rejected_setup({
-      flashcards_dir = hardlink_root,
+    rejected_collection({
+      path = hardlink_root,
       default_file = hardlink_cards,
     }, "review history destination must be separate from default_file")
-    rejected_setup({ default_file = 42 }, "default_file must be a string")
-    rejected_setup({ history_file = false }, "history_file must be a string")
-    rejected_setup({ schemas = {} }, "at least one card schema is required")
-    rejected_setup({ default_kind = "missing" }, "default_kind does not name a configured schema")
-    rejected_setup({ scheduling = { hard_hours = 0 } }, "scheduling.hard_hours must be a positive finite number")
-    rejected_setup({ leech_threshold = 1.5 }, "leech_threshold must be a positive integer")
-    rejected_setup({ schedulng = {} }, "unknown setup option: schedulng")
-    rejected_setup({ on_review = true }, "on_review must be a function")
-    rejected_setup({ on_edit = function() end }, "unknown setup option: on_edit")
-    rejected_setup({ ui = { heatmap_highlights = false } }, "ui.heatmap_highlights must be a table")
-    rejected_setup(
+    rejected_collection({ default_file = 42 }, "default_file must be a string")
+    rejected_collection({ history_file = false }, "history_file must be a string")
+    rejected_collection({ schemas = {} }, "at least one card schema is required")
+    rejected_collection({ default_card_type = "missing" }, "default_card_type does not name a configured schema")
+    rejected_collection({ scheduling = { hard_hours = 0 } }, "scheduling.hard_hours must be a positive finite number")
+    rejected_collection({ leech_threshold = 1.5 }, "leech_threshold must be a positive integer")
+    rejected_collection({ schedulng = {} }, "unknown collection test option: schedulng")
+    rejected_workspace({ on_review = true }, "on_review must be a function")
+    rejected_workspace({ on_edit = function() end }, "unknown setup option: on_edit")
+    rejected_workspace({ ui = { heatmap_highlights = false } }, "ui.heatmap_highlights must be a table")
+    rejected_workspace(
       { ui = { heatmap_highlights = { [5] = { link = "Special" } } } },
       "unknown ui.heatmap_highlights option: 5"
     )
-    rejected_setup(
+    rejected_workspace(
       { ui = { heatmap_highlights = { [2] = "Special" } } },
       "ui.heatmap_highlights[2] must be a highlight table"
     )
 
     local misspelled_scheduling = vim.deepcopy(config)
     misspelled_scheduling.scheduling = { hard_hors = 6 }
-    rejected_setup({ scheduling = misspelled_scheduling.scheduling }, "unknown scheduling option: hard_hors")
+    rejected_collection({ scheduling = misspelled_scheduling.scheduling }, "unknown scheduling option: hard_hors")
 
     local malformed_schema = vim.deepcopy(config.schemas.japanese)
     malformed_schema.front = "missing"
     malformed_schema.fields[1].key = "score"
-    rejected_setup({ schemas = { japanese = malformed_schema } }, "reserved by the scheduler")
+    rejected_collection({ schemas = { japanese = malformed_schema } }, "reserved by the scheduler")
 
     local removed_form_option = vim.deepcopy(config.schemas.japanese)
     removed_form_option.fields[1].prompt = false
-    rejected_setup({ schemas = { japanese = removed_form_option } }, "contains a removed composer option")
+    rejected_collection({ schemas = { japanese = removed_form_option } }, "contains a removed composer option")
 
     local misspelled_field_option = vim.deepcopy(config.schemas.japanese)
     misspelled_field_option.fields[1].placehoder = "typo"
-    rejected_setup({ schemas = { japanese = misspelled_field_option } }, "unknown japanese field japanese option")
+    rejected_collection({ schemas = { japanese = misspelled_field_option } }, "unknown japanese field japanese option")
 
     local original_cwd = vim.fn.getcwd()
     local absolute_relative_root = test_root .. "/relative-collection"
     local relative_root = vim.fn.fnamemodify(absolute_relative_root, ":.")
     local relative_ok, relative_error = pcall(function()
-      flashcards.setup({
-        flashcards_dir = relative_root,
+      T.setup({
+        path = relative_root,
         default_file = relative_root .. "/cards.norg",
-        default_kind = "japanese",
+        default_card_type = "japanese",
         schemas = presets.only("japanese"),
       })
       vim.cmd("cd /")
@@ -374,7 +387,7 @@ return function(T)
     end)
     vim.cmd("cd " .. vim.fn.fnameescape(original_cwd))
     assert_true(relative_ok, "relative path setup remains stable after :cd: " .. tostring(relative_error))
-    flashcards.setup(config)
+    T.setup(config)
   end
 
   T.test_root = test_root

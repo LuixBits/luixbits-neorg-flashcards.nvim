@@ -114,7 +114,7 @@ function M.inspect(card_config, cards)
 end
 
 function M.format(card_config, item)
-  return string.format("%s: [%s] %s", label(item.card, card_config.flashcards_dir), item.severity, item.message)
+  return string.format("%s: [%s] %s", label(item.card, card_config.path), item.severity, item.message)
 end
 
 function M.counts(issues)
@@ -135,17 +135,17 @@ function M.check()
   local report = vim.health
   report.start("neorg-flashcards")
 
-  if util.isempty(config.flashcards_dir) then
-    report.error("flashcards_dir is not configured")
+  if util.isempty(config.path) then
+    report.error("collection path is not configured")
     return
   end
 
-  local _, root_err = util.resolve_pinned_directory(config._collection_root or config.flashcards_dir)
+  local _, root_err = util.resolve_pinned_directory(config._root or config.path)
   if root_err then
     report.error(root_err)
     return
   end
-  report.ok("Collection directory: " .. config.flashcards_dir)
+  report.ok("Collection directory: " .. config.path)
 
   local schema_count = vim.tbl_count(config.schemas or {})
   if schema_count == 0 then

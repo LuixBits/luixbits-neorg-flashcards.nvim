@@ -1,5 +1,33 @@
 local M = {}
 
+function M.workspace(config, id)
+  if type(config) == "table" and config.collections then
+    return vim.deepcopy(config)
+  end
+  id = id or (type(config) == "table" and config.id) or "test"
+  local source = config or {}
+  local collection = {
+    label = source.label,
+    path = source.path,
+    default_file = source.default_file,
+    history_file = source.history_file,
+    default_card_type = source.default_card_type,
+    schemas = vim.deepcopy(source.schemas),
+    scheduling = vim.deepcopy(source.scheduling),
+    leech_threshold = source.leech_threshold,
+  }
+  return {
+    default_collection = id,
+    collections = { [id] = collection },
+    ui = vim.deepcopy(source.ui),
+    on_review = source.on_review,
+  }
+end
+
+function M.setup(config, id)
+  return require("neorg_flashcards").setup(M.workspace(config, id))
+end
+
 function M.assert_true(value, message)
   if not value then
     error(message or "expected truthy value", 2)

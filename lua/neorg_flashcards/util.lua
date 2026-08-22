@@ -35,7 +35,7 @@ function M.pin_directory(path)
   local canonical = M.canonical_path(lexical)
   local stat = (vim.uv or vim.loop).fs_stat(canonical)
   if not stat or stat.type ~= "directory" then
-    return nil, "configured flashcards_dir is not a directory"
+    return nil, "configured collection path is not a directory"
   end
   return {
     lexical = lexical,
@@ -50,16 +50,16 @@ function M.resolve_pinned_directory(root)
     return M.canonical_path(vim.fn.fnamemodify(vim.fn.expand(root), ":p"))
   end
   if type(root) ~= "table" or M.isempty(root.lexical) or M.isempty(root.canonical) then
-    return nil, "configured flashcards_dir identity is missing"
+    return nil, "configured collection-path identity is missing"
   end
 
   local current = M.canonical_path(root.lexical)
   if current ~= root.canonical then
-    return nil, "configured flashcards_dir changed since setup; run setup again"
+    return nil, "configured collection path changed since setup; run setup again"
   end
   local stat = (vim.uv or vim.loop).fs_stat(current)
   if not stat or stat.type ~= "directory" then
-    return nil, "configured flashcards_dir is no longer the setup directory"
+    return nil, "configured collection path is no longer the setup directory"
   end
   if
     root.dev ~= nil
@@ -68,7 +68,7 @@ function M.resolve_pinned_directory(root)
     and stat.ino ~= nil
     and (root.dev ~= stat.dev or root.ino ~= stat.ino)
   then
-    return nil, "configured flashcards_dir was replaced since setup; run setup again"
+    return nil, "configured collection path was replaced since setup; run setup again"
   end
   return root.canonical
 end

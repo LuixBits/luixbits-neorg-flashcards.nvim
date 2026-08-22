@@ -145,10 +145,14 @@ local function is_destination(value)
   return type(value) == "table" and value._neorg_flashcards_history_destination == true
 end
 
-local function new_destination(path, root)
+local function new_destination(path, root, collection_id)
   local destination = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path), ":p"))
   local parent = canonical_path(vim.fn.fnamemodify(destination, ":h"))
   local stat = (vim.uv or vim.loop).fs_stat(parent)
+  local normalized_collection_id
+  if not util.isempty(collection_id) then
+    normalized_collection_id = util.trim(collection_id)
+  end
   local captured = {
     _neorg_flashcards_history_destination = true,
     path = destination,
@@ -156,11 +160,13 @@ local function new_destination(path, root)
     dev = stat and stat.dev or nil,
     ino = stat and stat.ino or nil,
     root = type(root) == "table" and vim.deepcopy(root) or nil,
+    collection_id = normalized_collection_id,
   }
   local root_key = captured.root
       and table.concat({ captured.root.canonical or "", captured.root.dev or "", captured.root.ino or "" }, ":")
     or ""
-  local key_parts = { destination, root_key, parent, captured.dev or "", captured.ino or "" }
+  local key_parts =
+    { destination, root_key, captured.collection_id or "", parent, captured.dev or "", captured.ino or "" }
   for index, value in ipairs(key_parts) do
     value = tostring(value)
     key_parts[index] = string.format("%d:%s", #value, value)
@@ -323,10 +329,10 @@ function M.path(source)
   end
 
   local opts = source_config(source)
-  if util.isempty(opts.flashcards_dir) then
-    return nil, "flashcards_dir is not configured"
+  if util.isempty(opts.path) then
+    return nil, "collection path is not configured"
   end
-  local root_spec = opts._collection_root or opts.flashcards_dir
+  local root_spec = opts._root or opts.path
   local root, root_err = util.resolve_pinned_directory(root_spec)
   if not root then
     return nil, root_err
@@ -336,10 +342,10 @@ function M.path(source)
   if not destination:match("%.jsonl$") then
     return nil, "review history destination must be a .jsonl file separate from card sources"
   elseif not util.resolved_path_is_within(destination, root) then
-    return nil, "review history destination must be inside flashcards_dir"
+    return nil, "review history destination must be inside the collection path"
   end
   if type(root_spec) ~= "table" and not captured_destinations[destination] then
-    root_spec = util.pin_directory(opts.flashcards_dir)
+    root_spec = util.pin_directory(opts.path)
   end
   remember_captured_destination(destination, root_spec, false)
   return destination
@@ -370,11 +376,11 @@ function M.capture(source)
   end
 
   local opts = source_config(source)
-  local root_spec = opts._collection_root
+  local root_spec = opts._root
   if type(root_spec) ~= "table" then
-    root_spec = util.pin_directory(opts.flashcards_dir)
+    root_spec = util.pin_directory(opts.path)
   end
-  return new_destination(path, root_spec)
+  return new_destination(path, root_spec, opts.id)
 end
 
 function M.destination_key(source)
@@ -523,6 +529,17 @@ local function normalize_event(event)
     end
   end
 
+  for _, field in ipairs({ "collection_id", "card_type" }) do
+    if normalized[field] ~= nil then
+      normalized[field] = util.trim(normalized[field])
+      if normalized[field] == "" then
+        normalized[field] = nil
+      elseif not normalized[field]:match("^[a-z][a-z0-9_-]*$") then
+        return nil, "review event has an invalid " .. field
+      end
+    end
+  end
+
   if normalized.duration_ms ~= nil then
     normalized.duration_ms = math.max(0, math.floor(tonumber(normalized.duration_ms) or 0))
   end
@@ -635,6 +652,20 @@ function M.append(event, source)
   local path, path_err = M.path(destination)
   if util.isempty(path) then
     return false, path_err or "review history path is not configured"
+  end
+  if destination.collection_id then
+    if not util.isempty(normalized.collection_id) and normalized.collection_id ~= destination.collection_id then
+      return false,
+        string.format(
+          "review event belongs to collection %s, not %s",
+          tostring(normalized.collection_id),
+          destination.collection_id
+        )
+    end
+    normalized.collection_id = destination.collection_id
+  end
+  if util.isempty(normalized.card_type) and type(normalized.card_ref) == "table" then
+    normalized.card_type = util.trim(normalized.card_ref.kind)
   end
 
   local ok_encode, line = pcall(encode, normalized)
@@ -830,7 +861,47 @@ function M.append_review(card, score, now, details, source)
   return M.append(event, source)
 end
 
-local function read_jsonl(path, entries, errors)
+-- Undo remains in the append-only ledger as a compensating event. Explicit
+-- event IDs are authoritative even when clock changes make an undo sort before
+-- the rating it cancels. Older undo records without an ID keep their original
+-- sequential meaning and cancel the latest preceding matching rating.
+function M.effective_entries(entries)
+  local explicitly_undone = {}
+  for _, entry in ipairs(entries or {}) do
+    if entry.event == "undo" then
+      local undo_of = util.trim(entry.undo_of)
+      if undo_of ~= "" then
+        explicitly_undone[undo_of] = true
+      end
+    end
+  end
+
+  local active = {}
+  for _, entry in ipairs(entries or {}) do
+    if entry.event == "undo" then
+      if util.isempty(entry.undo_of) then
+        for index = #active, 1, -1 do
+          local candidate = active[index]
+          local same_card = entry.card_id == nil or candidate.card_id == entry.card_id
+          local same_rating = entry.rating == nil or candidate.rating == entry.rating
+          if candidate.event == "rated" and same_card and same_rating then
+            table.remove(active, index)
+            break
+          end
+        end
+      end
+    elseif entry.type == "review" then
+      local event_id = util.trim(entry.event_id)
+      local cancelled = entry.event == "rated" and event_id ~= "" and explicitly_undone[event_id]
+      if not cancelled then
+        table.insert(active, entry)
+      end
+    end
+  end
+  return active
+end
+
+local function read_jsonl(path, entries, errors, expected_collection_id)
   local lines, read_err = read_lines(path)
   if not lines then
     table.insert(errors, string.format("%s: %s", path, read_err))
@@ -844,7 +915,24 @@ local function read_jsonl(path, entries, errors)
         table.insert(errors, string.format("%s:%d: invalid JSON review event", path, index))
       else
         local event, event_err = normalize_event(raw)
-        if event then
+        if
+          event
+          and expected_collection_id
+          and event.collection_id
+          and event.collection_id ~= expected_collection_id
+        then
+          table.insert(
+            errors,
+            string.format(
+              "%s:%d: review event belongs to collection %s, not %s",
+              path,
+              index,
+              event.collection_id,
+              expected_collection_id
+            )
+          )
+        elseif event then
+          event.collection_id = event.collection_id or expected_collection_id
           event._history_order = #entries + 1
           table.insert(entries, event)
         else
@@ -862,7 +950,7 @@ function M.read(source)
   if destination then
     local path, path_err = M.path(destination)
     if path then
-      read_jsonl(path, entries, errors)
+      read_jsonl(path, entries, errors, destination.collection_id)
     elseif path_err then
       table.insert(errors, path_err)
     end

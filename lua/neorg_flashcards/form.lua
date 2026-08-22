@@ -32,6 +32,8 @@ local function fresh_state(generation)
     target = {},
     initial_lines = {},
     initial_values = {},
+    initial_multiline_values = {},
+    multiline_values = {},
     last_lines = {},
     errors = {},
     validation_attempted = false,
@@ -52,6 +54,7 @@ end
 
 local state = fresh_state()
 local key_help = { buf = nil, win = nil }
+local long_editor = { buf = nil, win = nil, index = nil, initial_lines = nil, generation = nil, closing = false }
 
 local function show_shortcuts()
   return type(state.config.ui) ~= "table" or state.config.ui.show_shortcuts ~= false
@@ -85,12 +88,29 @@ local function one_line(value)
   return result
 end
 
+local function multiline_preview(value)
+  local lines = util.value_lines(value)
+  local first = one_line(lines[1] or "")
+  if #lines > 1 then
+    return first .. " …"
+  end
+  return first
+end
+
 local function default_lines()
   local lines = {}
-  for _, field in ipairs(state.fields) do
+  state.multiline_values = {}
+  for index, field in ipairs(state.fields) do
     local initial = state.initial_values[field.key]
-    table.insert(lines, one_line(initial ~= nil and initial or field.default))
+    local value = initial ~= nil and initial or field.default
+    if field.multiline then
+      state.multiline_values[index] = tostring(value or "")
+      table.insert(lines, multiline_preview(value))
+    else
+      table.insert(lines, one_line(value))
+    end
   end
+  state.initial_multiline_values = vim.deepcopy(state.multiline_values)
   return lines
 end
 
@@ -101,8 +121,16 @@ local function current_lines()
   return vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
 end
 
+local function draft_field_value(index, field, lines)
+  if field.multiline then
+    return state.multiline_values[index] or ""
+  end
+  return (lines or current_lines())[index] or ""
+end
+
 local function refresh_dirty(lines)
   state.dirty = not vim.deep_equal(lines or current_lines(), state.initial_lines)
+    or not vim.deep_equal(state.multiline_values, state.initial_multiline_values)
 end
 
 local function field_title(field)
@@ -191,7 +219,7 @@ local function status_chunks()
   local remaining = 0
   local lines = current_lines()
   for index, item in ipairs(state.fields) do
-    if item.required and util.isempty(lines[index]) then
+    if item.required and util.isempty(draft_field_value(index, item, lines)) then
       remaining = remaining + 1
     end
   end
@@ -235,6 +263,14 @@ local function render()
     local decoration
     if state.errors[index] then
       decoration = { "  " .. state.errors[index], FORM_HIGHLIGHTS.error }
+    elseif field.multiline and not util.isempty(state.multiline_values[index]) then
+      local count = #util.value_lines(state.multiline_values[index])
+      decoration = {
+        string.format("  ↳ %d %s · Enter to edit", count, count == 1 and "line" or "lines"),
+        FORM_HIGHLIGHTS.hint,
+      }
+    elseif field.multiline then
+      decoration = { "  Enter to open the long-field editor", FORM_HIGHLIGHTS.muted }
     elseif util.isempty(value) and not util.isempty(field.placeholder) then
       decoration = { "  " .. one_line(field.placeholder), FORM_HIGHLIGHTS.muted }
     end
@@ -283,6 +319,203 @@ local function focus_form()
   end
 end
 
+local function long_editor_open()
+  return long_editor.buf
+    and vim.api.nvim_buf_is_valid(long_editor.buf)
+    and long_editor.win
+    and vim.api.nvim_win_is_valid(long_editor.win)
+end
+
+local function long_editor_lines()
+  if not long_editor.buf or not vim.api.nvim_buf_is_valid(long_editor.buf) then
+    return {}
+  end
+  return vim.api.nvim_buf_get_lines(long_editor.buf, 0, -1, false)
+end
+
+local function long_window_config(index)
+  local field = state.fields[index] or {}
+  local width = math.max(48, math.min(96, math.floor(vim.o.columns * 0.7)))
+  local height = math.max(10, math.min(26, #long_editor_lines() + 5))
+  width = math.max(1, math.min(width, vim.o.columns - 4))
+  height = math.max(1, math.min(height, vim.o.lines - 4))
+  return {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
+    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
+    border = "rounded",
+    title = " " .. field_title(field) .. " ",
+    title_pos = "center",
+    footer = " Ctrl-S apply · Esc cancel ",
+    footer_pos = "center",
+    style = "minimal",
+  }
+end
+
+local function focus_long_editor()
+  if long_editor_open() then
+    vim.api.nvim_set_current_win(long_editor.win)
+  end
+end
+
+local function close_long_editor()
+  local win, buf = long_editor.win, long_editor.buf
+  long_editor.closing = true
+  long_editor.win = nil
+  long_editor.buf = nil
+  long_editor.index = nil
+  long_editor.initial_lines = nil
+  long_editor.generation = nil
+  if win and vim.api.nvim_win_is_valid(win) then
+    pcall(vim.api.nvim_win_close, win, true)
+  end
+  if buf and vim.api.nvim_buf_is_valid(buf) then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end
+  long_editor.closing = false
+  focus_form()
+end
+
+local function reopen_long_window()
+  if not long_editor.buf or not vim.api.nvim_buf_is_valid(long_editor.buf) then
+    return false
+  end
+  long_editor.win = vim.api.nvim_open_win(long_editor.buf, true, long_window_config(long_editor.index))
+  vim.wo[long_editor.win].number = false
+  vim.wo[long_editor.win].relativenumber = false
+  vim.wo[long_editor.win].signcolumn = "no"
+  vim.wo[long_editor.win].wrap = false
+  local watched_win = long_editor.win
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = state.augroup,
+    pattern = tostring(watched_win),
+    once = true,
+    callback = function()
+      if long_editor.closing or long_editor.win ~= watched_win then
+        return
+      end
+      long_editor.win = nil
+      vim.schedule(M.cancel_long_field)
+    end,
+  })
+  vim.cmd("startinsert")
+  return true
+end
+
+function M.apply_long_field()
+  if long_editor.generation ~= state.generation or not long_editor.buf then
+    return false
+  end
+  local index = long_editor.index
+  local value = table.concat(long_editor_lines(), "\n")
+  state.multiline_values[index] = value
+  local lines = current_lines()
+  lines[index] = multiline_preview(value)
+  replace_lines(lines)
+  refresh_dirty(lines)
+  state.errors[index] = nil
+  state.status = nil
+  close_long_editor()
+  M.goto_field(index)
+  render()
+  return true
+end
+
+function M.cancel_long_field()
+  if not long_editor.buf or long_editor.generation ~= state.generation then
+    return false
+  end
+  local changed = not vim.deep_equal(long_editor_lines(), long_editor.initial_lines or {})
+  if not changed then
+    close_long_editor()
+    return true
+  end
+  local expected_buf = long_editor.buf
+  local expected_generation = long_editor.generation
+  vim.ui.select({ "Keep editing", "Discard changes" }, {
+    prompt = "Discard changes to this field?",
+  }, function(choice)
+    if long_editor.buf ~= expected_buf or long_editor.generation ~= expected_generation then
+      return
+    end
+    if choice == "Discard changes" then
+      close_long_editor()
+    else
+      if not long_editor_open() then
+        reopen_long_window()
+      else
+        focus_long_editor()
+      end
+    end
+  end)
+  return false
+end
+
+function M.open_long_field(index)
+  index = tonumber(index) or selected_row()
+  local field = state.fields[index]
+  if not M.is_open() or not field or not field.multiline then
+    return false
+  end
+  if long_editor.buf and vim.api.nvim_buf_is_valid(long_editor.buf) then
+    focus_long_editor()
+    return true
+  end
+
+  long_editor = {
+    buf = vim.api.nvim_create_buf(false, true),
+    win = nil,
+    index = index,
+    initial_lines = util.value_lines(state.multiline_values[index] or ""),
+    generation = state.generation,
+    closing = false,
+  }
+  vim.bo[long_editor.buf].buftype = "nofile"
+  vim.bo[long_editor.buf].bufhidden = "hide"
+  vim.bo[long_editor.buf].filetype = "neorg_flashcards_field"
+  vim.bo[long_editor.buf].swapfile = false
+  vim.bo[long_editor.buf].undofile = false
+  vim.api.nvim_buf_set_lines(long_editor.buf, 0, -1, false, long_editor.initial_lines)
+
+  local function apply()
+    vim.cmd("stopinsert")
+    M.apply_long_field()
+  end
+  local function cancel()
+    vim.cmd("stopinsert")
+    M.cancel_long_field()
+  end
+  vim.keymap.set({ "n", "i" }, "<C-s>", apply, {
+    buffer = long_editor.buf,
+    silent = true,
+    nowait = true,
+    desc = "Apply this long flashcard field",
+  })
+  vim.keymap.set("i", "<Esc>", cancel, {
+    buffer = long_editor.buf,
+    silent = true,
+    nowait = true,
+    desc = "Cancel this long flashcard field",
+  })
+  vim.keymap.set("n", "q", cancel, {
+    buffer = long_editor.buf,
+    silent = true,
+    nowait = true,
+    desc = "Cancel this long flashcard field",
+  })
+  vim.keymap.set("n", "<Esc>", cancel, {
+    buffer = long_editor.buf,
+    silent = true,
+    nowait = true,
+    desc = "Cancel this long flashcard field",
+  })
+
+  reopen_long_window()
+  return true
+end
+
 ---Move the cursor to a field. Because labels are virtual, column zero is the
 ---start of the value and the end column is simply the raw line length.
 function M.goto_field(index)
@@ -294,6 +527,9 @@ function M.goto_field(index)
   vim.api.nvim_win_set_cursor(state.win, { index, #line })
   state.selected = index
   render()
+  if state.fields[index] and state.fields[index].multiline and vim.fn.mode():sub(1, 1) == "i" then
+    vim.cmd("stopinsert")
+  end
 end
 
 function M.edit_field()
@@ -302,6 +538,11 @@ function M.edit_field()
   end
   focus_form()
   M.goto_field(selected_row())
+  local field = state.fields[selected_row()]
+  if field and field.multiline then
+    M.open_long_field(selected_row())
+    return
+  end
   vim.cmd("startinsert!")
 end
 
@@ -361,6 +602,9 @@ function M.cycle_field(delta)
 end
 
 local function close_now()
+  if long_editor.buf then
+    close_long_editor()
+  end
   local return_win = state.return_win
   local augroup = state.augroup
   local on_close = state.on_close
@@ -419,6 +663,11 @@ end
 function M.close(opts)
   opts = opts or {}
   pcall(popup.close, key_help)
+  if long_editor.buf and opts.force ~= true then
+    focus_long_editor()
+    util.notify("Apply or cancel the open long field first", vim.log.levels.WARN)
+    return false
+  end
   if not M.is_open() then
     if state.buf or state.on_close then
       return close_now()
@@ -502,9 +751,10 @@ local function validate()
   local errors = {}
   local first_invalid
   for index, field in ipairs(state.fields) do
-    local value = util.trim(lines[index])
+    local raw_value = draft_field_value(index, field, lines)
+    local value = field.multiline and tostring(raw_value or "") or util.trim(raw_value)
     values[field.key] = value
-    if field.required and value == "" then
+    if field.required and util.isempty(value) then
       errors[index] = field_title(field) .. " is required"
       first_invalid = first_invalid or index
     end
@@ -562,7 +812,7 @@ local function save_message(result)
   local path = result.path or state.target.path
   local label = state.target.label
   if not util.isempty(path) then
-    label = util.path_label(path, state.config.flashcards_dir)
+    label = util.path_label(path, state.config.path)
   end
   if not util.isempty(label) then
     return "Flashcard saved to " .. one_line(label)
@@ -574,11 +824,25 @@ end
 ---The callback returns a structured { ok, persisted, path, message } result.
 function M.save(mode)
   mode = mode == "new" and "new" or "close"
-  if mode == "new" and not state.allow_save_new then
-    set_error("Save-and-new is not available while editing a card", "mode")
+  if not valid_buffer() then
     return false
   end
-  if not valid_buffer() then
+
+  if long_editor_open() and long_editor.generation == state.generation then
+    local message = "Apply or cancel the open long field before saving"
+    state.status = {
+      kind = "warning",
+      source = "long_field",
+      text = message,
+    }
+    render()
+    focus_long_editor()
+    util.notify(message, vim.log.levels.WARN)
+    return false
+  end
+
+  if mode == "new" and not state.allow_save_new then
+    set_error("Save-and-new is not available while editing a card", "mode")
     return false
   end
 
@@ -628,7 +892,9 @@ function M.save(mode)
   replace_lines(state.initial_lines)
   state.dirty = false
   M.goto_field(1)
-  vim.cmd("startinsert!")
+  if not state.fields[1].multiline then
+    vim.cmd("startinsert!")
+  end
   return true
 end
 
@@ -665,6 +931,22 @@ local function refresh_after_change()
   end
 
   local lines = current_lines()
+  for index, field in ipairs(state.fields) do
+    if field.multiline then
+      local expected = multiline_preview(state.multiline_values[index] or "")
+      if lines[index] ~= expected then
+        lines[index] = expected
+        replace_lines(lines)
+        state.status = {
+          kind = "warning",
+          source = "multiline",
+          text = field_title(field) .. " opens in its own editor; press Enter",
+        }
+        M.goto_field(index)
+        return
+      end
+    end
+  end
   local valid_change = state.valid_change
   state.valid_change = false
   state.last_lines = copy_lines(lines)
@@ -768,7 +1050,7 @@ local function infer_target(config, opts, source_buf)
 
   local label = util.trim(opts.target_label)
   if label == "" then
-    label = util.path_label(path, config.flashcards_dir)
+    label = util.path_label(path, config.path)
   end
   return {
     path = path,
@@ -959,7 +1241,9 @@ function M.open(config, kind, opts)
 
   render()
   M.goto_field(1)
-  vim.cmd("startinsert!")
+  if not state.fields[1].multiline then
+    vim.cmd("startinsert!")
+  end
   return true
 end
 

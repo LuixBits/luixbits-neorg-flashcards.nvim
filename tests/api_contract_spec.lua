@@ -12,12 +12,12 @@ return function(T)
 
   local contract_root = vim.fn.tempname()
   local contract_config = {
-    flashcards_dir = contract_root .. "/cards",
+    path = contract_root .. "/cards",
     default_file = contract_root .. "/cards/inbox.norg",
-    default_kind = "japanese",
+    default_card_type = "japanese",
     schemas = presets.only("japanese"),
   }
-  assert_true(flashcards.setup(contract_config), "setup returns true after applying a valid configuration")
+  assert_true(T.setup(contract_config), "setup returns true after applying a valid configuration")
 
   assert_true(flashcards.help(), "help reports that its popup opened")
   help.close()
@@ -52,7 +52,7 @@ return function(T)
   assert_true(form.close({ force = true }), "the command add fixture closes cleanly")
   assert_true(not flashcards.add_kind("missing"), "an unsupported add kind returns false")
 
-  local card_path = contract_config.flashcards_dir .. "/contract.norg"
+  local card_path = contract_config.path .. "/contract.norg"
   vim.fn.writefile({
     "@flashcard japanese",
     "id: fc_api_contract",
@@ -162,7 +162,7 @@ return function(T)
 
   assert_true(flashcards.command("help"), "command returns the routed UI result")
   help.close()
-  local history_path = contract_config.flashcards_dir .. "/reviews.jsonl"
+  local history_path = contract_config.path .. "/reviews.jsonl"
   assert_equal(vim.fn.writefile({ "{not valid json" }, history_path, "a"), 0, "the history diagnostic fixture writes")
   local healthy, collection_cards, issues, diagnostics = flashcards.command("check")
   assert_true(healthy, "command returns the routed validation status")
@@ -191,5 +191,5 @@ return function(T)
   overview.close()
   help.close()
   vim.fn.delete(contract_root, "rf")
-  assert_true(flashcards.setup(T.config), "the shared test configuration is restored")
+  assert_true(T.setup(T.config), "the shared test configuration is restored")
 end

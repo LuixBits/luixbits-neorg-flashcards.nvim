@@ -25,7 +25,7 @@ function M.for_kind(config, kind)
 end
 
 function M.field_value(card, field)
-  local value = util.trim(card.values[field])
+  local value = tostring(card.values[field] or "")
   return util.isempty(value) and "" or value
 end
 
@@ -51,21 +51,6 @@ local REMOVED_FIELDS = {
   buried_until = "available_at",
 }
 
-local SETUP_OPTIONS = {
-  flashcards_dir = true,
-  default_file = true,
-  default_kind = true,
-  schemas = true,
-  scheduling = true,
-  history_file = true,
-  leech_threshold = true,
-  ui = true,
-  on_review = true,
-  -- Retained only so validation can return the precise removal errors below.
-  languages = true,
-  legacy_history_file = true,
-}
-
 local SCHEDULING_OPTIONS = {
   again_minutes = true,
   hard_hours = true,
@@ -87,6 +72,8 @@ local FIELD_OPTIONS = {
   help = true,
   required = true,
   reveal = true,
+  multiline = true,
+  typed_answer = true,
   prompt = true,
   input = true,
 }
@@ -151,33 +138,26 @@ local function add_number_error(errors, card, field, opts)
   end
 end
 
----Validate the complete setup contract before any commands or autocmds exist.
+---Validate one normalized collection before it becomes active.
 ---@param config table
 ---@return string[] errors
-function M.validate_config(config)
+function M.validate_collection(config)
   local errors = {}
-  reject_unknown_keys(errors, config, SETUP_OPTIONS, "setup")
-  if config.languages ~= nil then
-    table.insert(errors, "setup option languages was removed; use schemas")
-  end
-  if config.legacy_history_file ~= nil then
-    table.insert(errors, "setup option legacy_history_file was removed")
-  end
   if type(config.scheduling) == "table" and config.scheduling.mid_hours ~= nil then
     table.insert(errors, "scheduling.mid_hours was removed; use hard_hours")
   end
-  local root = util.canonical_path(config.flashcards_dir)
+  local root = util.canonical_path(config.path)
   local default_file = util.canonical_path(config.default_file)
 
   if root == "" then
-    table.insert(errors, "flashcards_dir is required")
+    table.insert(errors, "path is required")
   end
   if default_file == "" then
     table.insert(errors, "default_file is required")
   elseif not default_file:match("%.norg$") then
     table.insert(errors, "default_file must be a .norg file")
   elseif root ~= "" and not util.path_is_within(default_file, root) then
-    table.insert(errors, "default_file must be inside flashcards_dir")
+    table.insert(errors, "default_file must be inside the collection path")
   end
   local requested_history = config.history_file
   if util.isempty(requested_history) and root ~= "" then
@@ -188,7 +168,7 @@ function M.validate_config(config)
     if not history_file:match("%.jsonl$") then
       table.insert(errors, "review history destination must be a .jsonl file separate from card sources")
     elseif root ~= "" and not util.path_is_within(history_file, root) then
-      table.insert(errors, "review history destination must be inside flashcards_dir")
+      table.insert(errors, "review history destination must be inside the collection path")
     elseif default_file ~= "" and (history_file == default_file or same_existing_file(history_file, default_file)) then
       table.insert(errors, "review history destination must be separate from default_file")
     end
@@ -200,11 +180,11 @@ function M.validate_config(config)
     schemas = {}
   end
 
-  local default_kind = util.trim(config.default_kind)
-  if default_kind == "" then
-    table.insert(errors, "default_kind is required")
-  elseif not schemas[default_kind] then
-    table.insert(errors, "default_kind does not name a configured schema: " .. default_kind)
+  local default_card_type = util.trim(config.default_card_type)
+  if default_card_type == "" then
+    table.insert(errors, "default_card_type is required")
+  elseif not schemas[default_card_type] then
+    table.insert(errors, "default_card_type does not name a configured schema: " .. default_card_type)
   end
 
   local kinds = vim.tbl_keys(schemas)
@@ -246,10 +226,13 @@ function M.validate_config(config)
                 table.insert(errors, string.format("%s field %s.%s must be a string", kind, key, property))
               end
             end
-            for _, property in ipairs({ "required", "reveal" }) do
+            for _, property in ipairs({ "required", "reveal", "multiline", "typed_answer" }) do
               if field[property] ~= nil and type(field[property]) ~= "boolean" then
                 table.insert(errors, string.format("%s field %s.%s must be a boolean", kind, key, property))
               end
+            end
+            if field.typed_answer == true and field.reveal ~= true then
+              table.insert(errors, string.format("%s field %s.typed_answer requires reveal = true", kind, key))
             end
             if field.prompt ~= nil or field.input ~= nil then
               table.insert(errors, string.format("%s field %s contains a removed composer option", kind, key))
@@ -385,6 +368,27 @@ function M.reveal_fields(config, card)
   return fields
 end
 
+function M.typed_answer_fields(config, card)
+  local card_schema = M.for_kind(config, card.kind)
+  local fields = {}
+  if not card_schema then
+    return fields
+  end
+  for _, field in ipairs(card_schema.fields or {}) do
+    if field.typed_answer then
+      local value = M.field_value(card, field.key)
+      if not util.isempty(value) then
+        table.insert(fields, {
+          key = field.key,
+          title = field.title or field.key,
+          value = value,
+        })
+      end
+    end
+  end
+  return fields
+end
+
 function M.composer_fields(config, kind)
   local card_schema = M.for_kind(config, kind)
   local fields = {}
@@ -401,6 +405,8 @@ function M.composer_fields(config, kind)
       title = title,
       default = field.default or "",
       required = field.required or false,
+      multiline = field.multiline or false,
+      typed_answer = field.typed_answer or false,
       placeholder = field.placeholder or "",
       help = field.help or "",
     })
@@ -422,6 +428,10 @@ function M.validate_card(config, card)
     table.insert(errors, "missing @end")
   end
 
+  for _, syntax_error in ipairs(card.syntax_errors or {}) do
+    table.insert(errors, syntax_error)
+  end
+
   local id = identity.card_id(card)
   if not id then
     table.insert(errors, "missing id")
@@ -434,12 +444,6 @@ function M.validate_card(config, card)
   for _, field in ipairs(duplicate_fields) do
     table.insert(errors, "duplicate field: " .. field)
   end
-  local multiline_fields = vim.tbl_keys(card.multiline_fields or {})
-  table.sort(multiline_fields)
-  for _, field in ipairs(multiline_fields) do
-    table.insert(errors, "multiline values are not supported: " .. field)
-  end
-
   for field, replacement in pairs(REMOVED_FIELDS) do
     if card.values[field] ~= nil then
       table.insert(errors, string.format("removed field %s (replace with %s)", field, replacement))
@@ -447,14 +451,25 @@ function M.validate_card(config, card)
   end
 
   local allowed_fields = vim.deepcopy(SYSTEM_FIELDS)
+  local declared_fields = {}
   for _, field in ipairs(card_schema.fields or {}) do
     allowed_fields[field.key] = true
+    declared_fields[field.key] = field
   end
   local present_fields = vim.tbl_keys(card.values or {})
   table.sort(present_fields)
   for _, field in ipairs(present_fields) do
     if not allowed_fields[field] and not REMOVED_FIELDS[field] then
       table.insert(errors, "unknown field: " .. field)
+    end
+  end
+
+  local multiline_fields = vim.tbl_keys(card.multiline_fields or {})
+  table.sort(multiline_fields)
+  for _, field in ipairs(multiline_fields) do
+    local declaration = declared_fields[field]
+    if SYSTEM_FIELDS[field] or declaration and declaration.multiline ~= true then
+      table.insert(errors, "field does not allow multiline values: " .. field)
     end
   end
 
@@ -512,6 +527,27 @@ function M.validate_card(config, card)
   return errors
 end
 
+---Render one card field. A multiline value uses an explicit block whose
+---container indentation is exactly two spaces beyond the card directive. Any
+---additional indentation is part of the value and survives a round trip.
+---@param field string
+---@param value any
+---@param opts? { force_multiline?: boolean, indent?: string }
+---@return string[]
+function M.field_lines(field, value, opts)
+  opts = opts or {}
+  local indent = tostring(opts.indent or "")
+  value = tostring(value or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+  if value:find("\n", 1, true) or opts.force_multiline == true then
+    local lines = { indent .. field .. ": |" }
+    for _, line in ipairs(util.value_lines(value)) do
+      table.insert(lines, indent .. "  " .. line)
+    end
+    return lines
+  end
+  return { indent .. field .. ": " .. util.trim(value) }
+end
+
 function M.card_lines(config, kind, values)
   values = values or {}
   local card_schema = M.for_kind(config, kind)
@@ -522,9 +558,10 @@ function M.card_lines(config, kind, values)
   }
 
   for _, field in ipairs((card_schema and card_schema.fields) or {}) do
-    local value = util.trim(values[field.key])
+    local value = tostring(values[field.key] or "")
     if field.required or not util.isempty(value) then
-      table.insert(lines, field.key .. ": " .. value)
+      local preserve_edge_space = field.multiline == true and (value:match("^%s") or value:match("%s$")) ~= nil
+      vim.list_extend(lines, M.field_lines(field.key, value, { force_multiline = preserve_edge_space }))
     end
   end
 

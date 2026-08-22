@@ -1,3 +1,4 @@
+local answer_diff = require("neorg_flashcards.answer_diff")
 local popup = require("neorg_flashcards.popup")
 local highlights = require("neorg_flashcards.highlights")
 local schedule = require("neorg_flashcards.schedule")
@@ -11,7 +12,7 @@ local M = {}
 local config = {}
 
 local function collection_root()
-  return config._collection_root or config.flashcards_dir
+  return config._root or config.path
 end
 
 local function monotonic_time()
@@ -78,9 +79,12 @@ local function review_context()
 end
 
 local function review_capabilities()
+  local attempt = state.queue[state.index]
+  local typed_fields = attempt and schema.typed_answer_fields(config, attempt.card) or {}
   return {
     bury = type(config.on_bury) == "function",
     suspend = type(config.on_suspend) == "function",
+    type_answer = #typed_fields > 0,
   }
 end
 
@@ -134,6 +138,56 @@ local function unmask_clozes(text)
   return (plain:gsub("{{c%d+::(.-)}}", "%1"))
 end
 
+-- The built-in vim.ui.input implementation records answers in the input
+-- history, which ShaDa may persist. Remove only matching entries created by
+-- this prompt; pre-existing entries, including duplicates, remain untouched.
+local function input_history_snapshot()
+  local snapshot = { last = -1, values = {} }
+  local ok, last = pcall(vim.fn.histnr, "input")
+  if not ok then
+    return snapshot
+  end
+  snapshot.last = tonumber(last) or -1
+  for history_number = 1, snapshot.last do
+    local read_ok, entry = pcall(vim.fn.histget, "input", history_number)
+    if read_ok and entry ~= "" then
+      snapshot.values[entry] = true
+    end
+  end
+  return snapshot
+end
+
+local function forget_typed_input(value, snapshot)
+  local ok, newest = pcall(vim.fn.histnr, "input")
+  if not ok then
+    return
+  end
+  newest = tonumber(newest) or -1
+  for history_number = newest, snapshot.last + 1, -1 do
+    local read_ok, entry = pcall(vim.fn.histget, "input", history_number)
+    if read_ok and entry == value then
+      pcall(vim.fn.histdel, "input", history_number)
+    end
+  end
+
+  -- Vim deduplicates history when a matching value is added, so opening the
+  -- prompt may have moved an older identical entry instead of adding a second
+  -- one. Put that known pre-existing value back if necessary.
+  if snapshot.values[value] then
+    local matching_entry = false
+    local current_last = tonumber(vim.fn.histnr("input")) or -1
+    for history_number = 1, current_last do
+      if vim.fn.histget("input", history_number) == value then
+        matching_entry = true
+        break
+      end
+    end
+    if not matching_entry then
+      pcall(vim.fn.histadd, "input", value)
+    end
+  end
+end
+
 local function append_field(lines, title, value, masked)
   table.insert(lines, "")
   table.insert(lines, "** " .. title)
@@ -145,6 +199,52 @@ local function append_field(lines, title, value, masked)
     end
     table.insert(lines, line)
   end
+end
+
+local function append_typed_comparison(lines, spans, comparison)
+  if not comparison then
+    return
+  end
+  local labels = {
+    exact = { text = "✓ Correct", highlight = RATING_HIGHLIGHTS.Good },
+    close = { text = "≈ Close", highlight = RATING_HIGHLIGHTS.Hard },
+    miss = { text = "✗ Check this", highlight = RATING_HIGHLIGHTS.Again },
+  }
+  local label = labels[comparison.status] or labels.miss
+  table.insert(lines, "")
+  table.insert(lines, "** Typed answer  " .. label.text)
+  local heading_line = #lines
+  local label_start = lines[heading_line]:find(label.text, 1, true)
+  if label_start then
+    table.insert(spans, {
+      line = heading_line,
+      start_col = label_start - 1,
+      end_col = label_start - 1 + #label.text,
+      hl = label.highlight,
+    })
+  end
+
+  if comparison.status == "exact" then
+    table.insert(lines, "  " .. comparison.actual.text)
+    return
+  end
+
+  local actual_prefix = "  Yours   "
+  table.insert(lines, actual_prefix .. comparison.actual.text)
+  table.insert(spans, {
+    line = #lines,
+    start_col = #actual_prefix + comparison.actual.start_col,
+    end_col = #actual_prefix + comparison.actual.end_col,
+    hl = RATING_HIGHLIGHTS.Again,
+  })
+  local expected_prefix = "  Answer  "
+  table.insert(lines, expected_prefix .. comparison.expected.text)
+  table.insert(spans, {
+    line = #lines,
+    start_col = #expected_prefix + comparison.expected.start_col,
+    end_col = #expected_prefix + comparison.expected.end_col,
+    hl = RATING_HIGHLIGHTS.Good,
+  })
 end
 
 local function current_attempt()
@@ -244,6 +344,8 @@ local function next_event_id()
 end
 
 local function emit_event(event)
+  event.collection_id = event.collection_id or config.id
+  event.card_type = event.card_type or (event.card_ref and event.card_ref.kind)
   event.session = session_snapshot()
   event.session_id = state.session_id
   event.label = state.label
@@ -290,7 +392,12 @@ local function rate_from_popup(score)
 end
 
 local function dispatch(action_name)
-  if not actions.is_available("review", action_name, review_context(), review_capabilities()) then
+  local capabilities = review_capabilities()
+  if action_name == "type_answer" and not capabilities.type_answer then
+    M.type_answer()
+    return false
+  end
+  if not actions.is_available("review", action_name, review_context(), capabilities) then
     return false
   end
   if action_name == "close" then
@@ -331,7 +438,9 @@ local function ensure_window()
   end
 
   local maps = {}
-  for _, binding in ipairs(actions.available_bindings("review", review_capabilities())) do
+  local mapping_capabilities = review_capabilities()
+  mapping_capabilities.type_answer = true
+  for _, binding in ipairs(actions.available_bindings("review", mapping_capabilities)) do
     local action_name = binding.action
     table.insert(maps, {
       binding.key,
@@ -463,7 +572,7 @@ local function render()
       #state.queue,
       state.session.requeued
     ),
-    "Source: " .. util.path_label(card.path, config.flashcards_dir),
+    "Source: " .. util.path_label(card.path, config.path),
   }
   local rating_spans = {}
 
@@ -473,6 +582,8 @@ local function render()
     for _, field in ipairs(schema.reveal_fields(config, card)) do
       append_field(lines, field.title, field.value, false)
     end
+
+    append_typed_comparison(lines, rating_spans, attempt.typed_answer)
 
     local previews = interval_previews(card, os.time())
     table.insert(lines, "")
@@ -600,8 +711,12 @@ function M.start(cards, errors, label, empty_message, opts)
   state.last_action = nil
   state.requeued_cards = {}
   state.event_sequence = 0
-  state.session_id =
-    string.format("%s-%x", os.date("!%Y%m%dT%H%M%SZ"), math.floor(monotonic_time() * 1000000) % 0xffffff)
+  state.session_id = string.format(
+    "%s-%s-%x",
+    config.id or "collection",
+    os.date("!%Y%m%dT%H%M%SZ"),
+    math.floor(monotonic_time() * 1000000) % 0xffffff
+  )
   render()
   return true
 end
@@ -992,10 +1107,6 @@ function M.edit_current()
   return true
 end
 
-local function normalize_answer(text)
-  return util.trim(text):lower():gsub("%s+", " ")
-end
-
 function M.type_answer()
   if state.completed or #state.queue == 0 then
     return false
@@ -1003,43 +1114,43 @@ function M.type_answer()
 
   local attempt = current_attempt()
   local card = attempt.card
-  local fields = schema.reveal_fields(config, card)
+  local fields = schema.typed_answer_fields(config, card)
   if #fields == 0 then
-    util.notify("This card kind has no answer fields to type against", vim.log.levels.WARN)
+    util.notify("Typed answers are not enabled for this card type", vim.log.levels.WARN)
     return false
   end
 
+  local input_history_before = input_history_snapshot()
   vim.ui.input({ prompt = "Answer: " }, function(input)
+    if input ~= nil then
+      forget_typed_input(input, input_history_before)
+    end
     if input == nil or current_attempt() ~= attempt then
       return
     end
 
-    local answer = normalize_answer(input)
-    local best_distance = math.huge
-    local best_expected = ""
+    local candidates = {}
     for _, field in ipairs(fields) do
-      for _, line in ipairs(util.value_lines(field.value)) do
-        local expected = normalize_answer(unmask_clozes(line))
-        if expected ~= "" then
-          local distance = util.levenshtein(answer, expected)
-          if distance < best_distance then
-            best_distance = distance
-            best_expected = expected
-          end
-        end
-      end
+      table.insert(candidates, unmask_clozes(field.value))
+    end
+    local comparison = answer_diff.best(input, candidates)
+    if not comparison then
+      util.notify("This card has no answer text to check", vim.log.levels.WARN)
+      return
     end
 
+    attempt.typed_answer = comparison
     state.showing_answer = true
     render()
 
-    local close_enough = math.max(1, math.floor(#util.utf8_chars(best_expected) * 0.2))
-    if best_distance == 0 then
+    if comparison.truncated and comparison.status ~= "exact" then
+      util.notify("Answer is too long for fuzzy checking; compare it after reveal")
+    elseif comparison.status == "exact" then
       util.notify("✓ Correct")
-    elseif best_distance <= close_enough then
-      util.notify("≈ Close — answer: " .. best_expected)
+    elseif comparison.status == "close" then
+      util.notify("≈ Close — compare the highlighted text")
     else
-      util.notify("✗ Answer: " .. best_expected)
+      util.notify("✗ Compare your answer before rating")
     end
   end)
   return true

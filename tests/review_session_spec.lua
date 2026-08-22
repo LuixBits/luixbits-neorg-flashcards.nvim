@@ -231,8 +231,8 @@ return function(T)
 
   -- add_to_default goes through the form and appends to the default file; it
   -- runs last against the first collection because it writes a card into
-  -- flashcards_dir/inbox.
-  flashcards.add_to_default("")
+  -- path/inbox.
+  flashcards.add_to_default("japanese")
   local default_form_buf = vim.api.nvim_get_current_buf()
   assert_equal(vim.bo[default_form_buf].buftype, "nofile", "add_to_default opens the form")
   assert_contains(decoration_text(default_form_buf), "inbox/cards.norg", "dashboard add shows the default destination")
@@ -269,10 +269,10 @@ return function(T)
     "@end",
   }, future_dir .. "/cards.norg")
 
-  flashcards.setup({
-    flashcards_dir = future_dir,
+  T.setup({
+    path = future_dir,
     default_file = future_dir .. "/cards.norg",
-    default_kind = "japanese",
+    default_card_type = "japanese",
     schemas = presets.only("japanese"),
   })
 

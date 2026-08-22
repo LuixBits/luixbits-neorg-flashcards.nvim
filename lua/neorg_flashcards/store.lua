@@ -1,4 +1,5 @@
 local fs_lock = require("neorg_flashcards.fs_lock")
+local schema = require("neorg_flashcards.schema")
 local util = require("neorg_flashcards.util")
 
 local M = {}
@@ -51,7 +52,7 @@ local function resolve_destination(path, opts)
       return nil, root_err
     end
     if not util.resolved_path_is_within(destination, allowed_root) then
-      return nil, "source destination must stay inside the configured flashcards_dir"
+      return nil, "source destination must stay inside the configured collection path"
     end
   end
   return destination
@@ -94,7 +95,7 @@ local function ensure_destination_parent(path, opts)
   if not root then
     return nil, root_err
   elseif not util.resolved_path_is_within(parent, root) then
-    return nil, "source directory must stay inside the configured flashcards_dir"
+    return nil, "source directory must stay inside the configured collection path"
   end
 
   local uv = vim.uv or vim.loop
@@ -156,11 +157,48 @@ local function guard_source_lines(lines, destination, opts)
   return true
 end
 
-local function field_line(lines, start_line, end_line, field)
-  for index = start_line + 1, math.min(end_line - 1, #lines) do
-    local key = lines[index]:match("^%s*([%w_-]+)%s*:")
-    if key and key:lower():gsub("-", "_") == field then
-      return index
+local function source_card_indent(lines, card)
+  local indent, kind = lines[card.start_line]:match("^([ \t]*)@flashcard%s+([%w_-]+)%s*$")
+  if not kind or (not util.isempty(card.kind) and kind ~= card.kind) then
+    return nil
+  end
+  return indent
+end
+
+local function relative_line(line, indent)
+  if line:sub(1, #indent) ~= indent then
+    return nil
+  end
+  return line:sub(#indent + 1)
+end
+
+local function field_span(lines, card, end_line, field)
+  local indent = source_card_indent(lines, card)
+  if indent == nil then
+    return nil
+  end
+  local index = card.start_line + 1
+  local last = math.min(end_line - 1, #lines)
+  while index <= last do
+    local relative = relative_line(lines[index], indent)
+    local key, value
+    if relative then
+      key, value = relative:match("^([%w_-]+)%s*:%s*(.-)%s*$")
+    end
+    if key then
+      local span_end = index
+      if value == "|" then
+        local content_indent = indent .. "  "
+        while span_end + 1 <= last and lines[span_end + 1]:sub(1, #content_indent) == content_indent do
+          span_end = span_end + 1
+        end
+      end
+      if key:lower():gsub("-", "_") == field then
+        return index, span_end
+      end
+      index = span_end + 1
+    else
+      index = index + 1
     end
   end
   return nil
@@ -545,12 +583,21 @@ local function write_source_lines(path, bufnr, lines, opts)
 end
 
 local function end_line_for_card(lines, card)
-  if lines[card.end_line] and lines[card.end_line]:match("^%s*@end%s*$") then
+  local indent = source_card_indent(lines, card)
+  if indent == nil then
+    return nil
+  end
+  local function is_end(line)
+    local relative = line and relative_line(line, indent)
+    return relative and relative:match("^@end%s*$") ~= nil
+  end
+
+  if is_end(lines[card.end_line]) then
     return card.end_line
   end
 
-  for index = card.start_line, #lines do
-    if lines[index]:match("^%s*@end%s*$") then
+  for index = card.start_line + 1, #lines do
+    if is_end(lines[index]) then
       return index
     end
   end
@@ -558,17 +605,32 @@ local function end_line_for_card(lines, card)
   return nil
 end
 
-local function upsert_field(lines, start_line, end_line, field, value)
-  local line = field_line(lines, start_line, end_line, field)
-  local rendered = field .. ": " .. value
+local function replace_range(lines, first, last, replacements)
+  for _ = first, last do
+    table.remove(lines, first)
+  end
+  for index = #replacements, 1, -1 do
+    table.insert(lines, first, replacements[index])
+  end
+end
 
-  if line then
-    lines[line] = rendered
-    return 0
+local function upsert_field(lines, card, end_line, field, value, opts)
+  local first, last = field_span(lines, card, end_line, field)
+  local render_opts = vim.tbl_extend("force", {}, opts or {}, {
+    indent = source_card_indent(lines, card) or "",
+  })
+  local rendered = schema.field_lines(field, value, render_opts)
+
+  if first then
+    local old_count = last - first + 1
+    replace_range(lines, first, last, rendered)
+    return #rendered - old_count
   end
 
-  table.insert(lines, end_line, rendered)
-  return 1
+  for index, line in ipairs(rendered) do
+    table.insert(lines, end_line + index - 1, line)
+  end
+  return #rendered
 end
 
 local function adjust_cached_lines(cards, updated_card, original_end_line, delta)
@@ -614,7 +676,7 @@ function M.set_card_fields(card, updates, opts)
 
   local before = #lines
   for _, update in ipairs(updates) do
-    local inserted = upsert_field(lines, card.start_line, end_line, update.field, update.value)
+    local inserted = upsert_field(lines, card, end_line, update.field, update.value)
     end_line = end_line + inserted
   end
 
@@ -626,6 +688,8 @@ function M.set_card_fields(card, updates, opts)
   local delta = #lines - before
   for _, update in ipairs(updates) do
     card.values[update.field] = update.value
+    card.multiline_fields = card.multiline_fields or {}
+    card.multiline_fields[update.field] = tostring(update.value or ""):find("\n", 1, true) and true or nil
     if update.field == "id" then
       card.id = update.value
     end
@@ -664,20 +728,26 @@ function M.restore_card_fields(card, prior, fields, opts)
 
   local before = #lines
   local restored = {}
+  local force_multiline = {}
   for _, item in ipairs(fields) do
     local field = type(item) == "table" and item.field or item
+    local field_force_multiline = type(item) == "table" and item.force_multiline == true
     field = util.trim(field):lower():gsub("-", "_")
     if field ~= "" and not restored[field] then
       restored[field] = true
+      force_multiline[field] = field_force_multiline
       local value = prior[field]
       if value == nil then
-        local line = field_line(lines, card.start_line, end_line, field)
-        if line then
-          table.remove(lines, line)
-          end_line = end_line - 1
+        local first, last = field_span(lines, card, end_line, field)
+        if first then
+          local removed = last - first + 1
+          replace_range(lines, first, last, {})
+          end_line = end_line - removed
         end
       else
-        local inserted = upsert_field(lines, card.start_line, end_line, field, tostring(value))
+        local inserted = upsert_field(lines, card, end_line, field, tostring(value), {
+          force_multiline = field_force_multiline,
+        })
         end_line = end_line + inserted
       end
     end
@@ -691,6 +761,10 @@ function M.restore_card_fields(card, prior, fields, opts)
   local delta = #lines - before
   for field in pairs(restored) do
     card.values[field] = prior[field]
+    card.multiline_fields = card.multiline_fields or {}
+    card.multiline_fields[field] = prior[field] ~= nil
+        and (force_multiline[field] or tostring(prior[field]):find("\n", 1, true) ~= nil)
+      or nil
     if field == "id" then
       card.id = prior[field]
     end
@@ -741,14 +815,17 @@ function M.delete_card(card, opts)
     return false, "Flashcard source range is invalid; refresh before deleting it.", false
   end
 
-  local source_kind = lines[start_line] and lines[start_line]:match("^%s*@flashcard%s+([%w_-]+)%s*$")
+  local source_indent, source_kind
+  if lines[start_line] then
+    source_indent, source_kind = lines[start_line]:match("^([ \t]*)@flashcard%s+([%w_-]+)%s*$")
+  end
   if not source_kind or (not util.isempty(card.kind) and source_kind ~= card.kind) then
     return false, "Flashcard no longer starts at the selected source line; refresh before deleting it.", false
   end
 
   if card.closed == false then
     return false, "Cannot safely delete an unclosed flashcard; add its missing @end first.", false
-  elseif not lines[end_line]:match("^%s*@end%s*$") then
+  elseif not (relative_line(lines[end_line], source_indent) or ""):match("^@end%s*$") then
     return false, "Flashcard no longer ends at the selected source line; refresh before deleting it.", false
   end
 
