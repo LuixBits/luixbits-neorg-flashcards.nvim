@@ -1,5 +1,6 @@
 return function(T)
   local identity = require("neorg_flashcards.identity")
+  local highlight_module = require("neorg_flashcards.highlights")
   local parser = require("neorg_flashcards.parser")
   local presets = require("neorg_flashcards.presets")
   local schema = require("neorg_flashcards.schema")
@@ -40,15 +41,38 @@ return function(T)
     "partial highlight overrides keep default links"
   )
   local exact_color_config = vim.tbl_deep_extend("force", vim.deepcopy(config), {
-    ui = { rating_highlights = { again = { fg = "#ff5f5f", bold = true } } },
+    ui = {
+      rating_highlights = { again = { fg = "#ff5f5f", bold = true } },
+      heatmap_highlights = {
+        [2] = { link = "Special" },
+        ["4"] = { fg = "#123456", ctermfg = 24, bold = true },
+      },
+    },
   })
   flashcards.setup(exact_color_config)
   local exact_again = vim.api.nvim_get_hl(0, { name = "NeorgFlashcardsAgain" })
   assert_equal(exact_again.fg, tonumber("ff5f5f", 16), "exact rating colors can override a theme")
   assert_true(exact_again.bold, "exact rating color attributes are applied")
-  vim.api.nvim_exec_autocmds("ColorScheme", {})
+  assert_equal(highlight_link("NeorgFlashcardsHeat0"), "NonText", "partial heat overrides keep level 0")
+  assert_equal(highlight_link("NeorgFlashcardsHeat1"), "Comment", "partial heat overrides keep level 1")
+  assert_equal(highlight_link("NeorgFlashcardsHeat2"), "Special", "numeric heat-level overrides are applied")
+  assert_equal(highlight_link("NeorgFlashcardsHeat3"), "DiagnosticInfo", "partial heat overrides keep level 3")
+  local exact_heat = vim.api.nvim_get_hl(0, { name = "NeorgFlashcardsHeat4" })
+  assert_equal(exact_heat.fg, tonumber("123456", 16), "string heat-level keys support exact colors")
+  assert_true(exact_heat.bold, "exact heat attributes are applied")
+
+  vim.cmd("colorscheme habamax")
   exact_again = vim.api.nvim_get_hl(0, { name = "NeorgFlashcardsAgain" })
-  assert_equal(exact_again.fg, tonumber("ff5f5f", 16), "rating overrides survive colorscheme reloads")
+  exact_heat = vim.api.nvim_get_hl(0, { name = "NeorgFlashcardsHeat4" })
+  assert_equal(exact_again.fg, tonumber("ff5f5f", 16), "rating overrides survive a real colorscheme load")
+  assert_equal(exact_heat.fg, tonumber("123456", 16), "heat overrides survive a real colorscheme load")
+  for _, section in pairs(highlight_module.groups) do
+    for _, group in pairs(section) do
+      local definition = vim.api.nvim_get_hl(0, { name = group, link = true })
+      assert_true(next(definition) ~= nil, group .. " is restored after a real colorscheme load")
+    end
+  end
+  vim.cmd("colorscheme default")
   flashcards.setup(config)
 
   assert_equal(vim.fn.exists(":Flashcards"), 2, "Flashcards is registered")
@@ -285,6 +309,15 @@ return function(T)
     rejected_setup({ schedulng = {} }, "unknown setup option: schedulng")
     rejected_setup({ on_review = true }, "on_review must be a function")
     rejected_setup({ on_edit = function() end }, "unknown setup option: on_edit")
+    rejected_setup({ ui = { heatmap_highlights = false } }, "ui.heatmap_highlights must be a table")
+    rejected_setup(
+      { ui = { heatmap_highlights = { [5] = { link = "Special" } } } },
+      "unknown ui.heatmap_highlights option: 5"
+    )
+    rejected_setup(
+      { ui = { heatmap_highlights = { [2] = "Special" } } },
+      "ui.heatmap_highlights[2] must be a highlight table"
+    )
 
     local misspelled_scheduling = vim.deepcopy(config)
     misspelled_scheduling.scheduling = { hard_hors = 6 }

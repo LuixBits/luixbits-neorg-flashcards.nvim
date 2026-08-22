@@ -1,4 +1,5 @@
 local popup = require("neorg_flashcards.popup")
+local highlights = require("neorg_flashcards.highlights")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local store = require("neorg_flashcards.store")
@@ -61,9 +62,9 @@ local state = {
 local key_help = { buf = nil, win = nil }
 local rating_ns = vim.api.nvim_create_namespace("neorg_flashcards_review_ratings")
 local RATING_HIGHLIGHTS = {
-  Again = { group = "NeorgFlashcardsAgain", fallback = "DiagnosticError" },
-  Hard = { group = "NeorgFlashcardsHard", fallback = "DiagnosticWarn" },
-  Good = { group = "NeorgFlashcardsGood", fallback = "DiagnosticOk" },
+  Again = highlights.groups.rating.again,
+  Hard = highlights.groups.rating.hard,
+  Good = highlights.groups.rating.good,
 }
 
 local function review_context()
@@ -87,38 +88,26 @@ local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
 end
 
-local function rating_config(label)
-  local name = label:lower()
-  local configured = type(config.ui) == "table"
-      and type(config.ui.rating_highlights) == "table"
-      and config.ui.rating_highlights[name]
-    or nil
-  return type(configured) == "table" and vim.deepcopy(configured) or { link = RATING_HIGHLIGHTS[label].fallback }
-end
-
-local function set_review_lines(lines)
+local function set_review_lines(lines, rating_spans)
   popup.set_lines(state, lines)
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return
   end
   vim.api.nvim_buf_clear_namespace(state.buf, rating_ns, 0, -1)
-  for label, highlight in pairs(RATING_HIGHLIGHTS) do
-    local value = rating_config(label)
-    local ok = not vim.tbl_isempty(value) and pcall(vim.api.nvim_set_hl, 0, highlight.group, value)
-    if not ok then
-      vim.api.nvim_set_hl(0, highlight.group, { link = highlight.fallback, default = true })
-    end
-    for line_index, line in ipairs(lines) do
-      local start = 1
-      while true do
-        local first, last = line:find(label, start, true)
-        if not first then
-          break
-        end
-        pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, highlight.group, line_index - 1, first - 1, last)
-        start = last + 1
-      end
-    end
+  for _, span in ipairs(rating_spans or {}) do
+    pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, span.hl, span.line - 1, span.start_col, span.end_col)
+  end
+end
+
+local function add_rating_span(spans, lines, line_index, label)
+  local first, last = lines[line_index]:find(label, 1, true)
+  if first then
+    table.insert(spans, {
+      line = line_index,
+      start_col = first - 1,
+      end_col = last,
+      hl = RATING_HIGHLIGHTS[label],
+    })
   end
 end
 
@@ -428,7 +417,11 @@ local function render_completion()
     "",
     "Nice work. Press u to undo the last rating, or q to return.",
   }
-  set_review_lines(lines)
+  local rating_spans = {}
+  add_rating_span(rating_spans, lines, 8, "Again")
+  add_rating_span(rating_spans, lines, 9, "Hard")
+  add_rating_span(rating_spans, lines, 10, "Good")
+  set_review_lines(lines, rating_spans)
 end
 
 local function render()
@@ -472,6 +465,7 @@ local function render()
     ),
     "Source: " .. util.path_label(card.path, config.flashcards_dir),
   }
+  local rating_spans = {}
 
   append_field(lines, front_title, front_value, not state.showing_answer)
 
@@ -484,6 +478,10 @@ local function render()
     table.insert(lines, "")
     table.insert(lines, "** Choose a rating")
     table.insert(lines, string.format("1 Again  %s    2 Hard  %s    3 Good  %s", previews[1], previews[2], previews[3]))
+    local control_line = #lines
+    add_rating_span(rating_spans, lines, control_line, "Again")
+    add_rating_span(rating_spans, lines, control_line, "Hard")
+    add_rating_span(rating_spans, lines, control_line, "Good")
   else
     if attempt.hint_level > 0 then
       append_field(lines, "Hint " .. attempt.hint_level, progressive_hint(hint_source(card), attempt.hint_level), false)
@@ -492,7 +490,7 @@ local function render()
     table.insert(lines, "Reveal the answer with ⏎ or Space before rating. Press h for a hint.")
   end
 
-  set_review_lines(lines)
+  set_review_lines(lines, rating_spans)
 end
 
 local function commit_last_action()

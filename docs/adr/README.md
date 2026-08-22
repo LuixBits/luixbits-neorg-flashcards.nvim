@@ -15,3 +15,4 @@ record is a design target and may change before implementation.
 | [0007](0007-strict-v02-contract.md) | Accepted | Ship one canonical v0.2 interface and require a manual v0.1 upgrade |
 | [0008](0008-source-and-history-persistence.md) | Accepted | Separate source commits from history delivery and persist failed events in an outbox |
 | [0009](0009-semantic-rating-highlights.md) | Accepted | Use configurable semantic highlight groups for ratings |
+| [0010](0010-centralize-theme-highlights.md) | Accepted | Centralize theme-linked highlights and redundant visual state |

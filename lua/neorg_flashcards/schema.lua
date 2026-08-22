@@ -90,8 +90,13 @@ local FIELD_OPTIONS = {
   prompt = true,
   input = true,
 }
-local UI_OPTIONS = { show_shortcuts = true, rating_highlights = true }
+local UI_OPTIONS = { show_shortcuts = true, rating_highlights = true, heatmap_highlights = true }
 local RATING_OPTIONS = { again = true, hard = true, good = true }
+local HEATMAP_OPTIONS = {}
+for level = 0, 4 do
+  HEATMAP_OPTIONS[level] = true
+  HEATMAP_OPTIONS[tostring(level)] = true
+end
 
 local function reject_unknown_keys(errors, value, allowed, context)
   if type(value) ~= "table" then
@@ -300,17 +305,35 @@ function M.validate_config(config)
 
   if type(config.ui) ~= "table" then
     table.insert(errors, "ui must be a table")
-  elseif type(config.ui.rating_highlights) ~= "table" then
-    table.insert(errors, "ui.rating_highlights must be a table")
   else
     reject_unknown_keys(errors, config.ui, UI_OPTIONS, "ui")
-    reject_unknown_keys(errors, config.ui.rating_highlights, RATING_OPTIONS, "ui.rating_highlights")
     if type(config.ui.show_shortcuts) ~= "boolean" then
       table.insert(errors, "ui.show_shortcuts must be a boolean")
     end
-    for _, rating in ipairs({ "again", "hard", "good" }) do
-      if type(config.ui.rating_highlights[rating]) ~= "table" then
-        table.insert(errors, "ui.rating_highlights." .. rating .. " must be a highlight table")
+
+    if type(config.ui.rating_highlights) ~= "table" then
+      table.insert(errors, "ui.rating_highlights must be a table")
+    else
+      reject_unknown_keys(errors, config.ui.rating_highlights, RATING_OPTIONS, "ui.rating_highlights")
+      for _, rating in ipairs({ "again", "hard", "good" }) do
+        if type(config.ui.rating_highlights[rating]) ~= "table" then
+          table.insert(errors, "ui.rating_highlights." .. rating .. " must be a highlight table")
+        end
+      end
+    end
+
+    if type(config.ui.heatmap_highlights) ~= "table" then
+      table.insert(errors, "ui.heatmap_highlights must be a table")
+    else
+      reject_unknown_keys(errors, config.ui.heatmap_highlights, HEATMAP_OPTIONS, "ui.heatmap_highlights")
+      for level = 0, 4 do
+        local value = config.ui.heatmap_highlights[level]
+        if value == nil then
+          value = config.ui.heatmap_highlights[tostring(level)]
+        end
+        if type(value) ~= "table" then
+          table.insert(errors, string.format("ui.heatmap_highlights[%d] must be a highlight table", level))
+        end
       end
     end
   end

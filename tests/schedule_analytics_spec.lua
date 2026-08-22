@@ -417,6 +417,47 @@ return function(T)
     assert_equal(metrics.overdue, 1, "analytics separates overdue from due-today cards")
     assert_equal(metrics.suspended, 1, "analytics counts suspended cards")
     assert_equal(metrics.buried, 1, "analytics counts buried cards")
+
+    local _, rating_spans = stats.ratings_section(analytic_entries, fixed_now, 42)
+    local rating_groups = {}
+    for _, span in ipairs(rating_spans) do
+      rating_groups[span.line] = span.hl
+    end
+    assert_equal(rating_groups[2], "NeorgFlashcardsAgain", "Again summary rows use the semantic group")
+    assert_equal(rating_groups[3], "NeorgFlashcardsHard", "Hard summary rows use the semantic group")
+    assert_equal(rating_groups[4], "NeorgFlashcardsGood", "Good summary rows use the semantic group")
+
+    local heat_entries = {}
+    for day_offset, count in ipairs({ 1, 3, 6, 10 }) do
+      for event = 1, count do
+        table.insert(heat_entries, {
+          type = "review",
+          event = "rated",
+          event_id = string.format("heat-%d-%d", day_offset, event),
+          epoch = fixed_now - (day_offset - 1) * 86400,
+          rating = 3,
+        })
+      end
+    end
+    local heat_lines, heat_spans = stats.heatmap_section(heat_entries, fixed_now, 4)
+    assert_equal(heat_lines[2], "  Less · ░ ▒ ▓ █ More", "heatmap includes a compact intensity legend")
+    local expected_heat = {
+      NeorgFlashcardsHeat0 = "·",
+      NeorgFlashcardsHeat1 = "░",
+      NeorgFlashcardsHeat2 = "▒",
+      NeorgFlashcardsHeat3 = "▓",
+      NeorgFlashcardsHeat4 = "█",
+    }
+    local rendered_heat = {}
+    for _, span in ipairs(heat_spans) do
+      if span.line > 3 and expected_heat[span.hl] then
+        rendered_heat[span.hl] = heat_lines[span.line]:sub(span.start_col + 1, span.end_col)
+      end
+    end
+    for group, glyph in pairs(expected_heat) do
+      assert_equal(rendered_heat[group], glyph, group .. " remains distinguishable without color")
+    end
+
     local forecast = stats.forecast_counts(analytic_cards, fixed_now, 7)
     assert_equal(forecast[1], 2, "forecast puts new and overdue active cards in today's bucket")
     assert_equal(vim.tbl_count(forecast), 7, "forecast returns the requested horizon")

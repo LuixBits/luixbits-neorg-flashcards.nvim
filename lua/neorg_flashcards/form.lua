@@ -5,11 +5,13 @@
 local popup = require("neorg_flashcards.popup")
 local schema = require("neorg_flashcards.schema")
 local actions = require("neorg_flashcards.ui.actions")
+local highlights = require("neorg_flashcards.highlights")
 local util = require("neorg_flashcards.util")
 
 local M = {}
 
 local namespace = vim.api.nvim_create_namespace("neorg_flashcards_form")
+local FORM_HIGHLIGHTS = highlights.groups.form
 
 local generation_counter = 0
 
@@ -68,23 +70,6 @@ end
 
 function M.is_open()
   return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
-end
-
-local function ensure_highlights()
-  local links = {
-    NeorgFlashcardsFormActive = "CursorLine",
-    NeorgFlashcardsFormError = "DiagnosticError",
-    NeorgFlashcardsFormHint = "Comment",
-    NeorgFlashcardsFormLabel = "Identifier",
-    NeorgFlashcardsFormMuted = "Comment",
-    NeorgFlashcardsFormRequired = "DiagnosticWarn",
-    NeorgFlashcardsFormStatusOk = "DiagnosticOk",
-    NeorgFlashcardsFormStatusWarn = "DiagnosticWarn",
-    NeorgFlashcardsFormTarget = "Directory",
-  }
-  for name, link in pairs(links) do
-    vim.api.nvim_set_hl(0, name, { default = true, link = link })
-  end
 end
 
 local function copy_lines(lines)
@@ -178,28 +163,28 @@ end
 local function status_chunks()
   if state.status then
     local prefix = "  "
-    local highlight = "NeorgFlashcardsFormHint"
+    local highlight = FORM_HIGHLIGHTS.hint
     if state.status.kind == "saved" then
       prefix = "  ✓ "
-      highlight = "NeorgFlashcardsFormStatusOk"
+      highlight = FORM_HIGHLIGHTS.status_ok
     elseif state.status.kind == "warning" then
       prefix = "  ! "
-      highlight = "NeorgFlashcardsFormStatusWarn"
+      highlight = FORM_HIGHLIGHTS.status_warn
     elseif state.status.kind == "error" then
       prefix = "  ! "
-      highlight = "NeorgFlashcardsFormError"
+      highlight = FORM_HIGHLIGHTS.error
     end
     return { { prefix .. state.status.text, highlight } }
   end
 
   local field = state.fields[state.selected]
   if field and state.errors[state.selected] then
-    return { { "  ! " .. state.errors[state.selected], "NeorgFlashcardsFormError" } }
+    return { { "  ! " .. state.errors[state.selected], FORM_HIGHLIGHTS.error } }
   end
   if field and not util.isempty(field.help) then
     return {
-      { "  Hint  ", "NeorgFlashcardsFormMuted" },
-      { one_line(field.help), "NeorgFlashcardsFormHint" },
+      { "  Hint  ", FORM_HIGHLIGHTS.muted },
+      { one_line(field.help), FORM_HIGHLIGHTS.hint },
     }
   end
 
@@ -212,9 +197,9 @@ local function status_chunks()
   end
   if remaining > 0 then
     local suffix = remaining == 1 and "field" or "fields"
-    return { { string.format("  %d required %s remaining", remaining, suffix), "NeorgFlashcardsFormMuted" } }
+    return { { string.format("  %d required %s remaining", remaining, suffix), FORM_HIGHLIGHTS.muted } }
   end
-  return { { "  Ready to save", "NeorgFlashcardsFormStatusOk" } }
+  return { { "  Ready to save", FORM_HIGHLIGHTS.status_ok } }
 end
 
 local function render()
@@ -222,7 +207,6 @@ local function render()
     return
   end
 
-  ensure_highlights()
   state.selected = selected_row()
   vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 
@@ -236,23 +220,23 @@ local function render()
       priority = 100,
       right_gravity = false,
       virt_text = {
-        { "  " .. title, "NeorgFlashcardsFormLabel" },
-        { marker, "NeorgFlashcardsFormRequired" },
-        { padding .. "  │ ", "NeorgFlashcardsFormMuted" },
+        { "  " .. title, FORM_HIGHLIGHTS.label },
+        { marker, FORM_HIGHLIGHTS.required },
+        { padding .. "  │ ", FORM_HIGHLIGHTS.muted },
       },
       virt_text_pos = "inline",
     }
     if index == state.selected then
-      options.line_hl_group = "NeorgFlashcardsFormActive"
+      options.line_hl_group = FORM_HIGHLIGHTS.active
     end
     vim.api.nvim_buf_set_extmark(state.buf, namespace, index - 1, 0, options)
 
     local value = lines[index] or ""
     local decoration
     if state.errors[index] then
-      decoration = { "  " .. state.errors[index], "NeorgFlashcardsFormError" }
+      decoration = { "  " .. state.errors[index], FORM_HIGHLIGHTS.error }
     elseif util.isempty(value) and not util.isempty(field.placeholder) then
-      decoration = { "  " .. one_line(field.placeholder), "NeorgFlashcardsFormMuted" }
+      decoration = { "  " .. one_line(field.placeholder), FORM_HIGHLIGHTS.muted }
     end
     if decoration then
       vim.api.nvim_buf_set_extmark(state.buf, namespace, index - 1, #value, {
@@ -269,8 +253,8 @@ local function render()
     priority = 90,
     virt_lines = {
       {
-        { "  Target  ", "NeorgFlashcardsFormMuted" },
-        { target_label, "NeorgFlashcardsFormTarget" },
+        { "  Target  ", FORM_HIGHLIGHTS.muted },
+        { target_label, FORM_HIGHLIGHTS.target },
       },
     },
     virt_lines_above = true,

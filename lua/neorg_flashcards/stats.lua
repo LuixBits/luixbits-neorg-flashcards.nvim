@@ -2,6 +2,7 @@
 -- JSONL review ledger.
 
 local history = require("neorg_flashcards.history")
+local highlights = require("neorg_flashcards.highlights")
 local schedule = require("neorg_flashcards.schedule")
 local util = require("neorg_flashcards.util")
 
@@ -10,23 +11,10 @@ local M = {}
 local WEEKS = 20
 local SECONDS_PER_DAY = 86400
 
-local HEAT = {
-  [0] = "NeorgFlashcardsHeat0",
-  "NeorgFlashcardsHeat1",
-  "NeorgFlashcardsHeat2",
-  "NeorgFlashcardsHeat3",
-  "NeorgFlashcardsHeat4",
-}
+local HEAT = highlights.groups.heatmap
+local HEAT_GLYPHS = { [0] = "·", "░", "▒", "▓", "█" }
 
 local config = {}
-
-local function define_highlights()
-  vim.api.nvim_set_hl(0, HEAT[0], { link = "NonText", default = true })
-  vim.api.nvim_set_hl(0, HEAT[1], { fg = "#0e4429", ctermfg = 22, default = true })
-  vim.api.nvim_set_hl(0, HEAT[2], { fg = "#006d32", ctermfg = 28, default = true })
-  vim.api.nvim_set_hl(0, HEAT[3], { fg = "#26a641", ctermfg = 35, default = true })
-  vim.api.nvim_set_hl(0, HEAT[4], { fg = "#39d353", ctermfg = 41, default = true })
-end
 
 -- Day arithmetic goes through os.date/os.time normalization (anchored at
 -- noon), so DST transitions do not shift a heatmap cell into another day.
@@ -268,9 +256,9 @@ function M.ratings_section(entries, now, width)
   table.insert(lines, string.format("  Median answer %s · %d hint-assisted", median_text, data.hints))
   return span_all(lines, {
     [1] = "Title",
-    [2] = "DiagnosticError",
-    [3] = "DiagnosticWarn",
-    [4] = "DiagnosticOk",
+    [2] = highlights.groups.rating.again,
+    [3] = highlights.groups.rating.hard,
+    [4] = highlights.groups.rating.good,
     [5] = "Comment",
   })
 end
@@ -311,6 +299,22 @@ function M.heatmap_section(entries, now, weeks)
   local lines = { "  Last " .. weeks .. " weeks" }
   local spans = { { line = 1, start_col = 0, end_col = -1, hl = "Title" } }
 
+  local legend = "  Less "
+  for level = 0, 4 do
+    if level > 0 then
+      legend = legend .. " "
+    end
+    local glyph = HEAT_GLYPHS[level]
+    table.insert(spans, {
+      line = 2,
+      start_col = #legend,
+      end_col = #legend + #glyph,
+      hl = HEAT[level],
+    })
+    legend = legend .. glyph
+  end
+  table.insert(lines, legend .. " More")
+
   local weekday = os.date("*t", now).wday -- 1 = Sunday
   local monday_offset = (weekday + 5) % 7
   local first_monday = add_days(noon, -monday_offset - (weeks - 1) * 7)
@@ -329,7 +333,7 @@ function M.heatmap_section(entries, now, weeks)
     end
   end
   table.insert(lines, month_header)
-  table.insert(spans, { line = 2, start_col = 0, end_col = -1, hl = "Comment" })
+  table.insert(spans, { line = #lines, start_col = 0, end_col = -1, hl = "Comment" })
 
   local names = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" }
   for row = 0, 6 do
@@ -340,7 +344,7 @@ function M.heatmap_section(entries, now, weeks)
         line = line .. "  "
       else
         local level = heat_level(counts[day_key(epoch)] or 0)
-        local glyph = level == 0 and "·" or "■"
+        local glyph = HEAT_GLYPHS[level]
         table.insert(spans, {
           line = #lines + 1,
           start_col = #line,
@@ -416,7 +420,6 @@ end
 function M.setup(opts)
   config = opts or {}
   history.setup(config)
-  define_highlights()
 end
 
 return M

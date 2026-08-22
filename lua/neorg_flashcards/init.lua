@@ -1,6 +1,7 @@
 local form = require("neorg_flashcards.form")
 local help = require("neorg_flashcards.help")
 local health = require("neorg_flashcards.health")
+local highlights = require("neorg_flashcards.highlights")
 local history = require("neorg_flashcards.history")
 local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
@@ -24,11 +25,8 @@ local defaults = {
   leech_threshold = 8,
   ui = {
     show_shortcuts = true,
-    rating_highlights = {
-      again = { link = "DiagnosticError" },
-      hard = { link = "DiagnosticWarn" },
-      good = { link = "DiagnosticOk" },
-    },
+    rating_highlights = vim.deepcopy(highlights.defaults.rating_highlights),
+    heatmap_highlights = vim.deepcopy(highlights.defaults.heatmap_highlights),
   },
 }
 
@@ -1012,6 +1010,19 @@ function M.setup(opts)
       end
     end
   end
+  local heatmap_overrides = type(opts) == "table" and type(opts.ui) == "table" and opts.ui.heatmap_highlights or nil
+  if type(heatmap_overrides) == "table" then
+    for level = 0, 4 do
+      local override = heatmap_overrides[level]
+      if override == nil then
+        override = heatmap_overrides[tostring(level)]
+      end
+      if override ~= nil then
+        next_config.ui.heatmap_highlights[level] = vim.deepcopy(override)
+      end
+      next_config.ui.heatmap_highlights[tostring(level)] = nil
+    end
+  end
   for _, path_option in ipairs({ "flashcards_dir", "default_file" }) do
     if type(next_config[path_option]) ~= "string" then
       error("neorg_flashcards.setup: " .. path_option .. " must be a string", 2)
@@ -1352,6 +1363,7 @@ function M.setup(opts)
       end
     end,
   })
+  highlights.setup(config)
   health.setup(config)
   stats.setup(config)
   help.setup(config)

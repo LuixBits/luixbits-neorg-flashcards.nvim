@@ -15,6 +15,30 @@ return function(T)
   local fixed_now = T.fixed_now
   local config = T.config
 
+  local rating_labels = {
+    NeorgFlashcardsAgain = "Again",
+    NeorgFlashcardsHard = "Hard",
+    NeorgFlashcardsGood = "Good",
+  }
+
+  local function semantic_rating_marks(bufnr)
+    local marks = {}
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, -1, 0, -1, { details = true })) do
+      local details = mark[4] or {}
+      local label = rating_labels[details.hl_group]
+      if label then
+        local line = lines[mark[2] + 1]
+        table.insert(marks, {
+          group = details.hl_group,
+          label = line:sub(mark[3] + 1, details.end_col),
+          line = line,
+        })
+      end
+    end
+    return marks
+  end
+
   local cloze_path = T.collection_dir .. "/review-cloze.norg"
   vim.fn.writefile({
     "@flashcard japanese",
@@ -60,8 +84,8 @@ return function(T)
   vim.fn.writefile({
     "@flashcard japanese",
     "id: fc_review_forest",
-    "japanese: 森",
-    "english: forest",
+    "japanese: Good morning",
+    "english: Hard Again Good",
     "@end",
   }, summary_path)
   vim.cmd.edit(vim.fn.fnameescape(summary_path))
@@ -75,6 +99,7 @@ return function(T)
   vim.cmd("Flashcards review file")
   do
     local review_popup = vim.api.nvim_get_current_buf()
+    assert_equal(#semantic_rating_marks(review_popup), 0, "rating words in card text are not colored before reveal")
     assert_buffer_maps(review_popup, { "q", "?", "j", "k", "1", "2", "3" })
     assert_contains(window_footer(), "Enter/Space reveal", "question review shows its current shortcuts")
 
@@ -113,6 +138,14 @@ return function(T)
   local _, revealed_text = current_popup()
   assert_contains(revealed_text, "Choose a rating", "first rating key reveals the answer and interval choices")
   assert_contains(revealed_text, "1 Again", "revealed card previews the Again interval")
+  do
+    local marks = semantic_rating_marks(vim.api.nvim_get_current_buf())
+    assert_equal(#marks, 3, "only the three revealed rating controls receive semantic colors")
+    for _, mark in ipairs(marks) do
+      assert_equal(mark.label, rating_labels[mark.group], "rating highlights cover the exact control label")
+      assert_contains(mark.line, "1 Again", "revealed semantic spans stay on the generated control row")
+    end
+  end
   assert_equal(flashcards.get_review_state().reviewed, 0, "reveal gating does not count an answer")
   assert_contains(window_footer(), "1/2/3 rate", "revealed review promotes rating shortcuts")
 
@@ -145,6 +178,14 @@ return function(T)
   assert_true(review_engine.rate_current(3, { require_reveal = true }), "rating succeeds after reveal")
   local _, completed_text = current_popup()
   assert_contains(completed_text, "Session complete", "finite review renders an explicit completion screen")
+  do
+    local marks = semantic_rating_marks(vim.api.nvim_get_current_buf())
+    assert_equal(#marks, 3, "completion colors only the three generated rating summary labels")
+    for _, mark in ipairs(marks) do
+      assert_equal(mark.label, rating_labels[mark.group], "completion highlights cover exact rating labels")
+      assert_true(mark.line:match("^%d%s%s") ~= nil, "completion semantic spans stay on generated summary rows")
+    end
+  end
   local completed_state = flashcards.get_review_state()
   assert_true(completed_state.completed, "finite review exposes completion state")
   assert_equal(completed_state.reviewed, 1, "completion reports the accepted rating")

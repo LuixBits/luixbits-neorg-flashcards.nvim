@@ -4,7 +4,12 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
-No unreleased changes yet.
+- Centralized every plugin highlight group and restore them after colorscheme
+  changes. Rating and heatmap colors can be overridden when a theme needs it.
+- Replaced the fixed-green, color-only heatmap with theme-linked levels,
+  distinct activity glyphs, and a compact legend.
+- Limited rating colors to generated controls and summaries so words such as
+  `Good` in card content keep the normal card highlight.
 
 ## 0.2.0 - 2026-08-22
 

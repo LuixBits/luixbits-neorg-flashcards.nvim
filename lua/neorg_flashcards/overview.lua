@@ -1,6 +1,7 @@
 -- A full-tab flashcard hub with Overview, Cards, and Stats pages.
 
 local actions = require("neorg_flashcards.ui.actions")
+local highlights = require("neorg_flashcards.highlights")
 local popup = require("neorg_flashcards.popup")
 local review = require("neorg_flashcards.review")
 local schedule = require("neorg_flashcards.schedule")
@@ -14,30 +15,7 @@ local GLYPH = "●"
 local PAGES = { "overview", "cards", "stats" }
 local SORTS = { "due", "front", "state", "source" }
 
-local HIGHLIGHTS = {
-  due = "NeorgFlashcardsDue",
-  overdue = "NeorgFlashcardsOverdue",
-  soon = "NeorgFlashcardsSoon",
-  scheduled = "NeorgFlashcardsScheduled",
-  new = "NeorgFlashcardsNew",
-  learning = "NeorgFlashcardsLearning",
-  review = "NeorgFlashcardsReview",
-  relearning = "NeorgFlashcardsLearning",
-  suspended = "NeorgFlashcardsSuspended",
-  buried = "NeorgFlashcardsBuried",
-  invalid = "NeorgFlashcardsInvalid",
-  active = "NeorgFlashcardsActive",
-  title = "NeorgFlashcardsGroupTitle",
-  muted = "NeorgFlashcardsMuted",
-  selected = "NeorgFlashcardsSelected",
-  heading = "NeorgFlashcardsHeading",
-  accent = "NeorgFlashcardsAccent",
-  action = "NeorgFlashcardsPrimaryAction",
-  table_header = "NeorgFlashcardsTableHeader",
-  again = "NeorgFlashcardsAgain",
-  hard = "NeorgFlashcardsHard",
-  good = "NeorgFlashcardsGood",
-}
+local HIGHLIGHTS = vim.tbl_extend("force", {}, highlights.groups.hub, highlights.groups.rating)
 
 local config = {}
 local handlers = {}
@@ -83,51 +61,6 @@ local function same_hub(token)
     and token.tab == state.tab
     and token.main_buf == state.main.buf
     and M.is_open()
-end
-
-local function define_rating_highlight(name, fallback)
-  local rating_highlights = type(config.ui) == "table" and config.ui.rating_highlights or nil
-  local configured = type(rating_highlights) == "table" and rating_highlights[name] or nil
-  local value = type(configured) == "table" and vim.deepcopy(configured) or { link = fallback }
-  if vim.tbl_isempty(value) then
-    value = { link = fallback }
-  end
-  local ok, err = pcall(vim.api.nvim_set_hl, 0, HIGHLIGHTS[name], value)
-  if ok then
-    return
-  end
-  util.notify(
-    string.format("Invalid ui.rating_highlights.%s (%s); using %s", name, tostring(err), fallback),
-    vim.log.levels.WARN
-  )
-  vim.api.nvim_set_hl(0, HIGHLIGHTS[name], { link = fallback })
-end
-
-local function define_highlights()
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.due, { link = "DiagnosticWarn", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.overdue, { link = "DiagnosticError", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.soon, { link = "DiagnosticWarn", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.scheduled, { link = "DiagnosticOk", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.new, { link = "DiagnosticInfo", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.learning, { link = "Special", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.review, { link = "Type", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.suspended, { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.buried, { link = "NonText", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.invalid, { link = "DiagnosticError", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.active, { link = "DiagnosticOk", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.title, { link = "Title", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.muted, { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.selected, { link = "Visual", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.heading, { link = "Title", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.accent, { link = "Special", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.action, { link = "IncSearch", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.table_header, { link = "Identifier", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsTabActive", { link = "TabLineSel", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsTabInactive", { link = "TabLine", default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsFooter", { link = "StatusLine", default = true })
-  define_rating_highlight("again", "DiagnosticError")
-  define_rating_highlight("hard", "DiagnosticWarn")
-  define_rating_highlight("good", "DiagnosticOk")
 end
 
 local function lower(value)
@@ -1097,16 +1030,6 @@ local function add_optional_stats_section(lines, spans, name, ...)
   if not ok then
     return false
   end
-  if name == "ratings_section" then
-    local rating_groups = {
-      DiagnosticError = HIGHLIGHTS.again,
-      DiagnosticWarn = HIGHLIGHTS.hard,
-      DiagnosticOk = HIGHLIGHTS.good,
-    }
-    for _, span in ipairs(section_spans or {}) do
-      span.hl = rating_groups[span.hl] or span.hl
-    end
-  end
   add_line(lines, spans, "")
   append_section(lines, spans, section_lines, section_spans)
   return true
@@ -1177,12 +1100,12 @@ local function statusline_escape(text)
 end
 
 local function tab_bar()
-  local chunks = { "%#NeorgFlashcardsHeading#  Flashcards  " }
+  local chunks = { "%#" .. HIGHLIGHTS.heading .. "#  Flashcards  " }
   for index, page in ipairs(PAGES) do
     local label = page:sub(1, 1):upper() .. page:sub(2)
-    local hl = page == state.page and "NeorgFlashcardsTabActive" or "NeorgFlashcardsTabInactive"
+    local hl = page == state.page and HIGHLIGHTS.tab_active or HIGHLIGHTS.tab_inactive
     table.insert(chunks, string.format("%%#%s# %d %s ", hl, index, label))
-    table.insert(chunks, "%#NeorgFlashcardsMuted# ")
+    table.insert(chunks, "%#" .. HIGHLIGHTS.muted .. "# ")
   end
   return table.concat(chunks)
 end
@@ -1201,11 +1124,11 @@ local function apply_chrome()
       -- primary pane and use the always-visible secondary winbar as the key
       -- ribbon. The statusline remains a useful fallback for simpler setups.
       if pane == state.side and show_shortcuts() then
-        vim.wo[pane.win].winbar = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
+        vim.wo[pane.win].winbar = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
       else
         vim.wo[pane.win].winbar = nav
       end
-      vim.wo[pane.win].statusline = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
+      vim.wo[pane.win].statusline = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
     end
   end
 end
@@ -2055,7 +1978,6 @@ end
 function M.setup(opts, extra_handlers)
   config = opts or {}
   handlers = extra_handlers or {}
-  define_highlights()
   local group = vim.api.nvim_create_augroup("neorg_flashcards_overview", { clear = true })
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
@@ -2065,10 +1987,6 @@ function M.setup(opts, extra_handlers)
         render()
       end
     end,
-  })
-  vim.api.nvim_create_autocmd("ColorScheme", {
-    group = group,
-    callback = define_highlights,
   })
   vim.api.nvim_create_autocmd("WinClosed", {
     group = group,
