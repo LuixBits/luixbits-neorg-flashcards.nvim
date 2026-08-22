@@ -40,8 +40,10 @@ return function(T)
   assert_contains(overview_text, "untagged", "overview groups cards without tags")
   assert_contains(overview_text, "nature · 2 cards · 2 due", "overview counts cards and due per group")
   assert_contains(overview_text, "▸", "overview shows the selected card marker")
-  assert_contains(overview_text, "● due", "overview shows the color legend")
+  assert_contains(overview_text, "● overdue   ● due   ● scheduled", "overview shows every timing state")
+  assert_true(not overview_text:find("● soon", 1, true), "overview does not advertise an unused timing state")
   assert_contains(overview_text, "山 — mountain", "card lines show front and reveal")
+  assert_contains(overview_text, "due now", "a new card has an honest ready-now label")
   assert_buffer_maps(overview_popup, {
     "q",
     "<Esc>",

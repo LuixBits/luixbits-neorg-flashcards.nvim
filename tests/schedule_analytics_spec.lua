@@ -102,6 +102,8 @@ return function(T)
     }, fixed_now, schedule.DEFAULTS)
     assert_equal(overdue_state.lifecycle, "review", "mature cards use the review lifecycle")
     assert_equal(overdue_state.timing, "overdue", "a card due before today is overdue")
+    local scheduled_state = schedule.card_state({ values = { due = "2026-08-20 18:00" } }, fixed_now, schedule.DEFAULTS)
+    assert_equal(scheduled_state.timing, "scheduled", "a future card later today is scheduled")
 
     local suspended_card = {
       values = { availability = "suspended", due = "2020-01-01 00:00" },

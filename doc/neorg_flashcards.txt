@@ -373,8 +373,9 @@ The hub presents three independent state axes:
   Lifecycle    new, learning, review, relearning
                Inferred when absent and written after ratings.
 
-  Timing       new, due, overdue, soon, scheduled
-               Derived for display from `due` and the current time.
+  Timing       due, overdue, scheduled
+               `due` is absent or reached today, predates today, or is still
+               in the future.
 
   Availability active, suspended, buried
                Controls whether normal due review can select the card.

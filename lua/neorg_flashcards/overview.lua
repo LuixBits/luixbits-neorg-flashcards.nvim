@@ -81,8 +81,7 @@ end
 
 local function is_ready(card, now)
   local status = card_state(card, now)
-  return status.availability == "active"
-    and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
+  return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
 end
 
 local function card_tags(card)
@@ -264,10 +263,10 @@ local function count_states(cards, now)
         result.due = result.due + 1
       elseif status.timing == "overdue" then
         result.overdue = result.overdue + 1
-      elseif status.timing == "scheduled" or status.timing == "soon" then
+      elseif status.timing == "scheduled" then
         result.scheduled = result.scheduled + 1
       end
-      if status.timing == "new" or status.timing == "due" or status.timing == "overdue" then
+      if status.timing == "due" or status.timing == "overdue" then
         result.ready = result.ready + 1
         if status.lifecycle == "new" then
           result.ready_new = result.ready_new + 1
@@ -284,7 +283,7 @@ local function status_label(status)
   elseif status.availability == "buried" then
     return "BURIED", HIGHLIGHTS.buried
   end
-  local labels = { overdue = "OVERDUE", due = "DUE", soon = "SOON", scheduled = "SCHEDULED", new = "NEW" }
+  local labels = { overdue = "OVERDUE", due = "DUE", scheduled = "SCHEDULED" }
   return labels[status.timing] or status.timing:upper(), HIGHLIGHTS[status.timing] or HIGHLIGHTS.muted
 end
 
@@ -305,14 +304,16 @@ local function status_text(card, now)
   local status = card_state(card, now)
   if status.availability ~= "active" then
     return status.availability
-  elseif status.timing == "new" then
-    return "new"
-  elseif status.timing == "due" or status.timing == "overdue" then
-    return "due " .. util.trim(card.values.due)
-  elseif status.timing == "soon" then
-    return "soon · " .. util.trim(card.values.due)
   end
-  return util.trim(card.values.due)
+  local due = util.trim(card.values.due)
+  if status.timing == "due" then
+    return due == "" and "due now" or "due · " .. due
+  elseif status.timing == "overdue" then
+    return "overdue · " .. due
+  elseif status.timing == "scheduled" then
+    return "scheduled · " .. due
+  end
+  return status.timing
 end
 
 local function selected_overview_entry()
@@ -425,14 +426,10 @@ local function build_overview()
     ),
     HIGHLIGHTS.muted
   )
-  add_line(
-    lines,
-    spans,
-    "  " .. GLYPH .. " due   " .. GLYPH .. " soon   " .. GLYPH .. " scheduled   " .. GLYPH .. " new"
-  )
+  add_line(lines, spans, "  " .. GLYPH .. " overdue   " .. GLYPH .. " due   " .. GLYPH .. " scheduled")
   local legend_line = #lines
   local at = 2
-  for _, key in ipairs({ "due", "soon", "scheduled", "new" }) do
+  for _, key in ipairs({ "overdue", "due", "scheduled" }) do
     add_span(spans, legend_line, at, at + #GLYPH, HIGHLIGHTS[key])
     at = at + #GLYPH + #" " + #key + 3
   end
@@ -582,12 +579,11 @@ local function matches_filter(card, now, filter)
   end
   local status = card_state(card, now)
   if filter == "ready" then
-    return status.availability == "active"
-      and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
+    return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
   elseif filter == "due" then
     return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
   elseif filter == "scheduled" then
-    return status.availability == "active" and (status.timing == "scheduled" or status.timing == "soon")
+    return status.availability == "active" and status.timing == "scheduled"
   elseif filter == "suspended" or filter == "buried" then
     return status.availability == filter
   elseif filter == "new" or filter == "learning" or filter == "review" or filter == "relearning" then
@@ -735,7 +731,7 @@ local function build_cards_browser()
       label = "[" .. status_name .. "]"
       due = util.trim(card.values.due)
       answer = card_answer(card)
-      if due == "" and (status.timing == "new" or status.timing == "due" or status.timing == "overdue") then
+      if due == "" and (status.timing == "due" or status.timing == "overdue") then
         due = "now"
       end
     end

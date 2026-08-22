@@ -324,7 +324,8 @@ available; `<leader>nc` also opens it when `keymaps.enable = true`.
 3. Run `:Flashcards`, or map it to `<leader>nc`, to open the hub.
 4. Press `a`, fill every required field, then press `Ctrl-S`. You can also press
    `Enter` through the fields; `Enter` on the last field saves. The form creates
-   the stable ID and returns to Overview, where the card appears as `NEW`.
+   the stable ID and returns to Overview, where the card is shown as `due now`.
+   It remains in the `new` lifecycle until its first rating.
 5. Press `Enter` on Overview. New cards are included in the due queue.
 6. Reveal with `Space` or `Enter`, then press `1`, `2`, or `3` to rate the card.
 7. Press `?` anywhere in the hub, review, or form for current shortcuts. Use
@@ -539,7 +540,7 @@ The hub presents card state as three separate axes:
 | Axis | Values | Meaning |
 | --- | --- | --- |
 | Lifecycle | `new`, `learning`, `review`, `relearning` | Learning progress; inferred when absent and written after ratings |
-| Timing | `new`, `due`, `overdue`, `soon`, `scheduled` | A display state derived from `due:` and the current time |
+| Timing | `due`, `overdue`, `scheduled` | `due:` is absent or reached today, predates today, or is still in the future |
 | Availability | `active`, `suspended`, `buried` | Whether normal due review can select the card |
 
 Suspended cards stay out of due review until resumed. Buried cards stay out

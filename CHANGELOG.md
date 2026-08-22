@@ -4,10 +4,12 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
-- Centralized every plugin highlight group and restore them after colorscheme
+- Centralized every plugin highlight group and restored them after colorscheme
   changes. Rating and heatmap colors can be overridden when a theme needs it.
 - Replaced the fixed-green, color-only heatmap with theme-linked levels,
   distinct activity glyphs, and a compact legend.
+- Removed the never-emitted `new` and `soon` timing branches. New remains a
+  lifecycle state; timing is now consistently due, overdue, or scheduled.
 - Limited rating colors to generated controls and summaries so words such as
   `Good` in card content keep the normal card highlight.
 - Added pinned lazy.nvim and Nix examples, a native-package install path, an
