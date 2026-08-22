@@ -56,12 +56,29 @@ local function resolve_destination(path, opts)
   return destination
 end
 
-local function buffer_matches_destination(bufnr, destination, opts)
-  if not vim.api.nvim_buf_is_valid(bufnr) then
+local function same_destination(left, right)
+  if left == right then
+    return true
+  elseif util.isempty(left) or util.isempty(right) then
     return false
   end
-  local buffer_destination = resolve_destination(vim.api.nvim_buf_get_name(bufnr), opts)
-  return buffer_destination == destination
+  local uv = vim.uv or vim.loop
+  local left_stat = uv.fs_stat(left)
+  local right_stat = uv.fs_stat(right)
+  return left_stat
+    and right_stat
+    and left_stat.dev ~= nil
+    and left_stat.ino ~= nil
+    and left_stat.dev == right_stat.dev
+    and left_stat.ino == right_stat.ino
+end
+
+local function buffer_matches_destination(bufnr, destination, opts)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false, nil, "source buffer is no longer valid"
+  end
+  local buffer_destination, buffer_err = resolve_destination(vim.api.nvim_buf_get_name(bufnr), opts)
+  return same_destination(buffer_destination, destination), buffer_destination, buffer_err
 end
 
 local function ensure_destination_parent(path, opts)
@@ -437,13 +454,15 @@ local function write_source_lines(path, bufnr, lines, opts)
 
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
     local prepared_destination, prepared_err = resolve_destination(path, destination_opts)
-    if
-      not prepared_destination
-      or prepared_destination ~= current_destination
-      or not buffer_matches_destination(bufnr, current_destination, destination_opts)
-    then
+    if not prepared_destination or not same_destination(prepared_destination, current_destination) then
       return restore_failure(
         prepared_err or "source changed while preparing this update; retry against the latest file"
+      )
+    end
+    local buffer_matches, _, buffer_err = buffer_matches_destination(bufnr, current_destination, destination_opts)
+    if not buffer_matches then
+      return restore_failure(
+        buffer_err or "source buffer changed while preparing this update; retry against the latest file"
       )
     end
 
@@ -467,13 +486,15 @@ local function write_source_lines(path, bufnr, lines, opts)
       return false, "source buffer was deleted by a pre-write hook", false
     end
     prepared_destination, prepared_err = resolve_destination(path, destination_opts)
-    if
-      not prepared_destination
-      or prepared_destination ~= current_destination
-      or not buffer_matches_destination(bufnr, current_destination, destination_opts)
-    then
+    if not prepared_destination or not same_destination(prepared_destination, current_destination) then
       return restore_failure(
         prepared_err or "source changed while preparing this update; retry against the latest file"
+      )
+    end
+    buffer_matches, _, buffer_err = buffer_matches_destination(bufnr, current_destination, destination_opts)
+    if not buffer_matches then
+      return restore_failure(
+        buffer_err or "source buffer changed while preparing this update; retry against the latest file"
       )
     end
 
@@ -497,12 +518,21 @@ local function write_source_lines(path, bufnr, lines, opts)
           return
         end
         local checked_destination, checked_err = resolve_destination(path, destination_opts)
+        local checked_buffer, _, checked_buffer_err =
+          buffer_matches_destination(bufnr, current_destination, destination_opts)
         if
           not checked_destination
-          or checked_destination ~= current_destination
-          or not buffer_matches_destination(bufnr, current_destination, destination_opts)
+          or not same_destination(checked_destination, current_destination)
+          or not checked_buffer
         then
           write_error = checked_err or "source changed while preparing this update; retry against the latest file"
+          if
+            checked_destination
+            and same_destination(checked_destination, current_destination)
+            and checked_buffer_err
+          then
+            write_error = checked_buffer_err
+          end
           writing = false
           return
         end
