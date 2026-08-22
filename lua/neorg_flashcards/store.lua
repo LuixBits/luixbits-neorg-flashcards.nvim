@@ -364,7 +364,6 @@ local function has_matching_custom_writer(bufnr)
   local name = vim.api.nvim_buf_get_name(bufnr)
   local tail = vim.fn.fnamemodify(name, ":t")
   local canonical = util.canonical_path(name)
-  local physical = (vim.uv or vim.loop).fs_realpath(name) or canonical
   for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "BufWriteCmd" })) do
     if autocmd.buf == bufnr then
       return true
@@ -373,7 +372,7 @@ local function has_matching_custom_writer(bufnr)
     if type(pattern) == "string" and pattern ~= "" then
       local ok_regex, regex = pcall(vim.fn.glob2regpat, pattern)
       if ok_regex then
-        local candidates = pattern:find("[/\\]") and { name, canonical, physical } or { tail }
+        local candidates = pattern:find("[/\\]") and { name, canonical } or { tail }
         for _, candidate in ipairs(candidates) do
           if candidate ~= "" and vim.fn.match(candidate, regex) >= 0 then
             return true
