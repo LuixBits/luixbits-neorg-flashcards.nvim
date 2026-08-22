@@ -1,14 +1,17 @@
-# ADR 0005: Use a value-only card composer
+# ADR 0005: Use one structured composer for add and edit
 
 - Status: Accepted
 - Date: 2026-08-22
+- Amended: 2026-08-22
 
 ## Context
 
 The first add form rendered each field as an editable label prefix followed by
 its value. Saving depended on every prefix remaining on its original physical
 line. Backspace, linewise editing, or multiline paste could therefore damage
-plugin-owned structure, and errors were found only after submission.
+plugin-owned structure, and errors were found only after submission. Editing
+an existing card still opened raw Neorg source, so add and edit offered very
+different levels of guidance and safety.
 
 The add path also changed a target buffer before running `:write`. A failed
 post-write hook could leave the card on disk while the form still appeared
@@ -28,6 +31,11 @@ protect a changed draft when closing.
   or window changes cannot redirect that draft.
 - Required fields are validated together, errors remain visible beside their
   fields, and focus moves to the first invalid value.
+- Valid existing cards open the same composer with their schema-owned values
+  filled in. Edit mode replaces only those schema-owned fields and preserves
+  the stable ID and scheduler metadata. Save-and-new is disabled while
+  editing. Invalid or malformed blocks continue to open as raw source because
+  structural repair requires the literal block to remain visible.
 - `Ctrl-S` saves and closes. `Ctrl-N` saves, restores schema defaults, and
   stays open for another card. Closing a changed draft requires confirmation.
 - The save callback returns an explicit `{ ok, persisted, path, message }`
@@ -45,9 +53,11 @@ protect a changed draft when closing.
 
 Deleting a visible label is impossible because labels are not stored in the
 draft. Failed validation or persistence leaves every value available for
-repair. Adding to a modified source preserves unrelated edits without writing
-them automatically, while post-write hook failures cannot cause duplicate
-cards on retry.
+repair. Adding or editing in a modified source preserves unrelated edits
+without writing them automatically, while post-write hook failures cannot
+cause duplicate cards on retry. Structured edit makes ordinary content
+changes consistent with creation without hiding malformed source that needs
+manual repair.
 
 Schemas may provide `title`, `placeholder`, and `help` presentation metadata.
 The composer requires Neovim 0.10's inline virtual text support. Multiline

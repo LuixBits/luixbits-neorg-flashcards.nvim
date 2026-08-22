@@ -1,6 +1,4 @@
--- A full-tab flashcard hub with Overview, Cards, and Stats pages. The public
--- API intentionally retains the original dashboard entry points so existing
--- integrations can move to the hub without a flag day.
+-- A full-tab flashcard hub with Overview, Cards, and Stats pages.
 
 local actions = require("neorg_flashcards.ui.actions")
 local popup = require("neorg_flashcards.popup")
@@ -36,6 +34,9 @@ local HIGHLIGHTS = {
   accent = "NeorgFlashcardsAccent",
   action = "NeorgFlashcardsPrimaryAction",
   table_header = "NeorgFlashcardsTableHeader",
+  again = "NeorgFlashcardsAgain",
+  hard = "NeorgFlashcardsHard",
+  good = "NeorgFlashcardsGood",
 }
 
 local config = {}
@@ -44,11 +45,10 @@ local provider = nil
 local ns = vim.api.nvim_create_namespace("neorg_flashcards_hub")
 
 local state = {
+  generation = 0,
   tab = nil,
-  -- These names are retained for compatibility. `cards` is the main region;
-  -- `stats` is the contextual secondary region.
-  cards = { buf = nil, win = nil },
-  stats = { buf = nil, win = nil },
+  main = { buf = nil, win = nil },
+  side = { buf = nil, win = nil },
   page = "overview",
   layout = nil,
   all_cards = {},
@@ -63,10 +63,45 @@ local state = {
   filter = "all",
   sort = "due",
   capabilities = {},
+  closing = false,
 }
 
 local peek = { buf = nil, win = nil }
 local key_help = { buf = nil, win = nil }
+
+local function hub_token()
+  return {
+    generation = state.generation,
+    tab = state.tab,
+    main_buf = state.main.buf,
+  }
+end
+
+local function same_hub(token)
+  return token ~= nil
+    and token.generation == state.generation
+    and token.tab == state.tab
+    and token.main_buf == state.main.buf
+    and M.is_open()
+end
+
+local function define_rating_highlight(name, fallback)
+  local rating_highlights = type(config.ui) == "table" and config.ui.rating_highlights or nil
+  local configured = type(rating_highlights) == "table" and rating_highlights[name] or nil
+  local value = type(configured) == "table" and vim.deepcopy(configured) or { link = fallback }
+  if vim.tbl_isempty(value) then
+    value = { link = fallback }
+  end
+  local ok, err = pcall(vim.api.nvim_set_hl, 0, HIGHLIGHTS[name], value)
+  if ok then
+    return
+  end
+  util.notify(
+    string.format("Invalid ui.rating_highlights.%s (%s); using %s", name, tostring(err), fallback),
+    vim.log.levels.WARN
+  )
+  vim.api.nvim_set_hl(0, HIGHLIGHTS[name], { link = fallback })
+end
 
 local function define_highlights()
   vim.api.nvim_set_hl(0, HIGHLIGHTS.due, { link = "DiagnosticWarn", default = true })
@@ -90,6 +125,9 @@ local function define_highlights()
   vim.api.nvim_set_hl(0, "NeorgFlashcardsTabActive", { link = "TabLineSel", bold = true, default = true })
   vim.api.nvim_set_hl(0, "NeorgFlashcardsTabInactive", { link = "TabLine", default = true })
   vim.api.nvim_set_hl(0, "NeorgFlashcardsFooter", { link = "StatusLine", default = true })
+  define_rating_highlight("again", "DiagnosticError")
+  define_rating_highlight("hard", "DiagnosticWarn")
+  define_rating_highlight("good", "DiagnosticOk")
 end
 
 local function lower(value)
@@ -100,95 +138,16 @@ local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
 end
 
-local function truthy(value)
-  value = lower(value)
-  return value == "1" or value == "true" or value == "yes" or value == "on"
-end
-
-local function valid_choice(value, choices, fallback)
-  value = lower(value)
-  for _, choice in ipairs(choices) do
-    if value == choice then
-      return value
-    end
-  end
-  return fallback
-end
-
-local function day_start(epoch)
-  local date = os.date("*t", epoch)
-  return os.time({ year = date.year, month = date.month, day = date.day, hour = 0, min = 0, sec = 0 })
-end
-
--- schedule.card_status is supplied by newer model versions. Keeping this
--- normalizer local lets the UI work against older checkouts and custom card
--- providers too.
-local function card_status(card, now)
-  local model_status = nil
-  if type(schedule.card_status) == "function" then
-    local ok, value = pcall(schedule.card_status, card, now)
-    if ok and type(value) == "table" then
-      model_status = value
-    end
-  end
-
-  local values = (card and card.values) or {}
-  local explicit = lower(values.state ~= "" and values.state or values.status)
-  local availability = model_status and (model_status.availability or model_status.availability_state)
-  availability = valid_choice(availability or explicit, { "active", "suspended", "buried" }, "active")
-  if not model_status then
-    if truthy(values.suspended) then
-      availability = "suspended"
-    elseif truthy(values.buried) then
-      availability = "buried"
-    end
-  end
-
-  local score = schema.card_score(card)
-  local interval = tonumber(values.interval)
-  local lifecycle = model_status and (model_status.lifecycle or model_status.learning_state)
-  lifecycle = valid_choice(lifecycle, { "new", "learning", "review", "relearning" }, nil)
-  if not lifecycle then
-    if explicit == "new" or explicit == "learning" or explicit == "review" or explicit == "relearning" then
-      lifecycle = explicit
-    elseif not score then
-      lifecycle = "new"
-    elseif interval == 0 or (interval and interval < 1) then
-      lifecycle = score == 1 and "relearning" or "learning"
-    else
-      lifecycle = "review"
-    end
-  end
-
-  local due = schedule.parse_due(values.due)
-  local timing = model_status and (model_status.timing or model_status.due_state)
-  timing = valid_choice(timing, { "new", "due", "overdue", "soon", "scheduled" }, nil)
-  if not timing then
-    if not due then
-      timing = lifecycle == "new" and "new" or "due"
-    elseif due <= now then
-      timing = due < day_start(now) and "overdue" or "due"
-    elseif due <= now + 86400 then
-      timing = "soon"
-    else
-      timing = "scheduled"
-    end
-  end
-  if lifecycle == "new" and not due and timing == "due" then
-    timing = "new"
-  elseif timing == "scheduled" and due and due <= now + 86400 then
-    timing = "soon"
-  end
-
-  return { lifecycle = lifecycle, timing = timing, availability = availability, due = due }
+local function card_state(card, now)
+  return schedule.card_state(card, now, config.scheduling)
 end
 
 local function is_available(card, now)
-  return card_status(card, now).availability == "active"
+  return card_state(card, now).availability == "active"
 end
 
 local function is_ready(card, now)
-  local status = card_status(card, now)
+  local status = card_state(card, now)
   return status.availability == "active"
     and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
 end
@@ -363,7 +322,7 @@ local function count_states(cards, now)
     buried = 0,
   }
   for _, card in ipairs(cards) do
-    local status = card_status(card, now)
+    local status = card_state(card, now)
     result[status.lifecycle] = (result[status.lifecycle] or 0) + 1
     if status.availability ~= "active" then
       result[status.availability] = (result[status.availability] or 0) + 1
@@ -410,7 +369,7 @@ local function status_badges(status)
 end
 
 local function status_text(card, now)
-  local status = card_status(card, now)
+  local status = card_state(card, now)
   if status.availability ~= "active" then
     return status.availability
   elseif status.timing == "new" then
@@ -435,6 +394,11 @@ local function selected_card_is_invalid()
   return state.page == "cards" and selected_card_entry() and selected_card_entry().invalid == true
 end
 
+local function selected_card_is_unclosed()
+  local entry = state.page == "cards" and selected_card_entry() or nil
+  return entry and entry.card and entry.card.closed == false or false
+end
+
 local function selected_card()
   if state.page == "cards" then
     local entry = selected_card_entry()
@@ -446,16 +410,38 @@ local function selected_card()
   return entry and entry.card
 end
 
+local function current_action_state()
+  local action_state = vim.deepcopy(state.capabilities)
+  local card = selected_card()
+  local invalid = selected_card_is_invalid()
+  if state.page == "cards" then
+    local availability = card and not invalid and card_state(card, os.time()).availability or nil
+    action_state.review_selected = card ~= nil and not invalid and availability == "active"
+  end
+  if state.page == "cards" and not card then
+    action_state.suspend, action_state.bury, action_state.delete = false, false, false
+  elseif invalid then
+    action_state.suspend, action_state.bury = false, false
+  end
+  if selected_card_is_unclosed() then
+    action_state.delete = false
+  end
+  if card and not invalid then
+    action_state.selected_availability = card_state(card, os.time()).availability
+  end
+  return action_state
+end
+
 local function main_width()
-  if state.cards.win and vim.api.nvim_win_is_valid(state.cards.win) then
-    return vim.api.nvim_win_get_width(state.cards.win)
+  if state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
+    return vim.api.nvim_win_get_width(state.main.win)
   end
   return math.max(40, math.floor(vim.o.columns * 0.64))
 end
 
 local function side_width()
-  if state.stats.win and vim.api.nvim_win_is_valid(state.stats.win) then
-    return vim.api.nvim_win_get_width(state.stats.win)
+  if state.side.win and vim.api.nvim_win_is_valid(state.side.win) then
+    return vim.api.nvim_win_get_width(state.side.win)
   end
   return 44
 end
@@ -556,7 +542,7 @@ local function build_overview()
       local status_col = #line
       line = line .. status_text(card, now)
       add_line(lines, spans, line)
-      local _, visual = status_label(card_status(card, now))
+      local _, visual = status_label(card_state(card, now))
       add_span(spans, #lines, glyph_col, glyph_col + #GLYPH, visual)
       if index == state.sel then
         add_span(spans, #lines, 2, 2 + #marker, HIGHLIGHTS.selected)
@@ -572,7 +558,7 @@ end
 local function build_overview_side()
   local now = os.time()
   local cards = state.all_cards
-  local log_entries, log_errors = stats.read_log()
+  local log_entries, log_errors = stats.read_history()
   local width = side_width()
   local weeks = math.max(4, math.min(14, math.floor((width - 8) / 2)))
   local lines, spans = {}, {}
@@ -594,9 +580,9 @@ local function build_overview_side()
   append_section(lines, spans, stats.summary_section(cards, log_entries, now))
   add_line(lines, spans, "")
   append_section(lines, spans, stats.forecast_section(cards, now, width))
-  local height = state.stats.win
-      and vim.api.nvim_win_is_valid(state.stats.win)
-      and vim.api.nvim_win_get_height(state.stats.win)
+  local height = state.side.win
+      and vim.api.nvim_win_is_valid(state.side.win)
+      and vim.api.nvim_win_get_height(state.side.win)
     or 30
   if height >= 24 then
     add_line(lines, spans, "")
@@ -615,13 +601,13 @@ local function build_overview_side()
   elseif counts.total == 0 then
     add_line(lines, spans, "  Add a small card you will be glad to remember.", HIGHLIGHTS.muted)
   else
-    add_line(lines, spans, "  Nothing is due. Browse weak cards or enjoy the win.", HIGHLIGHTS.scheduled)
+    add_line(lines, spans, "  Nothing is due. Browse challenging cards or enjoy the win.", HIGHLIGHTS.scheduled)
   end
   return lines, spans
 end
 
 local function searchable_text(card, now)
-  local status = card_status(card, now)
+  local status = card_state(card, now)
   return table
     .concat({
       card_front(card),
@@ -661,7 +647,7 @@ local function matches_filter(card, now, filter)
   if filter == "all" then
     return true
   end
-  local status = card_status(card, now)
+  local status = card_state(card, now)
   if filter == "ready" then
     return status.availability == "active"
       and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
@@ -710,7 +696,7 @@ local function filtered_card_entries()
     end
 
     local left_card, right_card = left.card, right.card
-    local left_status, right_status = card_status(left_card, now), card_status(right_card, now)
+    local left_status, right_status = card_state(left_card, now), card_state(right_card, now)
     local left_key, right_key
     if state.sort == "front" then
       left_key, right_key = card_front(left_card):lower(), card_front(right_card):lower()
@@ -810,7 +796,7 @@ local function build_cards_browser()
       due = invalid_source(entry)
       answer = entry.messages[1] or "invalid flashcard block"
     else
-      local status = card_status(card, now)
+      local status = card_state(card, now)
       local status_name
       status_name, badge_hl = status_label(status)
       label = "[" .. status_name .. "]"
@@ -862,7 +848,7 @@ local function detail_hint(status)
 end
 
 local function build_card_detail()
-  local entry = selected_card_entry()
+  local entry = state.page == "cards" and selected_card_entry() or nil
   local lines, spans = {}, {}
   add_line(lines, spans, " Card details", HIGHLIGHTS.heading)
   add_line(lines, spans, "")
@@ -907,12 +893,15 @@ local function build_card_detail()
     add_line(lines, spans, "")
     add_line(lines, spans, " Repair", HIGHLIGHTS.title)
     add_line(lines, spans, "  Press e to open the block, fix the errors, then R to refresh.", HIGHLIGHTS.accent)
-    if state.capabilities.delete then
+    if selected_card_is_unclosed() then
+      add_line(lines, spans, "  Add the missing @end before deleting this block.", HIGHLIGHTS.muted)
+    elseif state.capabilities.delete then
       add_line(lines, spans, "  Press D to delete this exact invalid block after confirmation.", HIGHLIGHTS.muted)
+      add_line(lines, spans, "  Unloaded sources keep a recoverable .flashcards-backup copy.", HIGHLIGHTS.muted)
     end
     return lines, spans
   end
-  local status = card_status(card, os.time())
+  local status = card_state(card, os.time())
   local badge_line = " "
   for _, badge in ipairs(status_badges(status)) do
     local start_col = #badge_line
@@ -972,10 +961,21 @@ local function build_card_detail()
   add_line(lines, spans, "")
   add_line(lines, spans, " Hint", HIGHLIGHTS.title)
   add_line(lines, spans, "  " .. truncate(detail_hint(status), math.max(20, side_width() - 4)), HIGHLIGHTS.accent)
-  if state.capabilities.delete then
+  if state.capabilities.suspend or state.capabilities.bury or state.capabilities.delete then
     add_line(lines, spans, "")
     add_line(lines, spans, " Actions", HIGHLIGHTS.title)
-    add_line(lines, spans, "  Press D to delete this card after confirmation.", HIGHLIGHTS.muted)
+    if state.capabilities.suspend then
+      local suspend_label = status.availability == "suspended" and "resume this card" or "suspend this card"
+      add_line(lines, spans, "  x  " .. suspend_label, HIGHLIGHTS.muted)
+    end
+    if state.capabilities.bury then
+      local bury_label = status.availability == "buried" and "unbury this card" or "bury this card until tomorrow"
+      add_line(lines, spans, "  b  " .. bury_label, HIGHLIGHTS.muted)
+    end
+    if state.capabilities.delete then
+      add_line(lines, spans, "  D  delete this card after confirmation", HIGHLIGHTS.muted)
+      add_line(lines, spans, "     unloaded source: keep a recoverable .flashcards-backup copy", HIGHLIGHTS.muted)
+    end
   end
   return lines, spans
 end
@@ -1060,15 +1060,15 @@ local function build_stats_insights()
       )
     end
   end
-  local weak = {}
+  local again_cards = {}
   for _, card in ipairs(state.all_cards) do
     if schema.card_score(card) == 1 then
-      table.insert(weak, card)
+      table.insert(again_cards, card)
     end
   end
   add_line(lines, spans, "")
   add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
-  if #weak == 0 then
+  if #again_cards == 0 then
     add_line(
       lines,
       spans,
@@ -1077,11 +1077,11 @@ local function build_stats_insights()
       HIGHLIGHTS.muted
     )
   else
-    for index = 1, math.min(5, #weak) do
+    for index = 1, math.min(5, #again_cards) do
       add_line(
         lines,
         spans,
-        "  " .. GLYPH .. " " .. truncate(card_front(weak[index]), math.max(20, main_width() - 8)),
+        "  " .. GLYPH .. " " .. truncate(card_front(again_cards[index]), math.max(20, main_width() - 8)),
         HIGHLIGHTS.overdue
       )
     end
@@ -1097,6 +1097,16 @@ local function add_optional_stats_section(lines, spans, name, ...)
   if not ok then
     return false
   end
+  if name == "ratings_section" then
+    local rating_groups = {
+      DiagnosticError = HIGHLIGHTS.again,
+      DiagnosticWarn = HIGHLIGHTS.hard,
+      DiagnosticOk = HIGHLIGHTS.good,
+    }
+    for _, span in ipairs(section_spans or {}) do
+      span.hl = rating_groups[span.hl] or span.hl
+    end
+  end
   add_line(lines, spans, "")
   append_section(lines, spans, section_lines, section_spans)
   return true
@@ -1105,7 +1115,7 @@ end
 local function build_full_stats()
   local now = os.time()
   local cards = state.all_cards
-  local log_entries, log_errors = stats.read_log()
+  local log_entries, log_errors = stats.read_history()
   local width = side_width()
   local weeks = math.max(4, math.min(20, math.floor((width - 8) / 2)))
   local lines, spans = {}, {}
@@ -1179,17 +1189,18 @@ end
 
 local function apply_chrome()
   local nav = tab_bar()
-  for _, pane in ipairs({ state.cards, state.stats }) do
+  local action_state = current_action_state()
+  for _, pane in ipairs({ state.main, state.side }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) then
       local footer = " "
       if show_shortcuts() then
-        footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), state.capabilities)
+        footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), action_state)
       end
       -- A global statusline (for example lualine with laststatus=3) can replace
       -- a window-local statusline after we render. Keep the page tabs in the
       -- primary pane and use the always-visible secondary winbar as the key
       -- ribbon. The statusline remains a useful fallback for simpler setups.
-      if pane == state.stats and show_shortcuts() then
+      if pane == state.side and show_shortcuts() then
         vim.wo[pane.win].winbar = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
       else
         vim.wo[pane.win].winbar = nav
@@ -1214,15 +1225,15 @@ local function render()
     main_lines, main_spans, state.entries = build_overview()
     side_lines, side_spans = build_overview_side()
   end
-  set_pane_lines(state.cards, main_lines)
-  paint(state.cards, main_spans)
-  set_pane_lines(state.stats, side_lines)
-  paint(state.stats, side_spans)
+  set_pane_lines(state.main, main_lines)
+  paint(state.main, main_spans)
+  set_pane_lines(state.side, side_lines)
+  paint(state.side, side_spans)
   apply_chrome()
   local entry = state.page == "cards" and selected_card_entry()
     or (state.page == "overview" and selected_overview_entry())
-  if entry and state.cards.win and vim.api.nvim_win_is_valid(state.cards.win) then
-    pcall(vim.api.nvim_win_set_cursor, state.cards.win, { entry.line, 0 })
+  if entry and state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
+    pcall(vim.api.nvim_win_set_cursor, state.main.win, { entry.line, 0 })
   end
 end
 
@@ -1309,7 +1320,7 @@ function M.review_selected()
     util.notify("This block is invalid and cannot be reviewed; press e to repair it", vim.log.levels.WARN)
     return
   end
-  local status = card_status(card, os.time())
+  local status = card_state(card, os.time())
   if status.availability ~= "active" then
     util.notify("This card is " .. status.availability .. "; make it active before reviewing", vim.log.levels.WARN)
     return
@@ -1319,16 +1330,16 @@ end
 
 local function focused_hub_window()
   local current = vim.api.nvim_get_current_win()
-  for _, pane in ipairs({ state.cards, state.stats }) do
+  for _, pane in ipairs({ state.main, state.side }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) and pane.win == current then
       return pane.win
     end
   end
-  if state.page == "stats" and state.stats.win and vim.api.nvim_win_is_valid(state.stats.win) then
-    return state.stats.win
+  if state.page == "stats" and state.side.win and vim.api.nvim_win_is_valid(state.side.win) then
+    return state.side.win
   end
-  if state.cards.win and vim.api.nvim_win_is_valid(state.cards.win) then
-    return state.cards.win
+  if state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
+    return state.main.win
   end
 end
 
@@ -1430,7 +1441,7 @@ function M.move(delta)
   if not win then
     return
   end
-  if state.page == "stats" or win == state.stats.win then
+  if state.page == "stats" or win == state.side.win then
     move_window_cursor(win, delta)
     return
   end
@@ -1447,7 +1458,7 @@ function M.scroll_page(direction)
     return
   end
   direction = direction < 0 and -1 or 1
-  if state.page ~= "stats" and win == state.cards.win then
+  if state.page ~= "stats" and win == state.main.win then
     move_selection_page(direction, win)
     return
   end
@@ -1461,7 +1472,7 @@ function M.scroll_edge(edge)
     return
   end
   edge = edge == "top" and "top" or "bottom"
-  if state.page ~= "stats" and win == state.cards.win then
+  if state.page ~= "stats" and win == state.main.win then
     local list, field = selection_for_page()
     select_index(list, field, edge == "top" and 1 or #list)
     return
@@ -1487,7 +1498,7 @@ function M.peek()
     table.insert(lines, "")
     table.insert(lines, "Source: " .. invalid_source(entry))
   else
-    local status = card_status(card, os.time())
+    local status = card_state(card, os.time())
     local front_title, front = schema.front(config, card)
     table.insert(lines, "** " .. front_title)
     for _, line in ipairs(util.value_lines(front)) do
@@ -1523,9 +1534,9 @@ end
 function M.peek_close()
   popup.close(peek)
   if state.page == "stats" then
-    M.focus_stats()
+    M.focus_side()
   else
-    M.focus_cards()
+    M.focus_main()
   end
 end
 
@@ -1543,24 +1554,30 @@ function M.context_help()
       { "?", M.help_close, "Close key help" },
     },
   })
-  popup.set_lines(key_help, actions.help_lines(state.page, state.capabilities))
+  popup.set_lines(key_help, actions.help_lines(state.page, current_action_state()))
 end
 
 function M.help_close()
   popup.close(key_help)
   if state.page == "stats" then
-    M.focus_stats()
+    M.focus_side()
   else
-    M.focus_cards()
+    M.focus_main()
   end
 end
 
 function M.edit_card()
-  local card = selected_card()
+  local entry = state.page == "cards" and selected_card_entry() or nil
+  local card = entry and entry.card or selected_card()
   if not card then
     return
   end
-  if call_handler("on_open_source", card) then
+  if
+    call_handler("on_edit", card, {
+      cards = state.all_cards,
+      invalid = entry and entry.invalid == true,
+    })
+  then
     return
   end
   M.close()
@@ -1569,8 +1586,9 @@ function M.edit_card()
 end
 
 function M.search()
+  local token = hub_token()
   vim.ui.input({ prompt = "Search cards: ", default = state.query }, function(input)
-    if input == nil or not M.is_open() then
+    if input == nil or not same_hub(token) then
       return
     end
     state.query = util.trim(input)
@@ -1595,6 +1613,7 @@ local FILTERS = {
 }
 
 function M.choose_filter()
+  local token = hub_token()
   local now = os.time()
   local choices = {}
   for _, filter in ipairs(FILTERS) do
@@ -1617,7 +1636,7 @@ function M.choose_filter()
       return string.format("%s %-14s %d", item.value == state.filter and "●" or " ", item.label, item.count)
     end,
   }, function(choice)
-    if not choice or not M.is_open() then
+    if not choice or not same_hub(token) then
       return
     end
     state.filter, state.card_sel, state.selected_card_key = choice.value, 1, nil
@@ -1689,6 +1708,10 @@ function M.delete_selected()
     util.notify("No card selected", vim.log.levels.WARN)
     return false
   end
+  if selected_card_is_unclosed() then
+    util.notify("Add the missing @end before deleting this flashcard", vim.log.levels.WARN)
+    return false
+  end
 
   local card = entry.card
   local source = delete_source(entry)
@@ -1696,19 +1719,25 @@ function M.delete_selected()
   if front == "" then
     front = "@flashcard " .. tostring(card.kind or "unknown")
   end
-  local prompt = string.format("Delete “%s” from %s?", truncate(front, 42), source)
+  local prompt = string.format(
+    "Delete “%s” from %s? Unloaded sources keep %s.flashcards-backup.",
+    truncate(front, 42),
+    source,
+    card.path
+  )
   local context = {
     invalid = entry.invalid == true,
     messages = vim.deepcopy(entry.messages or {}),
     source = source,
   }
+  local token = hub_token()
 
   vim.ui.select({ "Cancel", "Delete card" }, { prompt = prompt }, function(choice)
-    if choice ~= "Delete card" or not M.is_open() then
+    if choice ~= "Delete card" or not same_hub(token) then
       return
     end
     local handled, deleted = call_handler("on_delete_card", card, context)
-    if handled and deleted == true and M.is_open() then
+    if handled and deleted == true and same_hub(token) then
       M.refresh()
     end
   end)
@@ -1719,11 +1748,8 @@ function M.refresh()
   if not provider or not M.is_open() then
     return
   end
-  local cards, errors, invalid = provider()
+  local cards, _, invalid = provider()
   cards = cards or {}
-  if errors and #errors > 0 then
-    util.notify(table.concat(errors, "\n"), vim.log.levels.WARN)
-  end
   state.all_cards = cards
   state.invalid_cards = invalid or {}
   state.groups = group_cards(cards, os.time())
@@ -1731,18 +1757,46 @@ function M.refresh()
 end
 
 function M.is_open()
-  return state.cards.win ~= nil and vim.api.nvim_win_is_valid(state.cards.win)
+  return state.tab ~= nil
+    and vim.api.nvim_tabpage_is_valid(state.tab)
+    and state.main.buf ~= nil
+    and vim.api.nvim_buf_is_valid(state.main.buf)
+    and state.main.win ~= nil
+    and vim.api.nvim_win_is_valid(state.main.win)
+    and vim.api.nvim_win_get_buf(state.main.win) == state.main.buf
+    and state.side.buf ~= nil
+    and vim.api.nvim_buf_is_valid(state.side.buf)
+    and state.side.win ~= nil
+    and vim.api.nvim_win_is_valid(state.side.win)
+    and vim.api.nvim_win_get_buf(state.side.win) == state.side.buf
 end
 
-function M.focus_cards()
-  if state.cards.win and vim.api.nvim_win_is_valid(state.cards.win) then
-    vim.api.nvim_set_current_win(state.cards.win)
+function M.is_focused()
+  if not M.is_open() or vim.api.nvim_get_current_tabpage() ~= state.tab then
+    return false
+  end
+  local current = vim.api.nvim_get_current_win()
+  return current == state.main.win or current == state.side.win
+end
+
+function M.focus_main()
+  if state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
+    vim.api.nvim_set_current_win(state.main.win)
   end
 end
 
-function M.focus_stats()
-  if state.stats.win and vim.api.nvim_win_is_valid(state.stats.win) then
-    vim.api.nvim_set_current_win(state.stats.win)
+function M.focus_side()
+  if state.side.win and vim.api.nvim_win_is_valid(state.side.win) then
+    vim.api.nvim_set_current_win(state.side.win)
+  end
+end
+
+function M.focus_other_pane()
+  local current = vim.api.nvim_get_current_win()
+  if current == state.main.win then
+    M.focus_side()
+  else
+    M.focus_main()
   end
 end
 
@@ -1758,9 +1812,9 @@ function M.show(view)
   state.page = view
   render()
   if view == "stats" then
-    M.focus_stats()
+    M.focus_side()
   else
-    M.focus_cards()
+    M.focus_main()
   end
   return view
 end
@@ -1777,6 +1831,9 @@ local function cycle_page(delta)
 end
 
 local function dispatch(action)
+  if not actions.is_available("hub", action, state.page, current_action_state()) then
+    return false
+  end
   if action == "close" then
     M.close()
   elseif action == "escape" then
@@ -1801,6 +1858,8 @@ local function dispatch(action)
     M.move(1)
   elseif action == "previous" then
     M.move(-1)
+  elseif action == "focus_other_pane" then
+    M.focus_other_pane()
   elseif action == "scroll_down" then
     M.scroll_page(1)
   elseif action == "scroll_up" then
@@ -1847,17 +1906,14 @@ local function dispatch(action)
     M.delete_selected()
   elseif action == "peek" then
     M.peek()
-  elseif action == "open_source" then
+  elseif action == "edit_card" then
     M.edit_card()
   elseif action == "check" then
     call_handler("on_check")
-  elseif action == "migrate" then
-    if call_handler("on_migrate") then
-      M.refresh()
-    end
   elseif action == "refresh" then
     M.refresh()
   end
+  return true
 end
 
 local function new_scratch()
@@ -1884,21 +1940,21 @@ local function panel_width()
 end
 
 local function apply_layout()
-  if not M.is_open() or not (state.stats.win and vim.api.nvim_win_is_valid(state.stats.win)) then
+  if not M.is_open() then
     return
   end
   local desired = vim.o.columns < 105 and "stacked" or "columns"
   local function rearrange()
     local current = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(state.stats.win)
+    vim.api.nvim_set_current_win(state.side.win)
     if desired == "stacked" then
-      vim.wo[state.stats.win].winfixwidth = false
+      vim.wo[state.side.win].winfixwidth = false
       vim.cmd("wincmd J")
-      vim.api.nvim_win_set_height(state.stats.win, math.max(10, math.floor((vim.o.lines - 4) * 0.38)))
+      vim.api.nvim_win_set_height(state.side.win, math.max(10, math.floor((vim.o.lines - 4) * 0.38)))
     else
       vim.cmd("wincmd L")
-      vim.api.nvim_win_set_width(state.stats.win, panel_width())
-      vim.wo[state.stats.win].winfixwidth = true
+      vim.api.nvim_win_set_width(state.side.win, panel_width())
+      vim.wo[state.side.win].winfixwidth = true
     end
     if vim.api.nvim_win_is_valid(current) then
       vim.api.nvim_set_current_win(current)
@@ -1927,10 +1983,15 @@ local function install_maps(buf)
 end
 
 function M.close()
+  if state.closing then
+    return
+  end
+  state.closing = true
+  state.generation = state.generation + 1
   popup.close(peek)
   popup.close(key_help)
   local hub_tab = state.tab
-  for _, pane in ipairs({ state.cards, state.stats }) do
+  for _, pane in ipairs({ state.main, state.side }) do
     if pane.buf and vim.api.nvim_buf_is_valid(pane.buf) then
       pcall(vim.api.nvim_buf_delete, pane.buf, { force = true })
     end
@@ -1940,10 +2001,12 @@ function M.close()
     pcall(vim.cmd, "tabclose " .. vim.api.nvim_tabpage_get_number(hub_tab))
   end
   state.tab, state.layout = nil, nil
+  state.closing = false
 end
 
 function M.open(collect, opts)
   opts = opts or {}
+  state.generation = state.generation + 1
   provider = collect or provider
   if not provider then
     util.notify("Flashcard collection provider is not configured", vim.log.levels.ERROR)
@@ -1962,25 +2025,28 @@ function M.open(collect, opts)
     add = type(handlers.on_add) == "function",
     help = type(handlers.on_help) == "function",
     check = type(handlers.on_check) == "function",
-    migrate = type(handlers.on_migrate) == "function",
     suspend = type(handlers.on_toggle_suspend) == "function",
     bury = type(handlers.on_bury) == "function",
     delete = type(handlers.on_delete_card) == "function",
+    review_selected = true,
   }
+  if not M.is_open() and (state.tab or state.main.buf or state.side.buf) then
+    M.close()
+  end
   if not M.is_open() then
     vim.cmd("tabnew")
     state.tab = vim.api.nvim_get_current_tabpage()
-    state.cards.buf = new_scratch()
-    state.cards.win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(state.cards.win, state.cards.buf)
-    configure_window(state.cards.win)
+    state.main.buf = new_scratch()
+    state.main.win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(state.main.win, state.main.buf)
+    configure_window(state.main.win)
     vim.cmd("belowright vsplit")
-    state.stats.buf = new_scratch()
-    state.stats.win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(state.stats.win, state.stats.buf)
-    configure_window(state.stats.win)
-    install_maps(state.cards.buf)
-    install_maps(state.stats.buf)
+    state.side.buf = new_scratch()
+    state.side.win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(state.side.win, state.side.buf)
+    configure_window(state.side.win)
+    install_maps(state.main.buf)
+    install_maps(state.side.buf)
     apply_layout()
   end
   M.show(opts.view or state.page or "overview")
@@ -1998,6 +2064,25 @@ function M.setup(opts, extra_handlers)
         apply_layout()
         render()
       end
+    end,
+  })
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = group,
+    callback = define_highlights,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = group,
+    callback = function(args)
+      local closed_win = tonumber(args.match)
+      if state.closing or (closed_win ~= state.main.win and closed_win ~= state.side.win) then
+        return
+      end
+      local hub_tab = state.tab
+      vim.schedule(function()
+        if not state.closing and state.tab == hub_tab then
+          M.close()
+        end
+      end)
     end,
   })
 end

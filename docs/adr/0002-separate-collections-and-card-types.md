@@ -9,9 +9,9 @@ Today, `flashcards_dir` is both the configured root and the only study
 collection. That works for one subject, but Japanese and computer-science
 cards would share reviews, statistics, and default settings.
 
-The current `languages` option contains schemas. Some useful schemas, such as
-question/answer or code/output, are not languages. A study collection and a
-card shape are different concepts and should not be coupled.
+The current `schemas` option maps card kinds to field schemas. Some useful
+schemas, such as question/answer or code/output, are not languages. A study
+collection and a card shape are different concepts and should not be coupled.
 
 ## Decision
 
@@ -22,8 +22,8 @@ card shape are different concepts and should not be coupled.
   card-type identifier.
 - Each collection owns its root, default file, allowed card types, default
   card type, scheduler settings, limits, and history destination.
-- One collection is active for normal add, review, Cards, Stats, Check, and
-  Migrate actions. Reviews never mix collections implicitly.
+- One collection is active for normal add, review, Cards, Stats, and Check
+  actions. Reviews never mix collections implicitly.
 - The hub always shows the active collection. A buffer-local `C` action opens
   a picker, while `:Flashcards collection [id]` supports scripts and command
   completion without adding another global shortcut.
@@ -40,26 +40,30 @@ require("neorg_flashcards").setup({
       path = "~/notes/japanese/flashcards",
       default_file = "cards.norg",
       default_card_type = "japanese",
-      card_types = presets.only("japanese"),
+      schemas = presets.only("japanese"),
     },
     computer_science = {
       label = "Computer Science",
       path = "~/notes/computer-science/flashcards",
       default_file = "cards.norg",
       default_card_type = "question_answer",
-      card_types = presets.only("question_answer", "term_definition", "code_output"),
+      schemas = presets.only("question_answer", "term_definition", "code_output"),
     },
   },
 })
 ```
 
-## Compatibility
+## Migration
 
-When `collections` is absent, the existing `flashcards_dir`, `default_file`,
-`default_kind`, and `languages` options become one implicit `default`
-collection. Existing card files are not changed. During the configuration
-migration, `languages` remains an alias for `card_types`; mixing the old and
-new top-level shapes is rejected instead of guessed.
+This proposed change is a breaking configuration migration. The top-level
+`flashcards_dir`, `default_file`, `default_kind`, and `schemas` shape does not
+create an implicit collection. Release work must include a preflight migration
+for roots, default files, schemas, and history destinations before named
+collections can ship; no parallel configuration names remain active.
+
+Existing card blocks keep their on-disk `@flashcard <kind>` shape. Any ledger
+changes require an explicit migration rather than inferring ownership from a
+mixed history file.
 
 ## Consequences
 

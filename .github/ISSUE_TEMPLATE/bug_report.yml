@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a reproducible problem in the plugin
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Redact personal flashcard contents and paths before posting logs or examples.
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version
+      description: Use a tag or commit SHA.
+      placeholder: v0.2.0 or abcdef0
+    validations:
+      required: true
+  - type: input
+    id: neovim_version
+    attributes:
+      label: Neovim version
+      description: Paste the first line of `nvim --version`.
+      placeholder: NVIM v0.10.4
+    validations:
+      required: true
+  - type: input
+    id: operating_system
+    attributes:
+      label: Operating system
+      placeholder: NixOS 26.05, Ubuntu 24.04, or macOS 15
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - lazy.nvim
+        - Nix or NVF
+        - Local checkout
+        - Another plugin manager
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Minimal setup
+      description: Include the smallest `setup()` call that reproduces the problem. Replace personal paths and card text.
+      render: lua
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: List the commands and keys needed to reproduce the problem from a clean Neovim session.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste relevant `:checkhealth neorg_flashcards` output or errors after redacting note contents and paths.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I reproduced this with Neovim 0.10.4 or newer.
+          required: true
+        - label: I removed personal notes, paths, and credentials from this report.
+          required: true
+        - label: This is not a private security report.
+          required: true

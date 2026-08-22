@@ -1,7 +1,6 @@
 local popup = require("neorg_flashcards.popup")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
-local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
 local actions = require("neorg_flashcards.ui.actions")
 local util = require("neorg_flashcards.util")
@@ -9,6 +8,10 @@ local util = require("neorg_flashcards.util")
 local M = {}
 
 local config = {}
+
+local function collection_root()
+  return config._collection_root or config.flashcards_dir
+end
 
 local function monotonic_time()
   local uv = vim.uv or vim.loop
@@ -56,6 +59,12 @@ local state = {
 }
 
 local key_help = { buf = nil, win = nil }
+local rating_ns = vim.api.nvim_create_namespace("neorg_flashcards_review_ratings")
+local RATING_HIGHLIGHTS = {
+  Again = { group = "NeorgFlashcardsAgain", fallback = "DiagnosticError" },
+  Hard = { group = "NeorgFlashcardsHard", fallback = "DiagnosticWarn" },
+  Good = { group = "NeorgFlashcardsGood", fallback = "DiagnosticOk" },
+}
 
 local function review_context()
   if state.completed then
@@ -76,6 +85,41 @@ end
 
 local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
+end
+
+local function rating_config(label)
+  local name = label:lower()
+  local configured = type(config.ui) == "table"
+      and type(config.ui.rating_highlights) == "table"
+      and config.ui.rating_highlights[name]
+    or nil
+  return type(configured) == "table" and vim.deepcopy(configured) or { link = RATING_HIGHLIGHTS[label].fallback }
+end
+
+local function set_review_lines(lines)
+  popup.set_lines(state, lines)
+  if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(state.buf, rating_ns, 0, -1)
+  for label, highlight in pairs(RATING_HIGHLIGHTS) do
+    local value = rating_config(label)
+    local ok = not vim.tbl_isempty(value) and pcall(vim.api.nvim_set_hl, 0, highlight.group, value)
+    if not ok then
+      vim.api.nvim_set_hl(0, highlight.group, { link = highlight.fallback, default = true })
+    end
+    for line_index, line in ipairs(lines) do
+      local start = 1
+      while true do
+        local first, last = line:find(label, start, true)
+        if not first then
+          break
+        end
+        pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, highlight.group, line_index - 1, first - 1, last)
+        start = last + 1
+      end
+    end
+  end
 end
 
 local function shortcut_footer()
@@ -170,7 +214,9 @@ local scheduling_fields = {
   "ease",
   "reps",
   "lapses",
-  "state",
+  "lifecycle",
+  "availability",
+  "available_at",
 }
 
 local function scheduling_snapshot(values, updates)
@@ -220,9 +266,9 @@ local function emit_event(event)
     table.insert(callbacks, config.on_review_event)
   end
 
-  -- `on_review` is the deliberately small integration point for a richer
-  -- append-only history module. It only receives successfully persisted
-  -- ratings (and a compensating undo event when that rating is reversed).
+  -- `on_review` is the deliberately small integration point for the
+  -- append-only history module. It receives persisted ratings, compensating
+  -- undo events, and card-state changes made during review.
   if event.persisted and type(state.on_review) == "function" then
     table.insert(callbacks, state.on_review)
   elseif event.persisted and type(config.on_review) == "function" then
@@ -255,6 +301,9 @@ local function rate_from_popup(score)
 end
 
 local function dispatch(action_name)
+  if not actions.is_available("review", action_name, review_context(), review_capabilities()) then
+    return false
+  end
   if action_name == "close" then
     M.close()
   elseif action_name == "context_help" then
@@ -284,10 +333,11 @@ local function dispatch(action_name)
   elseif action_name == "suspend" then
     M.suspend_current()
   end
+  return true
 end
 
 local function ensure_window()
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
+  if popup.is_open(state) then
     return
   end
 
@@ -378,7 +428,7 @@ local function render_completion()
     "",
     "Nice work. Press u to undo the last rating, or q to return.",
   }
-  popup.set_lines(state, lines)
+  set_review_lines(lines)
 end
 
 local function render()
@@ -442,15 +492,12 @@ local function render()
     table.insert(lines, "Reveal the answer with ⏎ or Space before rating. Press h for a hint.")
   end
 
-  popup.set_lines(state, lines)
+  set_review_lines(lines)
 end
 
 local function commit_last_action()
   if not state.last_action then
     return
-  end
-  if type(state.on_review) ~= "function" and type(config.on_review) ~= "function" then
-    stats.log_review(state.last_action.score)
   end
   state.last_action.committed = true
   state.last_action = nil
@@ -475,6 +522,14 @@ end
 
 function M.setup(opts)
   config = opts or {}
+end
+
+function M.is_open()
+  return popup.is_open(state)
+end
+
+function M.is_active()
+  return #state.cards > 0
 end
 
 function M.context_help()
@@ -517,8 +572,8 @@ function M.start(cards, errors, label, empty_message, opts)
     return
   end
 
-  -- A new start replaces an existing session. Commit its final accepted rating
-  -- before resetting so the legacy aggregate log cannot silently lose it.
+  -- A new start replaces an existing session. Finalize the current undo
+  -- candidate before resetting the queue.
   commit_last_action()
 
   local ordered
@@ -660,7 +715,7 @@ function M.rate_current(score, opts)
   end
 
   -- Once another answer is accepted, the prior rating is no longer the
-  -- session-level undo candidate and can enter the legacy aggregate log.
+  -- session-level undo candidate.
   commit_last_action()
 
   local attempt = current_attempt()
@@ -677,7 +732,10 @@ function M.rate_current(score, opts)
     end
   end
 
-  local ok, message, persisted = store.set_card_fields(card, updates, { cards = state.cards })
+  local ok, message, persisted = store.set_card_fields(card, updates, {
+    allowed_root = collection_root(),
+    cards = state.cards,
+  })
   if not ok then
     util.notify(message, vim.log.levels.ERROR)
     return false
@@ -747,7 +805,6 @@ function M.rate_current(score, opts)
     card_id = reference.id,
     path = reference.path,
     start_line = reference.start_line,
-    score = score,
     rating = score,
     due = due,
     timestamp = now,
@@ -769,19 +826,16 @@ function M.undo_last()
   local action = state.last_action
   if not action then
     util.notify("Nothing to undo in this session", vim.log.levels.WARN)
-    return false
+    return false, "Nothing to undo in this session", false
   end
 
-  if type(store.restore_card_fields) ~= "function" then
-    util.notify("Undo requires field-removal support from neorg_flashcards.store", vim.log.levels.ERROR)
-    return false
-  end
-
-  local ok, message, persisted =
-    store.restore_card_fields(action.card, action.previous, action.updates, { cards = state.cards })
+  local ok, message, persisted = store.restore_card_fields(action.card, action.previous, action.updates, {
+    allowed_root = collection_root(),
+    cards = state.cards,
+  })
   if not ok then
     util.notify("Could not undo rating: " .. tostring(message), vim.log.levels.ERROR)
-    return false
+    return false, message, false
   end
   if message then
     util.notify(message, vim.log.levels.WARN)
@@ -820,14 +874,13 @@ function M.undo_last()
     card_id = action.reference.id,
     path = action.reference.path,
     start_line = action.reference.start_line,
-    score = action.score,
     rating = action.score,
     timestamp = undo_now,
     epoch = undo_now,
     original_timestamp = action.timestamp,
     original = {
       event_id = action.event_id,
-      score = action.score,
+      rating = action.score,
       timestamp = action.timestamp,
       before = action.before,
       after = action.after,
@@ -838,7 +891,7 @@ function M.undo_last()
 
   render()
   util.notify("Last rating undone")
-  return true
+  return true, message, persisted
 end
 
 local function apply_card_action(name, callback)
@@ -847,11 +900,12 @@ local function apply_card_action(name, callback)
   end
 
   local card = current_attempt().card
-  local ok, accepted, message = pcall(callback, card, {
+  local ok, accepted, message, persisted = pcall(callback, card, {
     session_id = state.session_id,
     label = state.label,
     action = name,
     cards = state.cards,
+    _review_emits_state_event = true,
   })
   if not ok then
     util.notify(string.format("Could not %s card: %s", name, tostring(accepted)), vim.log.levels.ERROR)
@@ -881,7 +935,7 @@ local function apply_card_action(name, callback)
   emit_event({
     event = name == "bury" and "buried" or "suspended",
     type = "card_state",
-    persisted = false,
+    persisted = persisted == true,
     card_ref = card_reference(card),
     card_id = schema.card_id(card),
     path = card.path,
@@ -911,11 +965,12 @@ function M.edit_current()
   -- Editing leaves the review flow entirely: no session summary, no on_close.
   commit_last_action()
   local card = current_attempt().card
+  local edit_context = { cards = state.cards }
   popup.close(key_help)
   popup.close(state)
   clear_state()
   if type(config.on_edit) == "function" then
-    local ok, err = pcall(config.on_edit, card)
+    local ok, err = pcall(config.on_edit, card, edit_context)
     if ok then
       return
     end

@@ -30,12 +30,68 @@ function M.canonical_path(path)
   return vim.fs.normalize(vim.fn.resolve(normalized))
 end
 
+function M.pin_directory(path)
+  local lexical = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path), ":p"))
+  local canonical = M.canonical_path(lexical)
+  local stat = (vim.uv or vim.loop).fs_stat(canonical)
+  if not stat or stat.type ~= "directory" then
+    return nil, "configured flashcards_dir is not a directory"
+  end
+  return {
+    lexical = lexical,
+    canonical = canonical,
+    dev = stat.dev,
+    ino = stat.ino,
+  }
+end
+
+function M.resolve_pinned_directory(root)
+  if type(root) == "string" then
+    return M.canonical_path(vim.fn.fnamemodify(vim.fn.expand(root), ":p"))
+  end
+  if type(root) ~= "table" or M.isempty(root.lexical) or M.isempty(root.canonical) then
+    return nil, "configured flashcards_dir identity is missing"
+  end
+
+  local current = M.canonical_path(root.lexical)
+  if current ~= root.canonical then
+    return nil, "configured flashcards_dir changed since setup; run setup again"
+  end
+  local stat = (vim.uv or vim.loop).fs_stat(current)
+  if not stat or stat.type ~= "directory" then
+    return nil, "configured flashcards_dir is no longer the setup directory"
+  end
+  if
+    root.dev ~= nil
+    and root.ino ~= nil
+    and stat.dev ~= nil
+    and stat.ino ~= nil
+    and (root.dev ~= stat.dev or root.ino ~= stat.ino)
+  then
+    return nil, "configured flashcards_dir was replaced since setup; run setup again"
+  end
+  return root.canonical
+end
+
 local function without_trailing_slash(path)
   if path == "/" or path:match("^%a:/$") then
     return path
   end
 
   return path:gsub("/+$", "")
+end
+
+function M.resolved_path_is_within(path, root)
+  path = without_trailing_slash(vim.fs.normalize(path))
+  root = without_trailing_slash(vim.fs.normalize(root))
+  if path == "" or root == "" then
+    return false
+  end
+  if path == root then
+    return true
+  end
+  local prefix = root:sub(-1) == "/" and root or (root .. "/")
+  return path:sub(1, #prefix) == prefix
 end
 
 function M.loaded_buffer(path)

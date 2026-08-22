@@ -1,0 +1,11 @@
+{"version":2,"width":92,"height":24,"timestamp":1782900000,"env":{"SHELL":"bash","TERM":"xterm-256color"}}
+[0.100000,"o","$ nvim ~/notes/flashcards/cards.norg\r\n"]
+[0.900000,"o",":Flashcards\r\n"]
+[1.500000,"o","Overview  [2 Cards] [3 Stats]  a add  Enter review due  ? keys\r\nDue now 0   New 0   Active 0\r\n\r\nNo cards yet. Press a to add one.\r\n"]
+[2.200000,"o","a\r\n"]
+[2.800000,"o","╭─ Add Japanese card ─────────────────────────────────────────────╮\r\n│ Target  ~/notes/flashcards/cards.norg                           │\r\n│                                                                │\r\n│ Japanese *  勉強                                                │\r\n│ Reading     べんきょう                                          │\r\n│ English *   study                                               │\r\n│ Notes       noun / suru verb                                    │\r\n│ Tags        jlpt vocab                                          │\r\n│                                                                │\r\n│ Ctrl-S save · Ctrl-N new · Tab/S-Tab fields · ? keys            │\r\n╰────────────────────────────────────────────────────────────────╯\r\n"]
+[4.000000,"o","<C-s>\r\nFlashcard saved\r\n"]
+[4.700000,"o","A\r\n"]
+[5.300000,"o","┌──────────── Flashcards ────────────┐\r\n│ all | 1/1 | Reviewed 0 · Remaining 1 │\r\n│                                      │\r\n│ ** Japanese                          │\r\n│ 勉強                                 │\r\n│                                      │\r\n│ Enter/Space reveal · h hint · j/k browse · ? keys · q close │\r\n└──────────────────────────────────────┘\r\n"]
+[6.100000,"o","<Space>\r\n** Reading\r\nべんきょう\r\n\r\n** English\r\nstudy\r\n\r\n1 Again 10 min   2 Hard 6 h   3 Good 3 d\r\n"]
+[7.000000,"o","3\r\nReview complete · Good 1 · 0 remaining\r\n"]

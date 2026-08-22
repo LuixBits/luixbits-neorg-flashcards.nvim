@@ -1,9 +1,0 @@
-{"version":2,"width":92,"height":24,"timestamp":1782900000,"env":{"SHELL":"bash","TERM":"xterm-256color"}}
-[0.100000,"o","$ nvim ~/notes/flashcards/cards.norg\r\n"]
-[0.900000,"o",":Flashcards add japanese\r\n"]
-[1.500000,"o","Japanese: 勉強\r\nReading: べんきょう\r\nEnglish: study\r\nNotes: noun / suru verb\r\nTags: jlpt vocab\r\n"]
-[2.200000,"o","Flashcard saved\r\n"]
-[3.000000,"o",":Flashcards review all\r\n"]
-[3.700000,"o","┌──────────── Flashcards ────────────┐\r\n│ * all | 1/1 | Reviewed 0 · Remaining 1 │\r\n│                                      │\r\n│ ** Japanese                          │\r\n│ 勉強                                 │\r\n│                                      │\r\n│ ⏎/Space reveal · h hint · j/k browse · ? keys · q close │\r\n└──────────────────────────────────────┘\r\n"]
-[4.500000,"o","<Space>\r\n** Reading\r\nべんきょう\r\n\r\n** English\r\nstudy\r\n"]
-[5.300000,"o","2\r\nscore: 2 and reviewed date saved, next card shown\r\n"]

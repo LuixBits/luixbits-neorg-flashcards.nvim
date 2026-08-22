@@ -140,17 +140,18 @@ function M.check()
     return
   end
 
-  if vim.fn.isdirectory(config.flashcards_dir) == 1 then
-    report.ok("Collection directory: " .. config.flashcards_dir)
-  else
-    report.warn("Collection directory does not exist yet: " .. config.flashcards_dir)
+  local _, root_err = util.resolve_pinned_directory(config._collection_root or config.flashcards_dir)
+  if root_err then
+    report.error(root_err)
+    return
   end
+  report.ok("Collection directory: " .. config.flashcards_dir)
 
-  local language_count = vim.tbl_count(config.languages or {})
-  if language_count == 0 then
-    report.error("No flashcard languages are configured")
+  local schema_count = vim.tbl_count(config.schemas or {})
+  if schema_count == 0 then
+    report.error("No flashcard schemas are configured")
   else
-    report.ok(string.format("%d language schema(s) configured", language_count))
+    report.ok(string.format("%d card schema(s) configured", schema_count))
   end
 
   local cards, parser_errors = require("neorg_flashcards.parser").collect_flashcards(config)
@@ -165,6 +166,14 @@ function M.check()
     for _, message in ipairs(history_errors) do
       report.warn(message)
     end
+  end
+
+  local pending_entries, outbox_errors = history.read_outbox(config)
+  if #pending_entries > 0 then
+    report.warn(string.format("%d review history event(s) are waiting in the durable retry queue", #pending_entries))
+  end
+  for _, message in ipairs(outbox_errors) do
+    report.error(message)
   end
 
   local issues = M.inspect(config, cards)

@@ -57,6 +57,10 @@ local catalog = {
         stats = "Scroll the focused pane up",
       },
     }),
+    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", HUB, {
+      hint_key = "C-W W",
+      hints = { overview = "pane", cards = "pane", stats = "pane" },
+    }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
       hint_key = "Ctrl-D/U",
       hint_id = "page_scroll",
@@ -72,8 +76,9 @@ local catalog = {
         stats = "Open Cards",
       },
       hints = { overview = "review due", cards = "review" },
+      capability = "review_selected",
     }),
-    action({ "r" }, "review", "Review the selected queue or card", HUB),
+    action({ "r" }, "review", "Review the selected queue or card", HUB, { capability = "review_selected" }),
     action({ "d" }, "review_due", "Review everything due now", HUB, {
       hints = { stats = "review due" },
     }),
@@ -88,18 +93,29 @@ local catalog = {
     action({ "f" }, "filter", "Choose a card state filter", { "cards" }, { hints = { cards = "filter" } }),
     action({ "o" }, "sort", "Cycle card sorting", { "cards" }, { hints = { cards = "sort" } }),
     action({ "X" }, "clear", "Clear search and filter", { "cards" }),
-    action({ "x" }, "toggle_suspend", "Suspend or unsuspend the selected card", { "cards" }, {
+    action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "cards" }, {
       hints = { cards = "suspend" },
       capability = "suspend",
+      presentation = function(_, action_state)
+        if action_state and action_state.selected_availability == "suspended" then
+          return { description = "Resume the selected card", hint = "resume" }
+        elseif action_state and action_state.selected_availability then
+          return { description = "Suspend the selected card", hint = "suspend" }
+        end
+      end,
     }),
     action({ "b" }, "bury", "Bury the selected card until tomorrow", { "cards" }, {
       hints = { cards = "bury" },
       capability = "bury",
+      presentation = function(_, action_state)
+        if action_state and action_state.selected_availability == "buried" then
+          return { description = "Unbury the selected card", hint = "unbury" }
+        end
+      end,
     }),
     action({ "p" }, "peek", "Open the selected card preview", { "overview", "cards" }),
-    action({ "e" }, "open_source", "Edit the selected card source", { "overview", "cards" }),
+    action({ "e" }, "edit_card", "Edit the selected card", { "overview", "cards" }),
     action({ "c" }, "check", "Check the flashcard collection", HUB, { capability = "check" }),
-    action({ "m" }, "migrate", "Migrate collection metadata", HUB, { capability = "migrate" }),
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },
   review = {
@@ -156,7 +172,7 @@ local catalog = {
       hints = { review_answer = "undo", review_complete = "undo" },
       essential = { review_complete = true },
     }),
-    action({ "e" }, "edit", "Edit the current card source", REVIEW_ACTIVE),
+    action({ "e" }, "edit", "Edit the current card", REVIEW_ACTIVE),
     action({ "b" }, "bury", "Bury the card until tomorrow", REVIEW_ACTIVE, {
       hints = { review_question = "bury", review_answer = "bury" },
       capability = "bury",
@@ -167,7 +183,7 @@ local catalog = {
     }),
   },
   form = {
-    action({ "q", "<Esc>" }, "close", "Cancel the add form (Normal mode)", { "form" }, {
+    action({ "q", "<Esc>" }, "close", "Close the card form (Normal mode)", { "form" }, {
       modes = { "n" },
       hint_key = "q",
       hints = { form = "close" },
@@ -188,6 +204,7 @@ local catalog = {
       modes = { "n", "i" },
       hint_key = "Ctrl-N",
       hints = { form = "new" },
+      capability = "save_new",
     }),
     action({ "<CR>" }, "next_or_save", "Move next; save and return from the last field (Insert mode)", { "form" }, {
       modes = { "i" },
@@ -226,7 +243,7 @@ local context_titles = {
   review_question = "Review keys · question",
   review_answer = "Review keys · answer",
   review_complete = "Review keys · complete",
-  form = "Add form keys",
+  form = "Card form keys",
 }
 
 local function contains(values, expected)
@@ -267,6 +284,7 @@ local function display_key(key)
     ["<C-n>"] = "Ctrl-N",
     ["<C-d>"] = "Ctrl-D",
     ["<C-u>"] = "Ctrl-U",
+    ["<C-w>w"] = "Ctrl-W W",
     ["<PageDown>"] = "PageDown",
     ["<PageUp>"] = "PageUp",
   }
@@ -280,8 +298,20 @@ local function context_value(value, context)
   return value
 end
 
-local function description_for(item, context)
-  return context_value(item.descriptions, context) or item.description or item.action
+local function presentation_for(item, context, action_state)
+  if type(item.presentation) ~= "function" then
+    return {}
+  end
+  local ok, presentation = pcall(item.presentation, context, action_state)
+  if ok and type(presentation) == "table" then
+    return presentation
+  end
+  return {}
+end
+
+local function description_for(item, context, action_state)
+  local presentation = presentation_for(item, context, action_state)
+  return presentation.description or context_value(item.descriptions, context) or item.description or item.action
 end
 
 local function keys_for_help(item)
@@ -292,7 +322,7 @@ local function keys_for_help(item)
   return table.concat(keys, " / ")
 end
 
-function M.title(context)
+function M.title(context, capabilities)
   return context_titles[context] or "Flashcard keys"
 end
 
@@ -318,11 +348,24 @@ function M.available_bindings(surface, capabilities)
   return result
 end
 
+---Return whether an action is valid in the current context. Mappings remain
+---installed across page changes, so dispatchers must enforce this boundary.
+function M.is_available(surface, action_name, context, capabilities)
+  surface = surface_for(surface) or surface
+  for _, item in ipairs(catalog[surface] or {}) do
+    if item.action == action_name then
+      return contains(item.contexts, context) and has_capability(item, capabilities)
+    end
+  end
+  return false
+end
+
 function M.footer(context, width, capabilities)
   local parts = {}
   local seen = {}
   for _, item in ipairs(catalog[surface_for(context)] or {}) do
-    local hint = context_value(item.hints, context)
+    local presentation = presentation_for(item, context, capabilities)
+    local hint = presentation.hint or context_value(item.hints, context)
     if hint and contains(item.contexts, context) and has_capability(item, capabilities) then
       local id = item.hint_id or item.action
       if not seen[id] then
@@ -364,14 +407,17 @@ end
 
 function M.help_lines(context, capabilities)
   local lines = {
-    "* " .. M.title(context),
+    "* " .. M.title(context, capabilities),
     "",
     "These are the shortcuts available here.",
     "",
   }
   for _, item in ipairs(catalog[surface_for(context)] or {}) do
     if contains(item.contexts, context) and has_capability(item, capabilities) then
-      table.insert(lines, string.format("  %-17s %s", keys_for_help(item), description_for(item, context)))
+      table.insert(
+        lines,
+        string.format("  %-17s %s", keys_for_help(item), description_for(item, context, capabilities))
+      )
     end
   end
   table.insert(lines, "")

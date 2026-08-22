@@ -9,13 +9,26 @@ end
 
 local presets = require("neorg_flashcards.presets")
 local flashcards = require("neorg_flashcards")
-local cards = root .. "/docs/demo/flashcards/cards.norg"
+local collection = vim.fn.tempname()
+local cards = collection .. "/cards.norg"
+vim.fn.mkdir(collection, "p")
+vim.fn.writefile({
+  "* Neorg integration fixture",
+  "",
+  "@flashcard japanese",
+  "id: fc_neorg_integration",
+  "japanese: 言語",
+  "reading: げんご",
+  "english: language",
+  "tags: test",
+  "@end",
+}, cards)
 
 flashcards.setup({
   flashcards_dir = vim.fn.fnamemodify(cards, ":h"),
   default_file = cards,
   default_kind = "japanese",
-  languages = presets.only("japanese"),
+  schemas = presets.only("japanese"),
 })
 
 assert(vim.fn.exists(":Flashcards") == 2, "unified :Flashcards command was not registered")
@@ -40,6 +53,7 @@ local text = table.concat(vim.api.nvim_buf_get_lines(popup, 0, -1, false), "\n")
 assert(text:find("Source: cards.norg", 1, true), "review popup omitted the source")
 assert(text:find("Japanese", 1, true), "review popup omitted the card front")
 flashcards.close_review()
+vim.fn.delete(collection, "rf")
 
 vim.g.neorg_flashcards_neorg_tests_passed = true
 print("neorg_flashcards Neorg integration tests passed")

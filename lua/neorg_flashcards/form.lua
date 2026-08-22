@@ -11,20 +11,25 @@ local M = {}
 
 local namespace = vim.api.nvim_create_namespace("neorg_flashcards_form")
 
-local function fresh_state()
+local generation_counter = 0
+
+local function fresh_state(generation)
   return {
+    generation = generation,
     buf = nil,
     win = nil,
     return_win = nil,
     augroup = nil,
     kind = nil,
-    language_label = nil,
+    kind_label = nil,
+    title = nil,
     fields = {},
     on_save = nil,
     on_close = nil,
     config = {},
     target = {},
     initial_lines = {},
+    initial_values = {},
     last_lines = {},
     errors = {},
     validation_attempted = false,
@@ -37,6 +42,9 @@ local function fresh_state()
     valid_change = false,
     change_scheduled = false,
     closing_prompt = false,
+    change_revision = 0,
+    allow_save_new = true,
+    edit_mode = false,
   }
 end
 
@@ -45,6 +53,13 @@ local key_help = { buf = nil, win = nil }
 
 local function show_shortcuts()
   return type(state.config.ui) ~= "table" or state.config.ui.show_shortcuts ~= false
+end
+
+local function form_capabilities()
+  return {
+    save_new = state.allow_save_new,
+    edit = state.edit_mode,
+  }
 end
 
 local function valid_buffer()
@@ -88,7 +103,8 @@ end
 local function default_lines()
   local lines = {}
   for _, field in ipairs(state.fields) do
-    table.insert(lines, one_line(field.default))
+    local initial = state.initial_values[field.key]
+    table.insert(lines, one_line(initial ~= nil and initial or field.default))
   end
   return lines
 end
@@ -134,12 +150,12 @@ local function window_config()
     row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
     col = math.max(0, math.floor((vim.o.columns - width) / 2)),
     border = "rounded",
-    title = " Add " .. (state.language_label or state.kind or "flashcard") .. " card ",
+    title = state.title or (" Add " .. (state.kind_label or state.kind or "flashcard") .. " card "),
     title_pos = "center",
     style = "minimal",
   }
   if show_shortcuts() then
-    config.footer = actions.footer("form", width)
+    config.footer = actions.footer("form", width, form_capabilities())
     config.footer_pos = "center"
   end
   return config
@@ -351,8 +367,6 @@ function M.next_field()
   M.goto_field(line + 1)
 end
 
-M.next_or_save = M.next_field
-
 ---Cycle fields without changing editing mode.
 function M.cycle_field(delta)
   if not M.is_open() or #state.fields == 0 then
@@ -441,10 +455,12 @@ function M.close(opts)
   end
 
   state.closing_prompt = true
+  local expected_generation = state.generation
+  local expected_buffer = state.buf
   vim.ui.select({ "Keep editing", "Discard draft" }, {
     prompt = "Discard this unsaved flashcard?",
   }, function(choice)
-    if not M.is_open() then
+    if state.generation ~= expected_generation or state.buf ~= expected_buffer or not M.is_open() then
       return
     end
     state.closing_prompt = false
@@ -462,7 +478,7 @@ function M.context_help()
     return
   end
   popup.open(key_help, {
-    title = " " .. actions.title("form") .. " ",
+    title = " " .. actions.title("form", form_capabilities()) .. " ",
     footer = " q/Esc/? close ",
     min_width = 56,
     max_width = 76,
@@ -474,7 +490,7 @@ function M.context_help()
       { "?", M.help_close, "Close form key help" },
     },
   })
-  popup.set_lines(key_help, actions.help_lines("form"))
+  popup.set_lines(key_help, actions.help_lines("form", form_capabilities()))
 end
 
 function M.help_close()
@@ -487,6 +503,7 @@ local function set_error(message, source)
     kind = "error",
     source = source,
     text = one_line(message),
+    revision = state.change_revision,
   }
   render()
 end
@@ -517,21 +534,12 @@ local function validate()
   return values
 end
 
-local function normalize_save_result(callback_ok, result, detail)
+local function normalize_save_result(callback_ok, result)
   if not callback_ok then
     return {
       ok = false,
       persisted = false,
       message = "Could not save flashcard: " .. tostring(result),
-    }
-  end
-
-  if result == false then
-    local message = type(detail) == "table" and detail.message or detail
-    return {
-      ok = false,
-      persisted = false,
-      message = one_line(message or "Could not save flashcard"),
     }
   end
 
@@ -544,23 +552,19 @@ local function normalize_save_result(callback_ok, result, detail)
     }
   end
 
-  return {
-    ok = true,
-    persisted = true,
-    message = type(result) == "string" and result or (type(detail) == "string" and detail or nil),
-  }
+  return { ok = false, persisted = false, message = "Flashcard save callback must return a result table" }
 end
 
 local function invoke_save(values, mode)
   if not state.on_save then
     return { ok = true, persisted = true }
   end
-  local callback_ok, result, detail = pcall(state.on_save, values, {
+  local callback_ok, result = pcall(state.on_save, values, {
     kind = state.kind,
     mode = mode,
     target = vim.deepcopy(state.target),
   })
-  return normalize_save_result(callback_ok, result, detail)
+  return normalize_save_result(callback_ok, result)
 end
 
 local function save_message(result)
@@ -583,10 +587,13 @@ local function save_message(result)
 end
 
 ---Validate and save the composer. mode is close (the default) or new.
----Callbacks may return nil/true/false for compatibility, or a structured
----{ ok, persisted, path, message } result.
+---The callback returns a structured { ok, persisted, path, message } result.
 function M.save(mode)
   mode = mode == "new" and "new" or "close"
+  if mode == "new" and not state.allow_save_new then
+    set_error("Save-and-new is not available while editing a card", "mode")
+    return false
+  end
   if not valid_buffer() then
     return false
   end
@@ -678,10 +685,19 @@ local function refresh_after_change()
   state.valid_change = false
   state.last_lines = copy_lines(lines)
   refresh_dirty(lines)
-  if valid_change and state.status and state.status.kind == "error" then
+  if
+    valid_change
+    and state.status
+    and state.status.kind == "error"
+    and (state.status.revision or -1) < state.change_revision
+  then
     state.status = nil
   end
-  if state.validation_attempted then
+  local callback_error_is_current = state.status
+    and state.status.kind == "error"
+    and state.status.source == "callback"
+    and (state.status.revision or -1) >= state.change_revision
+  if state.validation_attempted and not callback_error_is_current then
     local _, first_invalid = validate()
     if first_invalid then
       state.status = {
@@ -702,8 +718,9 @@ local function schedule_refresh()
   end
   state.change_scheduled = true
   local expected_buffer = state.buf
+  local expected_generation = state.generation
   vim.schedule(function()
-    if state.buf ~= expected_buffer then
+    if state.generation ~= expected_generation or state.buf ~= expected_buffer then
       return
     end
     state.change_scheduled = false
@@ -717,6 +734,7 @@ local function attach_guard(buf)
       if changed_buf ~= state.buf or state.rendering then
         return
       end
+      state.change_revision = state.change_revision + 1
       if old_last_line - first_line ~= new_last_line - first_line then
         state.structure_invalid = true
       else
@@ -823,8 +841,9 @@ handle_native_close = function(form_win)
   M.goto_field(selected)
 
   local expected_buf = state.buf
+  local expected_generation = state.generation
   vim.schedule(function()
-    if state.buf == expected_buf and M.is_open() then
+    if state.generation == expected_generation and state.buf == expected_buf and M.is_open() then
       M.close()
     end
   end)
@@ -846,15 +865,20 @@ local function configure_autocmds(buf)
   vim.api.nvim_create_autocmd("VimResized", {
     group = state.augroup,
     callback = function()
-      vim.schedule(resize)
+      local expected_generation = state.generation
+      vim.schedule(function()
+        if state.generation == expected_generation then
+          resize()
+        end
+      end)
     end,
   })
 end
 
 function M.open(config, kind, opts)
   opts = opts or {}
-  local language = schema.for_kind(config, kind)
-  if not language then
+  local card_schema = schema.for_kind(config, kind)
+  if not card_schema then
     util.notify("Unsupported flashcard kind: " .. kind, vim.log.levels.ERROR)
     return false
   end
@@ -868,7 +892,7 @@ function M.open(config, kind, opts)
     close_now()
   end
 
-  local fields = schema.prompt_fields(config, kind)
+  local fields = schema.composer_fields(config, kind)
   if #fields == 0 then
     util.notify("Flashcard kind has no editable fields: " .. kind, vim.log.levels.ERROR)
     return false
@@ -876,13 +900,18 @@ function M.open(config, kind, opts)
 
   local source_buf = vim.api.nvim_get_current_buf()
   local source_win = vim.api.nvim_get_current_win()
-  state = fresh_state()
+  generation_counter = generation_counter + 1
+  state = fresh_state(generation_counter)
   state.kind = kind
-  state.language_label = language.label or kind
+  state.kind_label = card_schema.label or kind
+  state.title = opts.title
   state.on_save = opts.on_save
   state.on_close = opts.on_close
   state.config = config
   state.fields = vim.deepcopy(fields)
+  state.initial_values = vim.deepcopy(opts.initial_values or {})
+  state.allow_save_new = opts.allow_save_new ~= false
+  state.edit_mode = opts.edit == true
   state.return_win = source_win
   state.target = infer_target(config, opts, source_buf)
   state.initial_lines = default_lines()
@@ -903,7 +932,7 @@ function M.open(config, kind, opts)
   configure_window(buf)
   configure_autocmds(buf)
 
-  for _, binding in ipairs(actions.available_bindings("form")) do
+  for _, binding in ipairs(actions.available_bindings("form", form_capabilities())) do
     local action_name = binding.action
     vim.keymap.set(binding.mode, binding.key, function()
       dispatch(action_name)

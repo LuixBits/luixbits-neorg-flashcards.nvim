@@ -1,6 +1,5 @@
--- Review analytics and reusable UI section builders. Review events live in a
--- versioned JSONL ledger; the legacy tab-separated log remains readable so an
--- upgrade never throws away an existing streak.
+-- Review analytics and reusable UI section builders backed by the versioned
+-- JSONL review ledger.
 
 local history = require("neorg_flashcards.history")
 local schedule = require("neorg_flashcards.schedule")
@@ -47,16 +46,12 @@ local function day_key(epoch)
   return os.date("%Y-%m-%d", epoch)
 end
 
-local function event_action(entry)
-  return entry.event or entry.action or "rated"
-end
-
 -- Undo is kept in the append-only history as a compensating event. Collapse
 -- it for user-facing analytics without mutating or rewriting the ledger.
 function M.effective_entries(entries)
   local active = {}
   for _, entry in ipairs(entries or {}) do
-    if event_action(entry) == "undo" then
+    if entry.event == "undo" then
       for index = #active, 1, -1 do
         local candidate = active[index]
         local same_event = entry.undo_of ~= nil and candidate.event_id == entry.undo_of
@@ -67,28 +62,14 @@ function M.effective_entries(entries)
           break
         end
       end
-    elseif entry.type == nil or entry.type == "review" then
+    elseif entry.type == "review" then
       table.insert(active, entry)
     end
   end
   return active
 end
 
--- Compatibility writer for callers that only have a score. New review
--- sessions use history.append() with a stable card id instead.
-function M.log_review(score)
-  if util.isempty(config.flashcards_dir) then
-    return false
-  end
-
-  local path = history.legacy_path(config)
-  local ok_mkdir = pcall(vim.fn.mkdir, vim.fn.fnamemodify(path, ":h"), "p")
-  local ok_write = ok_mkdir
-    and pcall(vim.fn.writefile, { os.date("%Y-%m-%d %H:%M") .. "\t" .. tostring(score) }, path, "a")
-  return ok_write == true
-end
-
-function M.read_log()
+function M.read_history()
   local entries, errors = history.read(config)
   return M.effective_entries(entries), errors
 end
@@ -107,10 +88,8 @@ end
 local function rating_counts(entries, from_epoch)
   local counts = { [1] = 0, [2] = 0, [3] = 0, total = 0 }
   for _, entry in ipairs(M.effective_entries(entries)) do
-    if
-      (not from_epoch or entry.epoch and entry.epoch >= from_epoch) and counts[tonumber(entry.rating or entry.score)]
-    then
-      local rating = tonumber(entry.rating or entry.score)
+    if (not from_epoch or entry.epoch and entry.epoch >= from_epoch) and counts[tonumber(entry.rating)] then
+      local rating = tonumber(entry.rating)
       counts[rating] = counts[rating] + 1
       counts.total = counts.total + 1
     end
@@ -174,7 +153,7 @@ function M.metrics(cards, entries, now)
   }
 
   for _, card in ipairs(cards) do
-    local status = schedule.card_status(card, now, config.scheduling)
+    local status = schedule.card_state(card, now, config.scheduling)
     result[status.lifecycle] = (result[status.lifecycle] or 0) + 1
     if status.availability == "suspended" then
       result.suspended = result.suspended + 1
@@ -386,7 +365,7 @@ function M.forecast_counts(cards, now, days)
   end
 
   for _, card in ipairs(cards or {}) do
-    local status = schedule.card_status(card, now, config.scheduling)
+    local status = schedule.card_state(card, now, config.scheduling)
     if status.availability == "active" then
       local offset = 0
       if status.due and status.due > now then

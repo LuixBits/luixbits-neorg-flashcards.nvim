@@ -10,7 +10,7 @@ The architectural choices behind this plan live in
 
 ## 0.2: Finish the unified workspace
 
-Status: in progress
+Status: release candidate (2026-08-22)
 
 The 0.2 release replaces the command-per-action interface with one workspace.
 
@@ -18,17 +18,19 @@ The 0.2 release replaces the command-per-action interface with one workspace.
 - Remove old `:NeorgFlashcard*` aliases, hidden route nicknames, the NVF suffix
   keymap mode, review `n`/`p`, and the hub's obsolete `s` pane bridge.
 - Generate buffer-local mappings, persistent hints, and `?` help from one
-  action catalogue across the hub, review window, and add form.
+  action catalogue across the hub, review window, and card form.
 - Replace the prefix-based add buffer with a target-aware composer: immutable
   virtual labels, field hints, inline validation, dirty-draft protection,
   explicit save and save-and-new actions, and transactional persistence.
 - Add `ui.show_shortcuts`, defaulting to `true`, to hide persistent shortcut
   chrome without hiding the mappings or contextual help.
 - Keep the broader guide at `:Flashcards help` and hub `H`.
-- Preserve ID-less cards, old scheduling fields, schema aliases, and
-  `reviews.log` reads. Removing old UI must not make stored data unreadable.
+- Require users upgrading from v0.1 to back up and manually convert ID-less
+  blocks and aliased fields before switching. UI commands, keymaps,
+  configuration aliases, and an automatic data migration are not carried
+  forward.
 - Keep the finished Overview, Cards, Stats, finite review queue, stable IDs,
-  health checks, migration, and JSONL analytics from the unified-hub work.
+  health checks, and JSONL analytics from the unified-hub work.
 
 Release checks:
 
@@ -47,10 +49,11 @@ Release checks:
 Goal: Japanese and computer-science study never mix unless the user explicitly
 asks for an aggregate view.
 
-1. Normalize today's top-level setup into an implicit `default` collection.
+1. Replace today's top-level setup with an explicit `default_collection` and
+   `collections` table through the documented breaking migration.
 2. Add collection validation, canonical path resolution, and immutable
    collection contexts.
-3. Pass that context through parser, add form, review, history, health, Cards,
+3. Pass that context through parser, card form, review, history, health, Cards,
    and Stats before exposing a collection switcher.
 4. Store one history ledger per collection and add collection identity to new
    events.
@@ -59,16 +62,18 @@ asks for an aggregate view.
 6. Test two roots with separate ledgers, dirty buffers, failed history retries,
    and identical card IDs. Reject overlapping roots and shared ledger paths.
 
-Existing `flashcards_dir`, `default_file`, `default_kind`, and `languages`
-configuration remains valid as the implicit collection during migration.
+Named collections require an explicit configuration and ledger migration.
+There is no implicit `default` collection compatibility mode; the migration
+must validate roots and history destinations before changing data.
 
 ## 0.4: General card types
 
 Goal: use the same engine for languages and technical subjects without making
 one universal, awkward schema.
 
-1. Make `card_types` the canonical name for today's schema registry, with a
-   temporary `languages` alias.
+1. Keep `schemas` as the canonical schema registry and move it under each
+   collection in a breaking configuration migration; do not add a parallel
+   option name.
 2. Add built-in `question_answer`, `term_definition`, and `code_output` types.
 3. Add a type picker to the form and a type filter to Cards.
 4. Add Japanese recognition, production, kanji, and sentence presets where

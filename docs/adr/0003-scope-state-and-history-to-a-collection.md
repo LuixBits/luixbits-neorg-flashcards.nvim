@@ -23,12 +23,13 @@ history write is open also risks sending state to the wrong destination.
 - Stats read only the active collection's cards and history.
 - Pending and failed writes remain keyed by canonical history path.
 
-## Compatibility
+## Migration
 
-An existing ledger stays at its current path. Events without a collection ID
-inherit the collection that owns that ledger. The plugin continues to read
-`reviews.log`, but never writes new events to it. A previously mixed ledger is
-not split automatically because old entries may not contain enough evidence.
+Existing ledgers require an explicit ownership migration before collection
+switching is enabled. Events without a collection ID are not assigned by
+guessing from their current path, and a previously mixed ledger is not split
+automatically because old entries may not contain enough evidence. Ambiguous
+events stop the migration and require user input.
 
 ## Consequences
 

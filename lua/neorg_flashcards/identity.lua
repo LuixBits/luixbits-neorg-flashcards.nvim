@@ -22,9 +22,6 @@ function M.card_id(card)
   local values = (card and card.values) or {}
   local value = trim(values.id)
   if value == "" then
-    value = trim(values.card_id)
-  end
-  if value == "" then
     value = trim(card and card.id)
   end
   return value ~= "" and value or nil

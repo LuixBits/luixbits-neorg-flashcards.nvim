@@ -3,9 +3,6 @@ local M = {}
 M.japanese = {
   label = "Japanese",
   front = "japanese",
-  aliases = {
-    japanese = { "word" },
-  },
   fields = {
     {
       key = "japanese",
@@ -53,10 +50,6 @@ M.japanese = {
 M.chinese = {
   label = "Chinese",
   front = "chinese",
-  aliases = {
-    chinese = { "hanzi", "word" },
-    pinyin = { "reading" },
-  },
   fields = {
     {
       key = "chinese",
@@ -102,13 +95,13 @@ M.chinese = {
 }
 
 function M.only(...)
-  local languages = {}
+  local schemas = {}
   for _, name in ipairs({ ... }) do
     if M[name] then
-      languages[name] = vim.deepcopy(M[name])
+      schemas[name] = vim.deepcopy(M[name])
     end
   end
-  return languages
+  return schemas
 end
 
 return M

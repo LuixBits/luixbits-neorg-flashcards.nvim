@@ -52,13 +52,13 @@ let
     else
       throw "Cannot render ${valueType} as Lua";
 
-  presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.languagePresets;
+  presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.schemaPresets;
 
   setupLua = ''
     local opts = ${toLua cfg.setupOpts}
-    ${optionalString (cfg.languagePresets != [ ]) ''
+    ${optionalString (cfg.schemaPresets != [ ]) ''
       local presets = require("neorg_flashcards.presets")
-      opts.languages = vim.tbl_deep_extend("force", presets.only(${presetArgs}), opts.languages or {})
+      opts.schemas = vim.tbl_deep_extend("force", presets.only(${presetArgs}), opts.schemas or {})
     ''}
     require("neorg_flashcards").setup(opts)
   '';
@@ -85,7 +85,9 @@ in
 
     setupOpts = mkOption {
       type = types.attrsOf types.anything;
-      default = { };
+      default = {
+        default_kind = "japanese";
+      };
       example = {
         flashcards_dir = "~/notes/flashcards";
         default_file = "~/notes/flashcards/cards.norg";
@@ -93,21 +95,24 @@ in
       };
       description = ''
         Options passed to `require("neorg_flashcards").setup(...)`.
-        Use `languagePresets` for bundled Lua presets, or set `languages`
-        directly for custom schemas.
+        The default selects the bundled Japanese schema so enabling the module
+        is immediately usable. Use `schemaPresets` for other bundled Lua
+        presets, or set `schemas` directly for custom schemas.
       '';
     };
 
-    languagePresets = mkOption {
+    schemaPresets = mkOption {
       type = types.listOf types.str;
-      default = [ ];
+      default = [ "japanese" ];
       example = [
         "japanese"
         "chinese"
       ];
       description = ''
-        Bundled language presets to merge into `setupOpts.languages` via
-        `require("neorg_flashcards.presets").only(...)`.
+        Bundled schema presets to merge into `setupOpts.schemas` via
+        `require("neorg_flashcards.presets").only(...)`. Japanese is enabled
+        by default; set this to an empty list when supplying only custom
+        schemas.
       '';
     };
 

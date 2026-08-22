@@ -1,3 +1,14 @@
+local demo_file = vim.api.nvim_buf_get_name(0)
+local demo_root = vim.fn.fnamemodify(demo_file, ":h")
+local presets = require("neorg_flashcards.presets")
+
+require("neorg_flashcards").setup({
+  flashcards_dir = demo_root,
+  default_file = demo_file,
+  default_kind = "japanese",
+  schemas = presets.only("japanese"),
+})
+
 local clock = 900
 
 local function later(delay, callback)

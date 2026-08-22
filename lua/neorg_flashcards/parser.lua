@@ -19,6 +19,8 @@ function M.parse_lines(lines, path)
       local card = {
         kind = kind,
         values = {},
+        duplicate_fields = {},
+        multiline_fields = {},
         path = path or "",
         start_line = index,
         end_line = index,
@@ -39,8 +41,12 @@ function M.parse_lines(lines, path)
         local key, value = line:match("^%s*([%w_-]+)%s*:%s*(.-)%s*$")
         if key then
           last_key = key:lower():gsub("-", "_")
+          if card.values[last_key] ~= nil then
+            card.duplicate_fields[last_key] = true
+          end
           card.values[last_key] = util.trim(value)
         elseif last_key and not util.isempty(line) then
+          card.multiline_fields[last_key] = true
           card.values[last_key] = card.values[last_key] .. "\n" .. util.trim(line)
         end
 
@@ -136,12 +142,25 @@ function M.valid_cards(config, cards)
 end
 
 function M.flashcard_files(config)
-  vim.fn.mkdir(config.flashcards_dir, "p")
-  local files = vim.fn.globpath(config.flashcards_dir, "**/*.norg", false, true)
+  local root_spec = config._collection_root or config.flashcards_dir
+  if type(root_spec) == "string" then
+    vim.fn.mkdir(config.flashcards_dir, "p")
+  end
+  local root, root_err = util.resolve_pinned_directory(root_spec)
+  if not root then
+    return {}, root_err
+  end
+
+  local discovered = vim.fn.globpath(root, "**/*.norg", false, true)
+  local files = {}
   local seen = {}
 
-  for _, path in ipairs(files) do
-    seen[util.canonical_path(path)] = true
+  for _, path in ipairs(discovered) do
+    local canonical = util.canonical_path(path)
+    if util.resolved_path_is_within(canonical, root) and not seen[canonical] then
+      table.insert(files, path)
+      seen[canonical] = true
+    end
   end
 
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
@@ -150,7 +169,7 @@ function M.flashcard_files(config)
     if
       vim.api.nvim_buf_is_loaded(bufnr)
       and path:match("%.norg$")
-      and util.path_is_within(path, config.flashcards_dir)
+      and util.resolved_path_is_within(canonical, root)
       and not seen[canonical]
     then
       table.insert(files, path)
@@ -159,14 +178,18 @@ function M.flashcard_files(config)
   end
 
   table.sort(files)
-  return files
+  return files, nil
 end
 
 function M.collect_flashcards(config)
   local cards = {}
   local errors = {}
 
-  for _, file in ipairs(M.flashcard_files(config)) do
+  local files, discovery_err = M.flashcard_files(config)
+  if discovery_err then
+    table.insert(errors, discovery_err)
+  end
+  for _, file in ipairs(files) do
     local file_cards, file_errors = M.parse_file(file)
     for _, card in ipairs(file_cards) do
       table.insert(cards, card)
@@ -182,26 +205,6 @@ function M.collect_flashcards(config)
   end
 
   return valid, errors, invalid
-end
-
--- Assign stable IDs to legacy cards after fully collecting and validating the
--- collection. The store performs an all-files preflight before writing, so a
--- stale or malformed source stops the migration before writes begin.
-function M.migrate_ids(config, opts)
-  local cards, errors = M.collect_flashcards(config)
-  if #errors > 0 and not (opts and opts.allow_validation_errors) then
-    return false, {
-      assigned = 0,
-      total = #cards,
-      errors = errors,
-    }
-  end
-
-  local ok, result = require("neorg_flashcards.store").migrate_card_ids(cards, opts)
-  if #errors > 0 then
-    result.validation_errors = errors
-  end
-  return ok, result
 end
 
 return M

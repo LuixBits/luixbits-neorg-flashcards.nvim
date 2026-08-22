@@ -272,6 +272,8 @@ const HookScene: React.FC = () => {
                 <br />
                 @flashcard japanese
                 <br />
+                id: fc_chapter_0{index + 1}_language
+                <br />
                 japanese: 言語
                 <br />
                 english: language
@@ -300,6 +302,7 @@ const StorageScene: React.FC = () => {
   const {fps} = useVideoConfig();
   const lines = [
     ["@flashcard japanese", theme.purple],
+    ["id: fc_chapter_language", theme.muted],
     ["japanese: 言語", theme.text],
     ["reading: げんご", theme.text],
     ["english: language", theme.text],
@@ -425,6 +428,8 @@ const CurrentFileScene: React.FC = () => {
               <br />
               <br />
               <span style={{color: theme.purple}}>@flashcard japanese</span>
+              <br />
+              id: fc_chapter_particle
               <br />
               japanese: まで
               <br />
@@ -603,9 +608,9 @@ const ScoringScene: React.FC = () => {
           <Flashcard answer={revealed} />
           <div style={{display: "flex", gap: 14, justifyContent: "center"}}>
             {[
-              ["1", "bad", theme.red],
-              ["2", "mid", theme.amber],
-              ["3", "good", theme.mint],
+              ["1", "Again", theme.red],
+              ["2", "Hard", theme.amber],
+              ["3", "Good", theme.mint],
             ].map(([key, label, color]) => (
               <div key={key} style={{border: `2px solid ${color}`, color, borderRadius: 13, padding: "12px 20px", fontFamily: fonts.mono, fontSize: 23}}>
                 {key} · {label}

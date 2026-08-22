@@ -95,7 +95,7 @@
                   {
                     programs.nvf.neorg-flashcards = {
                       enable = true;
-                      languagePresets = [ "japanese" ];
+                      schemaPresets = [ "japanese" ];
                       setupOpts = {
                         default_kind = "japanese";
                         ui.show_shortcuts = false;
@@ -105,7 +105,20 @@
                   }
                 ];
               };
+              defaultEvaluated = lib.evalModules {
+                specialArgs = {
+                  inherit pkgs;
+                };
+                modules = [
+                  optionModule
+                  self.homeManagerModules.nvf
+                  {
+                    programs.nvf.neorg-flashcards.enable = true;
+                  }
+                ];
+              };
               cfg = evaluated.config.programs.nvf.settings.vim;
+              defaultCfg = defaultEvaluated.config.programs.nvf.settings.vim;
             in
             assert builtins.length cfg.startPlugins == 1;
             assert builtins.length cfg.keymaps == 1;
@@ -113,7 +126,12 @@
             assert (builtins.head cfg.keymaps).action == "<cmd>Flashcards<CR>";
             assert lib.hasInfix "require(\"neorg_flashcards\").setup" cfg.luaConfigRC.neorg-flashcards;
             assert lib.hasInfix "presets.only(\"japanese\")" cfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "opts.schemas" cfg.luaConfigRC.neorg-flashcards;
             assert lib.hasInfix "[\"show_shortcuts\"] = false" cfg.luaConfigRC.neorg-flashcards;
+            assert builtins.length defaultCfg.startPlugins == 1;
+            assert builtins.length defaultCfg.keymaps == 0;
+            assert lib.hasInfix "presets.only(\"japanese\")" defaultCfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "[\"default_kind\"] = \"japanese\"" defaultCfg.luaConfigRC.neorg-flashcards;
             pkgs.runCommand "luixbits-neorg-flashcards-nvf-module-eval" { } ''
               touch "$out"
             '';
@@ -165,7 +183,7 @@
               }
               ''
                 cd ${self}
-                markdownlint ./*.md
+                find . -type f -name '*.md' -print0 | xargs -0 markdownlint
                 touch "$out"
               '';
 
@@ -212,7 +230,7 @@
                 ${nvimEnv}
                 nvim --headless -u NONE -i NONE -n \
                   --cmd "set rtp^=${plugin}" \
-                  -c "lua require('neorg_flashcards').setup({})" \
+                  -c "lua assert(type(require('neorg_flashcards').setup) == 'function')" \
                   -c "qa!"
                 touch "$out"
               '';

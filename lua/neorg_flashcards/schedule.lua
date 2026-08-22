@@ -1,17 +1,16 @@
 -- Score-driven scheduling. Pure date arithmetic with an injected `now`, so the
 -- module never touches the Neovim API and stays deterministic under tests.
 
-local identity = require("neorg_flashcards.identity")
-
 local M = {}
 
 M.DEFAULTS = {
   again_minutes = 10, -- score 1: see again very soon
-  mid_hours = 6, -- score 2: first retry later the same day
+  hard_hours = 6, -- score 2: first retry later the same day
   good_days = 3, -- score 3: every few days
   starting_ease = 2.5,
   min_ease = 1.3,
   max_ease = 2.8,
+  max_interval_days = 365,
 }
 
 local SECONDS_PER_DAY = 86400
@@ -41,13 +40,12 @@ local function nonnegative_integer(value, fallback)
   return math.floor(value)
 end
 
-local function truthy(value)
-  value = tostring(value or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  return value == "1" or value == "true" or value == "yes" or value == "on"
+local function clamp(value, minimum, maximum)
+  return math.min(maximum, math.max(minimum, value))
 end
 
 local function explicit_lifecycle(values)
-  local value = tostring(values.lifecycle or values.state or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  local value = tostring(values.lifecycle or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
   if value == "new" or value == "learning" or value == "review" or value == "relearning" then
     return value
   end
@@ -55,21 +53,7 @@ local function explicit_lifecycle(values)
 end
 
 local function inferred_reps(values)
-  if tonumber(values.reps) then
-    return nonnegative_integer(values.reps)
-  end
-
-  -- Legacy cards did not track reps. Preserve the useful distinction between
-  -- genuinely new cards and cards with existing scheduling evidence.
-  if
-    tostring(values.reviewed or ""):match("%S")
-    or tostring(values.score or ""):match("%S")
-    or tostring(values.interval or ""):match("%S")
-    or tostring(values.ease or ""):match("%S")
-  then
-    return 1
-  end
-  return 0
+  return nonnegative_integer(values.reps)
 end
 
 local function lifecycle_for(values, interval, reps, lapses)
@@ -88,29 +72,13 @@ end
 
 local function availability_for(values, now)
   local availability = tostring(values.availability or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  local legacy_state = tostring(values.state or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  local available_at = M.parse_due(values.available_at or values.buried_until)
+  local available_at = M.parse_due(values.available_at)
 
-  -- Once the canonical field exists, it is authoritative. In particular,
-  -- `availability: active` must be able to resume a legacy card that still
-  -- carries `suspended: true` or `state: suspended` metadata.
   if availability == "active" then
     return "active", available_at
   elseif availability == "suspended" then
     return "suspended", nil
   elseif availability == "buried" then
-    if available_at and available_at <= now then
-      return "active", available_at
-    end
-    return "buried", available_at
-  end
-
-  -- Cards written before `availability` was introduced keep their original
-  -- behavior until they are updated with one of the canonical values above.
-  if truthy(values.suspended) or legacy_state == "suspended" then
-    return "suspended", nil
-  end
-  if truthy(values.buried) or legacy_state == "buried" then
     if available_at and available_at <= now then
       return "active", available_at
     end
@@ -210,12 +178,14 @@ function M.format_due(epoch)
   return os.date("%Y-%m-%d %H:%M", epoch)
 end
 
-function M.card_state(card, opts, now)
+function M.card_state(card, now, opts)
   local values = (card and card.values) or {}
   now = now or os.time()
   local interval = tonumber(values.interval)
   if interval and interval <= 0 then
     interval = nil
+  elseif interval then
+    interval = math.min(interval, option(opts, "max_interval_days"))
   end
 
   local due = M.parse_due(values.due)
@@ -235,7 +205,11 @@ function M.card_state(card, opts, now)
 
   return {
     interval = interval,
-    ease = tonumber(values.ease) or option(opts, "starting_ease"),
+    ease = clamp(
+      tonumber(values.ease) or option(opts, "starting_ease"),
+      option(opts, "min_ease"),
+      option(opts, "max_ease")
+    ),
     reps = reps,
     lapses = lapses,
     lifecycle = lifecycle_for(values, interval, reps, lapses),
@@ -246,18 +220,13 @@ function M.card_state(card, opts, now)
   }
 end
 
--- A naming alias for callers that treat scheduling metadata as display state.
-function M.card_status(card, now, opts)
-  return M.card_state(card, opts, now)
-end
-
 function M.is_available(card, now)
-  return M.card_state(card, nil, now).availability == "active"
+  return M.card_state(card, now).availability == "active"
 end
 
 function M.is_due(card, now)
   now = now or os.time()
-  local state = M.card_state(card, nil, now)
+  local state = M.card_state(card, now)
   return state.availability == "active" and (state.due == nil or state.due <= now)
 end
 
@@ -270,7 +239,7 @@ function M.next_due(cards, now)
   now = now or os.time()
   local best = nil
   for _, card in ipairs(cards or {}) do
-    local state = M.card_state(card, nil, now)
+    local state = M.card_state(card, now)
     if state.availability ~= "suspended" then
       local due = state.due
       if state.availability == "buried" and state.available_at then
@@ -299,7 +268,10 @@ end
 -- Returns the store.set_card_fields update list plus the due epoch for the
 -- rating, following a small SM-2-style schedule.
 function M.review_updates(card, score, now, opts)
-  local state = M.card_state(card, opts, now)
+  if score ~= 1 and score ~= 2 and score ~= 3 then
+    error("rating must be 1, 2, or 3")
+  end
+  local state = M.card_state(card, now, opts)
   local interval
   local ease
 
@@ -307,17 +279,18 @@ function M.review_updates(card, score, now, opts)
     interval = 0
     ease = math.max(option(opts, "min_ease"), state.ease - 0.2)
   elseif score == 2 then
-    interval = state.interval and state.interval * 1.2 or option(opts, "mid_hours") / 24
+    interval = state.interval and state.interval * 1.2 or option(opts, "hard_hours") / 24
     ease = state.ease
   else
     interval = state.interval and state.interval * state.ease or option(opts, "good_days")
     ease = math.min(option(opts, "max_ease"), state.ease + 0.05)
   end
+  interval = math.min(interval, option(opts, "max_interval_days"))
 
-  -- Sub-day intervals need two decimals so a six-hour interval remains 0.25
-  -- days instead of being rounded up to 0.3 days (7.2 hours). Keep the
-  -- existing one-decimal storage for intervals of at least a day.
-  local interval_decimals = interval < 1 and 2 or 1
+  -- Sub-day intervals retain enough precision for custom hour values; the due
+  -- timestamp itself is always calculated from the unrounded interval.
+  local due_interval = interval
+  local interval_decimals = interval < 1 and 6 or 1
   interval = round(interval, interval_decimals)
   ease = round(ease, 2)
 
@@ -325,7 +298,7 @@ function M.review_updates(card, score, now, opts)
   if interval == 0 then
     due = now + option(opts, "again_minutes") * 60
   else
-    due = now + interval * SECONDS_PER_DAY
+    due = now + due_interval * SECONDS_PER_DAY
   end
 
   local updates = {
@@ -335,10 +308,6 @@ function M.review_updates(card, score, now, opts)
     { field = "interval", value = format_number(interval, interval_decimals) },
     { field = "ease", value = format_number(ease, 2) },
   }
-
-  if not identity.card_id(card) then
-    table.insert(updates, 1, { field = "id", value = identity.generate() })
-  end
 
   local lapses = state.lapses
   if score == 1 and state.lifecycle == "review" then
