@@ -17,6 +17,9 @@ All notable changes to this project will be documented here.
   window identify itself as a quick guide with current shortcuts.
 - Moved the identical source and history token-lock lifecycle into one tested
   helper while keeping their path validation and write policies separate.
+- Made the public Lua API return stable booleans, validation data, and
+  `ok, message, persisted` mutation results. `command()` now preserves routed
+  return values.
 
 ## 0.2.0 - 2026-08-22
 

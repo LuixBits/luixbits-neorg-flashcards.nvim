@@ -37,7 +37,7 @@ function M.close()
 end
 
 function M.open()
-  popup.open(state, {
+  local opened = popup.open(state, {
     title = " Flashcards Quick Guide ",
     footer = " q close ",
     min_width = 62,
@@ -51,7 +51,11 @@ function M.open()
     },
   })
 
-  popup.set_lines(state, {
+  if not opened then
+    return false
+  end
+
+  local rendered = popup.set_lines(state, {
     "* Flashcards",
     "",
     "Folder: " .. (config.flashcards_dir or ""),
@@ -79,6 +83,7 @@ function M.open()
     "",
     "Full manual: :help neorg-flashcards",
   })
+  return rendered == true
 end
 
 return M

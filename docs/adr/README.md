@@ -16,3 +16,4 @@ record is a design target and may change before implementation.
 | [0008](0008-source-and-history-persistence.md) | Accepted | Separate source commits from history delivery and persist failed events in an outbox |
 | [0009](0009-semantic-rating-highlights.md) | Accepted | Use configurable semantic highlight groups for ratings |
 | [0010](0010-centralize-theme-highlights.md) | Accepted | Centralize theme-linked highlights and redundant visual state |
+| [0011](0011-public-lua-result-contract.md) | Accepted | Give public Lua functions stable, useful result contracts |

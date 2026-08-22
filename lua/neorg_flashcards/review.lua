@@ -567,7 +567,7 @@ function M.start(cards, errors, label, empty_message, opts)
   if #cards == 0 then
     M.close()
     util.notify(empty_message or "No valid flashcards found", vim.log.levels.WARN)
-    return
+    return false
   end
 
   -- A new start replaces an existing session. Finalize the current undo
@@ -603,9 +603,11 @@ function M.start(cards, errors, label, empty_message, opts)
   state.session_id =
     string.format("%s-%x", os.date("!%Y%m%dT%H%M%SZ"), math.floor(monotonic_time() * 1000000) % 0xffffff)
   render()
+  return true
 end
 
 function M.close()
+  local was_active = M.is_open() or M.is_active()
   commit_last_action()
   popup.close(key_help)
   popup.close(state)
@@ -633,83 +635,89 @@ function M.close()
   if on_close then
     on_close()
   end
+  return was_active
 end
 
 function M.flip_or_next()
   if state.completed then
-    M.close()
-    return
+    return M.close()
   end
   if #state.queue == 0 then
-    return
+    return false
   end
 
   if state.showing_answer then
     util.notify("Choose 1 Again, 2 Hard, or 3 Good before continuing")
-    return
+    return false
   end
 
   state.showing_answer = true
   render()
+  return true
 end
 
 function M.next()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   state.index = state.index % #state.queue + 1
   state.showing_answer = false
   render()
+  return true
 end
 
 function M.previous()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   state.index = ((state.index - 2) % #state.queue) + 1
   state.showing_answer = false
   render()
+  return true
 end
 
 function M.hint()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
   if state.showing_answer then
     util.notify("The full answer is already visible")
-    return
+    return false
   end
 
   local attempt = current_attempt()
   local source = hint_source(attempt.card)
   if source == "" then
     util.notify("This card has no answer field to hint", vim.log.levels.WARN)
-    return
+    return false
   end
 
   attempt.hint_level = math.min(4, (attempt.hint_level or 0) + 1)
   attempt.hints_used = (attempt.hints_used or 0) + 1
   state.session.hints = state.session.hints + 1
   render()
+  return true
 end
 
 function M.rate_current(score, opts)
   if state.completed or #state.queue == 0 then
-    return false
+    return false, "No active review", false
   end
   if score ~= 1 and score ~= 2 and score ~= 3 then
-    util.notify("Rating must be 1, 2, or 3", vim.log.levels.ERROR)
-    return false
+    local message = "Rating must be 1, 2, or 3"
+    util.notify(message, vim.log.levels.ERROR)
+    return false, message, false
   end
 
   opts = opts or {}
   if opts.require_reveal and not state.showing_answer then
     state.showing_answer = true
     render()
-    util.notify("Answer revealed — review it, then press 1, 2, or 3 again")
-    return false
+    local message = "Answer revealed — review it, then press 1, 2, or 3 again"
+    util.notify(message)
+    return false, message, false
   end
 
   -- Once another answer is accepted, the prior rating is no longer the
@@ -736,7 +744,7 @@ function M.rate_current(score, opts)
   })
   if not ok then
     util.notify(message, vim.log.levels.ERROR)
-    return false
+    return false, message, false
   end
   if message then
     util.notify(message, vim.log.levels.WARN)
@@ -817,7 +825,7 @@ function M.rate_current(score, opts)
 
   util.notify("Next review " .. schedule.humanize(due - now))
   render()
-  return true
+  return true, message, persisted == true
 end
 
 function M.undo_last()
@@ -893,8 +901,11 @@ function M.undo_last()
 end
 
 local function apply_card_action(name, callback)
-  if state.completed or #state.queue == 0 or type(callback) ~= "function" then
-    return false
+  if state.completed or #state.queue == 0 then
+    return false, "No active review", false
+  end
+  if type(callback) ~= "function" then
+    return false, "Card action is not configured", false
   end
 
   local card = current_attempt().card
@@ -906,12 +917,14 @@ local function apply_card_action(name, callback)
     _review_emits_state_event = true,
   })
   if not ok then
-    util.notify(string.format("Could not %s card: %s", name, tostring(accepted)), vim.log.levels.ERROR)
-    return false
+    local error_message = tostring(accepted)
+    util.notify(string.format("Could not %s card: %s", name, error_message), vim.log.levels.ERROR)
+    return false, error_message, false
   end
   if accepted == false then
-    util.notify(message or ("Could not " .. name .. " card"), vim.log.levels.ERROR)
-    return false
+    message = message or ("Could not " .. name .. " card")
+    util.notify(message, vim.log.levels.ERROR)
+    return false, message, false
   end
 
   commit_last_action()
@@ -944,7 +957,7 @@ local function apply_card_action(name, callback)
     util.notify(message)
   end
   render()
-  return true
+  return true, message, persisted == true
 end
 
 function M.bury_current()
@@ -957,7 +970,7 @@ end
 
 function M.edit_current()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   -- Editing leaves the review flow entirely: no session summary, no on_close.
@@ -968,14 +981,15 @@ function M.edit_current()
   popup.close(state)
   clear_state()
   if type(config.on_edit) == "function" then
-    local ok, err = pcall(config.on_edit, card, edit_context)
+    local ok, opened = pcall(config.on_edit, card, edit_context)
     if ok then
-      return
+      return opened == true
     end
-    util.notify("Could not open flashcard source: " .. tostring(err), vim.log.levels.ERROR)
+    util.notify("Could not open flashcard source: " .. tostring(opened), vim.log.levels.ERROR)
   end
   vim.cmd.edit(util.fname(card.path))
   vim.api.nvim_win_set_cursor(0, { card.start_line, 0 })
+  return true
 end
 
 local function normalize_answer(text)
@@ -984,7 +998,7 @@ end
 
 function M.type_answer()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   local attempt = current_attempt()
@@ -992,7 +1006,7 @@ function M.type_answer()
   local fields = schema.reveal_fields(config, card)
   if #fields == 0 then
     util.notify("This card kind has no answer fields to type against", vim.log.levels.WARN)
-    return
+    return false
   end
 
   vim.ui.input({ prompt = "Answer: " }, function(input)
@@ -1028,6 +1042,7 @@ function M.type_answer()
       util.notify("✗ Answer: " .. best_expected)
     end
   end)
+  return true
 end
 
 -- Read-only state for UI integration and tests. Card contents stay private;

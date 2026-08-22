@@ -866,15 +866,27 @@ local flashcards = require("neorg_flashcards")
 vim.keymap.set("n", "<leader>nc", flashcards.overview, { desc = "Open flashcards" })
 ```
 
+Return values use four small contracts:
+
+- `setup()` and UI/action functions return a boolean. With `vim.ui` prompts,
+  `true` means the prompt was launched; the callback receives the later answer.
+- Source mutations return `ok, message, persisted`. A successful result with
+  `persisted = false` changed an open modified buffer that still needs saving.
+  Failed mutations always return `persisted = false`.
+- Queries return their data. Validation functions return a status followed by
+  the cards and diagnostics they computed.
+- `command()` returns every value from the routed function. The `:Flashcards`
+  command itself ignores those values.
+
 | Function | Action |
 | -------- | ------ |
-| `setup(opts)` | Configure the plugin (see [Configuration](#configuration)) |
-| `command(args?)` | Dispatch the same routes as `:Flashcards` |
+| `setup(opts)` | Configure the plugin and return `true`; invalid options raise an error (see [Configuration](#configuration)) |
+| `command(args?)` | Dispatch the same routes as `:Flashcards` and return the routed result |
 | `open_flashcards()` | Create or open `default_file` |
 | `add_kind(kind?)` | Add-card form targeting the current `.norg` file |
 | `add_to_default(kind?)` | Add-card form targeting `default_file` |
-| `validate_file()` | Validate `@flashcard` blocks in the current buffer |
-| `validate_collection()` | Run parser, schema, ID, scheduling, and health checks |
+| `validate_file()` | Return `ok, valid_cards, errors` for the current buffer |
+| `validate_collection()` | Return `ok, cards, issues, parse_errors` for the collection |
 | `review_all()` | Review every active, valid card under `flashcards_dir` |
 | `review_due()` | Review due and new cards, oldest due first |
 | `review_file()` | Review the current file |
@@ -885,20 +897,20 @@ vim.keymap.set("n", "<leader>nc", flashcards.overview, { desc = "Open flashcards
 | `close_review()` | Close the review popup |
 | `flip_or_next()` | Reveal the current answer |
 | `next_card()` / `previous_card()` | Move within the review session |
-| `rate_current(1\|2\|3)` | Score the current card and schedule its next review |
+| `rate_current(1\|2\|3)` | Score the current card and return `ok, message, persisted` |
 | `edit_current_card()` | Edit the current valid card in the protected composer |
 | `type_answer()` | Typed-answer mode for the current card |
 | `hint_current()` | Reveal the next progressive hint for the current card |
-| `undo_last_rating()` | Undo the latest accepted rating |
-| `bury_current()` | Bury the current review card until tomorrow |
-| `suspend_current()` | Suspend the current review card |
+| `undo_last_rating()` | Undo the latest accepted rating; returns the mutation triple |
+| `bury_current()` | Bury the current review card until tomorrow; returns the mutation triple |
+| `suspend_current()` | Suspend the current review card; returns the mutation triple |
 | `get_review_state()` | Return a copy of the active review session state |
-| `toggle_suspend(card)` | Suspend or resume a card |
+| `toggle_suspend(card)` | Suspend or resume a card; returns the mutation triple |
 | `edit_card(card, context?)` | Edit a parsed card in the protected composer; `context.invalid = true` opens source repair instead |
-| `delete_card(card)` | Delete one parsed card's exact source block; no confirmation at this low-level API |
-| `bury_card(card)` / `toggle_bury(card)` | Bury a card until tomorrow or toggle burial |
+| `delete_card(card)` | Delete one parsed card's exact source block and return the mutation triple; no low-level confirmation |
+| `bury_card(card)` / `toggle_bury(card)` | Bury or unbury a card; returns the mutation triple |
 | `open_card(card)` | Open a parsed card at its source block |
-| `help()` | Short in-editor guide |
+| `help()` | Open the quick in-editor guide |
 
 The review, hub, and form keymaps are buffer-local — they only exist
 while those UI elements are open and never occupy your global keys.

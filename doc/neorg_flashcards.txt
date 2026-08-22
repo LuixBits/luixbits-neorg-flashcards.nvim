@@ -506,14 +506,26 @@ The primary entry points are public functions on the plugin module:
     { desc = "Open flashcards" })
 <
 
+Result contracts:
+
+- setup() and UI/action functions return a boolean. For `vim.ui` prompts,
+  true means the prompt started; its callback receives the later answer.
+- Source mutations return `ok, message, persisted`. A successful false
+  `persisted` value means an open modified buffer still needs to be saved.
+  Failed mutations always return `persisted = false`.
+- Queries return data. Validation returns status, cards, and diagnostics.
+- command() returns every result from the routed function. |:Flashcards|
+  ignores those values.
+
                                                   *neorg-flashcards-functions*
-setup({opts})             Configure the plugin; see |neorg-flashcards-setup|.
-command({args})           Dispatch the same routes as |:Flashcards|.
+setup({opts})             Configure and return true; invalid options error.
+                          See |neorg-flashcards-setup|.
+command({args})           Dispatch |:Flashcards| routes and return the result.
 open_flashcards()         Create or open `default_file`.
 add_kind({kind})          Card form targeting the current `.norg` file.
 add_to_default({kind})    Card form targeting `default_file`.
-validate_file()           Validate the current buffer.
-validate_collection()     Check collection parsing, schema, and health.
+validate_file()           Return ok, valid cards, and current-buffer errors.
+validate_collection()     Return ok, cards, health issues, and parse errors.
 review_all()              Review all active, valid collection cards.
 review_due()              Review due and new active cards, oldest first.
 review_file()             Review the current file.
@@ -525,23 +537,23 @@ close_review()            Close the review popup.
 flip_or_next()            Reveal the current answer.
 next_card()               Browse the next pending card.
 previous_card()           Browse the previous pending card.
-rate_current({score})     Rate 1/2/3 and schedule the next review.
+rate_current({score})     Rate 1/2/3; return ok, message, persisted.
 edit_current_card()       Edit the current valid card in the card form.
 type_answer()             Typed-answer mode for the current card.
 hint_current()            Reveal the next progressive answer hint.
-undo_last_rating()        Undo the latest accepted rating.
-bury_current()            Bury the current review card until tomorrow.
-suspend_current()         Suspend the current review card.
+undo_last_rating()        Undo the latest rating; return the mutation triple.
+bury_current()            Bury until tomorrow; return the mutation triple.
+suspend_current()         Suspend the card; return the mutation triple.
 get_review_state()        Return a copy of the review session state.
-toggle_suspend({card})    Suspend or resume a parsed card.
+toggle_suspend({card})    Toggle suspension; return the mutation triple.
 edit_card({card}, {context})
                           Edit in the form; `context.invalid = true` opens
                           source for structural repair.
-delete_card({card})       Delete the parsed card's exact source block. The
-                          low-level Lua call does not ask for confirmation.
-bury_card({card})         Bury a card until tomorrow.
-toggle_bury({card})       Bury or unbury a card.
+delete_card({card})       Delete the exact source block; return the mutation
+                          triple. The low-level call does not confirm.
+bury_card({card})         Bury until tomorrow; return the mutation triple.
+toggle_bury({card})       Toggle burial; return the mutation triple.
 open_card({card})         Open a parsed card at its source block.
-help()                    Open the short guide.
+help()                    Open the quick guide.
 
 vim:tw=78:ts=8:ft=help:norl:

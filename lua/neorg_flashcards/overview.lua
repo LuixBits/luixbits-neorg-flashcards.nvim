@@ -1933,7 +1933,7 @@ function M.open(collect, opts)
   provider = collect or provider
   if not provider then
     util.notify("Flashcard collection provider is not configured", vim.log.levels.ERROR)
-    return
+    return false
   end
   local cards, errors, invalid = provider()
   cards = cards or {}
@@ -1973,6 +1973,7 @@ function M.open(collect, opts)
     apply_layout()
   end
   M.show(opts.view or state.page or "overview")
+  return M.is_open()
 end
 
 function M.setup(opts, extra_handlers)
