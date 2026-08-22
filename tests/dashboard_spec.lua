@@ -434,8 +434,8 @@ return function(T)
   vim.cmd("Flashcards open")
   assert_true(not overview.is_open(), "opening the collection closes the hub cleanly")
   assert_equal(
-    vim.fs.normalize(vim.api.nvim_buf_get_name(0)),
-    vim.fs.normalize(T.config.default_file),
+    T.canonical_path(vim.api.nvim_buf_get_name(0)),
+    T.canonical_path(T.config.default_file),
     "opening the collection lands in the configured card source"
   )
 
