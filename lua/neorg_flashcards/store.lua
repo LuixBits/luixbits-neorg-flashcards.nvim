@@ -56,6 +56,14 @@ local function resolve_destination(path, opts)
   return destination
 end
 
+local function buffer_matches_destination(bufnr, destination, opts)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  local buffer_destination = resolve_destination(vim.api.nvim_buf_get_name(bufnr), opts)
+  return buffer_destination == destination
+end
+
 local function ensure_destination_parent(path, opts)
   opts = opts or {}
   local destination, destination_err = resolve_destination(path, opts)
@@ -389,10 +397,7 @@ local function write_source_lines(path, bufnr, lines, opts)
   end
 
   if bufnr then
-    if
-      not vim.api.nvim_buf_is_valid(bufnr)
-      or util.canonical_path(vim.api.nvim_buf_get_name(bufnr)) ~= current_destination
-    then
+    if not buffer_matches_destination(bufnr, current_destination, destination_opts) then
       return false, "Source buffer no longer matches the configured collection destination", false
     end
     local was_modified = vim.bo[bufnr].modified
@@ -435,8 +440,7 @@ local function write_source_lines(path, bufnr, lines, opts)
     if
       not prepared_destination
       or prepared_destination ~= current_destination
-      or not vim.api.nvim_buf_is_valid(bufnr)
-      or util.canonical_path(vim.api.nvim_buf_get_name(bufnr)) ~= current_destination
+      or not buffer_matches_destination(bufnr, current_destination, destination_opts)
     then
       return restore_failure(
         prepared_err or "source changed while preparing this update; retry against the latest file"
@@ -466,7 +470,7 @@ local function write_source_lines(path, bufnr, lines, opts)
     if
       not prepared_destination
       or prepared_destination ~= current_destination
-      or util.canonical_path(vim.api.nvim_buf_get_name(bufnr)) ~= current_destination
+      or not buffer_matches_destination(bufnr, current_destination, destination_opts)
     then
       return restore_failure(
         prepared_err or "source changed while preparing this update; retry against the latest file"
@@ -496,7 +500,7 @@ local function write_source_lines(path, bufnr, lines, opts)
         if
           not checked_destination
           or checked_destination ~= current_destination
-          or util.canonical_path(vim.api.nvim_buf_get_name(bufnr)) ~= current_destination
+          or not buffer_matches_destination(bufnr, current_destination, destination_opts)
         then
           write_error = checked_err or "source changed while preparing this update; retry against the latest file"
           writing = false
