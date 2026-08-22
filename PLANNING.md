@@ -45,48 +45,60 @@ Release checks completed before v0.2.0:
 6. Evaluate the real NVF configuration and confirm that it emits only
    `<leader>nc`.
 
-## 0.3: Named collections
+## 0.3: Named study workspace
 
-Goal: Japanese and computer-science study never mix unless the user explicitly
-asks for an aggregate view.
+Status: implemented and validated for the next release; not released
 
-1. Replace today's top-level setup with an explicit `default_collection` and
-   `collections` table through the documented breaking migration.
-2. Add collection validation, canonical path resolution, and immutable
-   collection contexts.
-3. Pass that context through parser, card form, review, history, health, Cards,
-   and Stats before exposing a collection switcher.
-4. Store one history ledger per collection and add collection identity to new
-   events.
-5. Show the active collection in the hub, add local `C` selection, and add
-   `:Flashcards collection [id]` for scripts.
-6. Test two roots with separate ledgers, dirty buffers, failed history retries,
-   and identical card IDs. Reject overlapping roots and shared ledger paths.
+Goal: Japanese and computer-science study never mix, while both subjects use
+the same small interface. Any future aggregate view must be a separate,
+explicit design.
 
-Named collections require an explicit configuration and ledger migration.
-There is no implicit `default` collection compatibility mode; the migration
-must validate roots and history destinations before changing data.
+The implemented slice includes:
 
-## 0.4: General card types
+- A strict `default_collection` plus `collections` setup. Flat v0.2 options are
+  rejected; there is no implicit collection or compatibility alias.
+- Pinned, non-overlapping collection roots; separate default files and ledgers;
+  immutable operation contexts; and harmless reuse of a card ID in unrelated
+  collections.
+- The active collection in the hub, buffer-local `C` selection, command
+  completion for `:Flashcards collection [id]`, and no new global shortcut.
+- Per-collection schema registries and default card types. Bundled types include
+  `question_answer`, `term_definition`, `code_output`, Japanese recognition,
+  production, kanji, and sentence cards, plus the existing Chinese type.
+- A card-type picker when a collection has more than one type and a type filter
+  in Cards. New history events include the card type.
+- Schema-gated multiline fields. Long values use explicit `field: |` blocks and
+  a focused editor reached from the protected composer.
+- Schema-gated typed answers. The review shows `t` only for opted-in reveal
+  fields, displays an aligned comparison, and keeps the attempt in memory.
+- Card Clinic as a Cards filter. It explains leeches, recent Again ratings, and
+  repeated hint use from effective review history, then shows a recall trail in
+  the existing detail pane.
+- An NVF `schemaPresets` attribute set keyed by collection ID. NVF still exposes
+  exactly one optional global mapping, `<leader>nc`, for the hub.
 
-Goal: use the same engine for languages and technical subjects without making
-one universal, awkward schema.
+Named collections require an explicit configuration migration. A v0.2
+`reviews.jsonl` can stay with the root that becomes a named collection; a mixed
+ledger must be split manually. Existing scalar card fields remain valid.
 
-1. Keep `schemas` as the canonical schema registry and move it under each
-   collection in a breaking configuration migration; do not add a parallel
-   option name.
-2. Add built-in `question_answer`, `term_definition`, and `code_output` types.
-3. Add a type picker to the form and a type filter to Cards.
-4. Add Japanese recognition, production, kanji, and sentence presets where
-   they can reuse the same one-block/one-scheduled-card model.
-5. Record card type in new history events and show per-type counts and
-   retention.
+Validation completed on 2026-08-23:
 
-Automatic forward/reverse siblings and cloze siblings need a separate note
-identity design. They should not silently duplicate scheduling state inside
-the current card block.
+1. The upgrade guide covers Lua and NVF migration, old ledgers, long fields,
+   and removal of v0.2 shortcuts and setup keys.
+2. The real NVF configuration evaluates with the collection-keyed preset
+   shape and emits exactly one flashcard mapping, `<leader>nc`.
+3. Regression tests cover collection switching, stale prompt callbacks, card
+   types, multiline add/edit, typed comparisons, Card Clinic, and old-ledger
+   reads on the supported Neovim line.
+4. Headless, clean-install, Neorg integration, formatting, documentation, Lua
+   lint, package, and Nix flake checks pass. Tagging v0.3.0 remains a separate
+   release action.
 
-## 0.5: Daily study plans and scheduler adapters
+Automatic forward/reverse siblings and cloze siblings still need a separate
+note identity design. They must not silently duplicate scheduling state inside
+one card block.
+
+## 0.4: Daily study plans and scheduler adapters
 
 Goal: control workload without confusing queue selection with interval math.
 
@@ -113,6 +125,7 @@ separate ADR.
 ## Later candidates
 
 - Saved browser filters and named study plans.
+- Per-card-type counts and retention.
 - Audio attachments, pronunciation playback, and optional TTS hooks.
 - Import and export helpers that preserve stable IDs and plain-text ownership.
 - Per-tag interval growth and retention views.

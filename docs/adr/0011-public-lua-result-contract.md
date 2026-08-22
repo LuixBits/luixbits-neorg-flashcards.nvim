@@ -17,10 +17,10 @@ but the user's later choice is not.
 
 ## Decision
 
-- Public UI and session functions return a boolean. `true` means the requested
-  synchronous action was accepted; `false` means it was rejected or had no
-  effect. For `vim.ui` prompts, `true` means the prompt was launched; it does
-  not predict the later answer.
+- Public functions that open UI or control a session return a boolean. `true`
+  means the synchronous action was accepted; `false` means it was rejected or
+  had no effect. For `vim.ui` prompts, `true` means the prompt was launched; it
+  does not predict the later answer.
 - Public source mutations return `ok, message, persisted`. `ok` says whether
   the change was accepted. `message` is `nil` when nothing needs explaining;
   otherwise it describes the result, warning, or error. `persisted` is always

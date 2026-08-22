@@ -7,8 +7,8 @@ record is a design target and may change before implementation.
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [0001](0001-one-entry-point-and-contextual-help.md) | Accepted | One global entry point and contextual help |
-| [0002](0002-separate-collections-and-card-types.md) | Proposed | Separate study collections from card types |
-| [0003](0003-scope-state-and-history-to-a-collection.md) | Proposed | Scope identity, history, and analytics to a collection |
+| [0002](0002-separate-collections-and-card-types.md) | Accepted | Separate study collections from card types |
+| [0003](0003-scope-state-and-history-to-a-collection.md) | Accepted | Scope identity, history, and analytics to a collection |
 | [0004](0004-separate-study-limits-from-scheduling.md) | Proposed | Keep workload limits separate from scheduling |
 | [0005](0005-value-only-card-composer.md) | Accepted | Use one protected, structured composer for adding and editing valid cards |
 | [0006](0006-confirm-source-range-card-deletion.md) | Accepted | Confirm exact source-range deletion and leave a recoverable on-disk copy |
@@ -17,3 +17,5 @@ record is a design target and may change before implementation.
 | [0009](0009-semantic-rating-highlights.md) | Accepted | Use configurable semantic highlight groups for ratings |
 | [0010](0010-centralize-theme-highlights.md) | Accepted | Centralize theme-linked highlights and redundant visual state |
 | [0011](0011-public-lua-result-contract.md) | Accepted | Give public Lua functions stable, useful result contracts |
+| [0012](0012-capability-gated-ephemeral-typed-answers.md) | Accepted | Gate typed answers by schema and keep attempts in memory |
+| [0013](0013-card-clinic-is-an-evidence-filter.md) | Accepted | Keep Card Clinic inside Cards and derive it from review evidence |

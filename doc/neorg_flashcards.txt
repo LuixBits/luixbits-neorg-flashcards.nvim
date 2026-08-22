@@ -1,568 +1,580 @@
-*neorg-flashcards* *neorg_flashcards.txt* Local Neorg flashcards
+*neorg-flashcards* *neorg_flashcards.txt* Local flashcards for Neovim
 
 ==============================================================================
 CONTENTS                                         *neorg-flashcards-contents*
 
 1. Setup                         |neorg-flashcards-setup|
-2. Configuration                 |neorg-flashcards-configuration|
+2. Collections and configuration |neorg-flashcards-configuration|
 3. Primary command               |neorg-flashcards-commands|
-4. Global keymap                 |neorg-flashcards-keymaps|
-5. Flashcard hub                 |neorg-flashcards-hub|
-6. Review                        |neorg-flashcards-review|
-7. Collections and card format   |neorg-flashcards-card-format|
-8. Scheduling and state          |neorg-flashcards-scheduling|
-9. Health, history, and stats    |neorg-flashcards-data|
-10. Cloze and typed answers      |neorg-flashcards-cloze|
-11. Troubleshooting              |neorg-flashcards-troubleshooting|
-12. Release scope and upgrade    |neorg-flashcards-upgrade|
+4. Global keymap and help        |neorg-flashcards-keymaps|
+5. Workspace and Card Clinic     |neorg-flashcards-hub|
+6. Composer and card types       |neorg-flashcards-composer|
+7. Review                        |neorg-flashcards-review|
+8. Stored card format            |neorg-flashcards-card-format|
+9. Scheduling                    |neorg-flashcards-scheduling|
+10. Health, history, and stats   |neorg-flashcards-data|
+11. Theme colors                 |neorg-flashcards-colors|
+12. Upgrade and troubleshooting  |neorg-flashcards-upgrade|
 13. Lua API                      |neorg-flashcards-lua-api|
 
 ==============================================================================
 SETUP                                               *neorg-flashcards-setup*
 
-Install the plugin on Neovim 0.10.4 or newer, then configure at least one
-schema:
+Requirements:
+
+  Neovim 0.10.4 or newer
+  A writable directory for each flashcard collection
+
+Neorg is optional. Source files still use the .norg suffix because that is
+the format scanned by the plugin. Without Neorg they are ordinary text; the
+workspace, composer, review window, and statistics remain available.
+
+Minimal setup:
 >
   local presets = require("neorg_flashcards.presets")
 
   require("neorg_flashcards").setup({
-    flashcards_dir = vim.fn.expand("~/notes/flashcards"),
-    default_file = vim.fn.expand("~/notes/flashcards/cards.norg"),
-    default_kind = "japanese",
-    schemas = presets.only("japanese"),
-    leech_threshold = 8,
-    ui = {
-      show_shortcuts = true,
-      rating_highlights = {
-        again = { link = "DiagnosticError" },
-        hard = { link = "DiagnosticWarn" },
-        good = { link = "DiagnosticOk" },
-      },
-      heatmap_highlights = {
-        [0] = { link = "NonText" },
-        [1] = { link = "Comment" },
-        [2] = { link = "DiagnosticHint" },
-        [3] = { link = "DiagnosticInfo" },
-        [4] = { link = "DiagnosticOk" },
+    default_collection = "japanese",
+    collections = {
+      japanese = {
+        label = "Japanese",
+        path = vim.fn.expand("~/notes/flashcards/japanese"),
+        default_file = "cards.norg",
+        default_card_type = "japanese",
+        schemas = presets.only("japanese"),
       },
     },
   })
 <
 
-Use `presets.only("chinese")` for Chinese, or pass a custom `schemas`
-table. Neorg is optional. Card storage and collection scans always use
-`.norg` files, but the plugin reads those files directly.
-
-When Neorg is installed through lazy.nvim, install LuaRocks first. The
-flashcard-only installation does not need it. See the current instructions:
-https://github.com/nvim-neorg/neorg#lazy.nvim
-
-`default_file` must be inside `flashcards_dir`, which is also the card-form
-write boundary. A current `.norg` file outside it is rejected
-instead of receiving a card. A custom `history_file` must be a separate
-`.jsonl` file inside the root, so history cannot be appended to a card source.
-Unknown setup, scheduling, UI, schema, and field options are rejected so
-configuration typos fail visibly.
-
-Setup creates `flashcards_dir` when absent and pins its resolved directory for
-the current setup session. If that root is moved, replaced, or retargeted
-through a symlink, collection commands fail rather than following the new
-path. After an intentional move, restore the directory and call setup() again,
-or restart Neovim.
-
-`ui.show_shortcuts = true` displays compact hints in the hub, review window,
-and card form. Set it to false to hide the persistent chrome; mappings and `?`
-contextual help remain available.
-
-`ui.rating_highlights` configures the Again, Hard, and Good rating groups.
-Their defaults link to DiagnosticError, DiagnosticWarn, and DiagnosticOk so
-the review UI follows the active colorscheme. If a theme makes those colors
-indistinguishable, replace a link with exact attributes such as
-`again = { fg = "#ff5f5f", bold = true }`.
-
-`ui.heatmap_highlights` configures activity levels 0 through 4. The defaults
-link to NonText, Comment, DiagnosticHint, DiagnosticInfo, and DiagnosticOk.
-The glyph changes with activity too, so these links are not expected to form
-a guaranteed light-to-dark gradient in every theme.
-
-The repository's NVF module exposes `programs.nvf.neorg-flashcards`. Its
-keymap options are:
-
-  keymaps.enable        Add module-managed keymaps when true.
-  keymaps.prefix        Exact key that opens the hub.
-
-With `enable = true` and `prefix = "<leader>nc"`, the module creates one
-global mapping: `<leader>nc` opens |:Flashcards|.
+After setup, run |:Flashcards|. Press `a` to add a card, `Ctrl-S` to save it,
+and `Enter` in Overview to review cards due now. Press `?` in the workspace,
+composer, or review window for current shortcuts. In contextual help, `?`
+closes the popup.
 
 ==============================================================================
-CONFIGURATION                              *neorg-flashcards-configuration*
+COLLECTIONS AND CONFIGURATION             *neorg-flashcards-configuration*
+
+A collection owns one directory, its card types, scheduling settings, and one
+review-history ledger. Separate collections keep unrelated subjects out of
+each other's queues and statistics.
+
+Example with Japanese and computer science:
+>
+  local presets = require("neorg_flashcards.presets")
+
+  require("neorg_flashcards").setup({
+    default_collection = "japanese",
+    collections = {
+      japanese = {
+        label = "Japanese",
+        path = vim.fn.expand("~/notes/flashcards/japanese"),
+        default_file = "inbox.norg",
+        default_card_type = "japanese",
+        schemas = presets.only(
+          "japanese",
+          "japanese_production",
+          "japanese_kanji",
+          "japanese_sentence"
+        ),
+      },
+      computer_science = {
+        label = "Computer Science",
+        path = vim.fn.expand("~/notes/flashcards/computer-science"),
+        default_file = "inbox.norg",
+        default_card_type = "question_answer",
+        schemas = presets.only(
+          "question_answer",
+          "term_definition",
+          "code_output"
+        ),
+      },
+    },
+  })
+<
 
 Top-level options:
 
-  flashcards_dir           Collection root and card-write boundary.
-  default_file             .norg file used outside another collection file.
-  default_kind             Schema used when add has no kind argument.
-  schemas                  Non-empty map of card schemas.
-  history_file             Optional .jsonl ledger inside the collection root.
-  leech_threshold          Positive integer; default 8.
-  scheduling               Interval options listed below.
-  ui.show_shortcuts        Persistent compact hints; default true.
-  ui.rating_highlights     Again, Hard, and Good Neovim highlight tables.
-  ui.heatmap_highlights    Activity highlight tables at levels 0 through 4.
-  on_review                Optional callback after a source change persists.
+  default_collection      Collection ID selected at startup; required.
+  collections             Non-empty map of collection IDs; required.
+  ui.show_shortcuts       Show compact shortcut ribbons; default true.
+  ui.rating_highlights    Again, Hard, and Good highlight definitions.
+  ui.heatmap_highlights   Activity definitions for levels 0 through 4.
+  on_review               Optional observer called after a source persists.
 
-Every scheduling value must be a positive finite number:
+Collection options:
 
-  scheduling.again_minutes       10       Again delay
-  scheduling.hard_hours           6       first Hard interval
-  scheduling.good_days            3       first Good interval
-  scheduling.starting_ease        2.5     new-card ease
-  scheduling.min_ease             1.3     lower ease bound
-  scheduling.max_ease             2.8     upper ease bound
-  scheduling.max_interval_days  365       Hard and Good interval cap
+  label                   Human name; defaults to the collection ID.
+  path                    Root, recursive scan, and write boundary; required.
+  default_file            .norg file inside path; default cards.norg.
+  default_card_type       First/default configured card type; required.
+  schemas                 Non-empty card-type map; required.
+  history_file            .jsonl file inside path; default reviews.jsonl.
+  scheduling              Per-collection scheduler overrides.
+  leech_threshold         Lapse warning threshold; default 8.
 
-`min_ease` must not exceed `starting_ease`, and `starting_ease` must not
-exceed `max_ease`. `good_days` must not exceed `max_interval_days`.
+Relative default_file and history_file values resolve from path. Collection
+paths cannot overlap. Two collections cannot share the same ledger, including
+through symlinks or hard links.
 
-Schema names start with a lowercase letter and may contain lowercase letters,
-numbers, `_`, or `-`. Each schema needs a non-empty `fields` list and an
-explicit `front` naming one of those fields. Field keys follow the same rule
-without `-`, are unique inside the schema, and cannot use scheduler-owned
-metadata names. String field options are `label`, `title`, `default`,
-`placeholder`, and `help`; `required` and `reveal` are booleans.
+Collection and card-type IDs begin with a lowercase letter and contain only
+lowercase letters, numbers, `_`, or `-`. Setup rejects unknown options and
+invalid schemas rather than guessing what a misspelled setting meant.
 
-`on_review(event)` receives a copy after the source change is persisted. The
-event has `type` (`review` or `card_state`), an action in `event.event`,
-`card_id`, `path`, and a timestamp. `rated` events also carry `rating`,
-`before`, `after`, duration, hint, and session data.
-The callback cannot cancel the change. A history append may still be queued
-for retry. Callback errors do not stop review. Compatible releases may add
-fields.
+Setup creates missing collection directories and pins their resolved identity
+for the session. Moving, replacing, or retargeting one makes operations stop.
+Run setup again, normally by restarting Neovim, after an intentional move.
+
+Press `C` in the workspace to choose a collection. The active collection name
+is shown in page headings. Switching is blocked while a composer or review is
+open, keeping the current draft and session attached to their original data.
 
 ==============================================================================
 PRIMARY COMMAND                                 *neorg-flashcards-commands*
 
                                                         *:Flashcards*
 :Flashcards [route]
-        Open the Overview page when no route is supplied. Command-line
-        completion lists routes and review scopes. This is the plugin's only
-        Ex command.
+        Open Overview with no route. This is the plugin's only Ex command.
+        Completion lists routes, review scopes, collection IDs, and card
+        types where appropriate.
 
   :Flashcards overview
   :Flashcards cards
   :Flashcards stats
-        Open the hub at Overview, Cards, or Stats.
+        Open the workspace on that page.
+
+  :Flashcards collection [id]
+        Choose a collection, or switch directly when [id] is supplied.
+
+  :Flashcards add [type]
+        Open the composer. One configured type opens directly; several types
+        open a picker. Supplying [type] skips the picker.
+
+        From a .norg file inside the active collection, the card is added at
+        the cursor. From another buffer or the workspace, it is added to the
+        active collection's default_file.
 
   :Flashcards review due
   :Flashcards review all
   :Flashcards review file
   :Flashcards review tag [tag]
   :Flashcards review score [again|hard|good|new]
-        Start a due, cram, current-file, tag, or score review. Every scope
-        excludes suspended and buried cards. Missing tag or score arguments
-        are prompted for. The current-file scope requires a saved file inside
-        `flashcards_dir`, because ratings update that source.
-
-  :Flashcards add [kind]
-        Open the card form for the current `.norg` file, or for `default_file`
-        from another buffer. Both targets must be inside `flashcards_dir`.
-        The target is checked against the pinned collection root before the
-        form opens and again when it is written.
-        Uses `default_kind` when [kind] is omitted. The destination is shown
-        above value-only fields; labels, required marks, placeholders, and
-        validation errors cannot be edited. Backspace, word deletion, and
-        Delete stop at the current value's boundaries.
-
-        In Insert mode, Enter advances and saves and closes from the last
-        field; Tab / Shift-Tab cycle fields. Ctrl-S saves and closes, while
-        Ctrl-N saves and starts another card. In Normal mode, j / k select a
-        field and Enter or i edits it. q / Esc confirms before discarding a
-        changed draft, and ? shows the complete current shortcuts. Fields are
-        currently single-line.
+        Start a due, cram, current-file, tag, or rating-bucket review. Missing
+        tag and score arguments open a prompt. Buried and suspended cards are
+        excluded from every normal queue.
 
   :Flashcards open
-        Create or open `default_file`, including missing parent directories.
-        The configured file must be inside `flashcards_dir`. Initial file
-        creation uses the same guarded store as card and scheduling changes.
+        Create or open the active collection's default_file.
 
   :Flashcards check
-        Check the whole collection. See |neorg-flashcards-data|.
+        Check parsing, schemas, stable IDs, scheduling values, leeches, and
+        review history.
 
   :Flashcards help
-        Open the quick in-editor guide. The complete manual is available at
-        |neorg-flashcards| with `:help neorg-flashcards`.
+        Open the short in-editor guide.
 
 ==============================================================================
-GLOBAL KEYMAP                                   *neorg-flashcards-keymaps*
+GLOBAL KEYMAP AND HELP                           *neorg-flashcards-keymaps*
 
-The plugin itself defines no global mappings. A normal Lua setup only needs:
+The plugin creates no global mappings. Its workspace, composer, help, and
+review mappings are buffer-local. A single optional entry point is enough:
 >
-  vim.keymap.set("n", "<leader>nc", "<cmd>Flashcards<CR>",
-    { desc = "Open flashcards" })
+  vim.keymap.set("n", "<leader>nc", "<cmd>Flashcards<CR>", {
+    desc = "Open flashcards",
+  })
 <
 
-Hub, review, and form keys are buffer-local. The NVF module creates the same
-single mapping when `keymaps.enable = true`.
+The NVF module creates that one mapping only when keymaps.enable is true. Its
+keymaps.prefix option is the exact key used to open |:Flashcards|.
+
+Useful current shortcuts are visible in the workspace winbar and floating
+window footers when ui.show_shortcuts is true. Set it to false to hide the
+compact ribbons without disabling mappings or `?` help. The focused long-field
+editor keeps its short apply/cancel footer because those controls are local to
+that editor.
+
+Every `?` window is searchable with Neovim's normal `/`. Use `n` and `N` for
+the next and previous matches. The short plugin guide opened with `H` or
+`:Flashcards help` is searchable in the same way.
 
 ==============================================================================
-FLASHCARD HUB                                       *neorg-flashcards-hub*
-                                               *neorg-flashcards-overview*
+WORKSPACE AND CARD CLINIC                            *neorg-flashcards-hub*
 
-|:Flashcards| opens a full tab with Overview, Cards, and Stats pages. Wide
-windows use two columns; narrow windows stack the panels. The winbar marks the
-active page and keeps compact contextual key hints visible even when Neovim
-uses a global statusline. Press `?` for the complete key list for the current
-page. Inside that list, `/` finds text and `n` / `N` move between matches.
+The workspace has Overview, Cards, and Stats pages in one tab. A wide Neovim
+window uses two columns; a narrow one stacks the panes.
 
 Common keys:
 
   1 / 2 / 3       Overview / Cards / Stats
-  Tab / Shift-Tab next / previous page
-  Ctrl-W then w   focus the other pane; clicking a pane also focuses it
-  j / k, Up / Down
-                    select in the primary list; otherwise scroll
-  Ctrl-D / Ctrl-U  scroll the focused pane by half a page
-  PageDown / PageUp
-                    scroll the focused pane by half a page
-  gg / G            first/last item, or top/bottom of the focused pane
-  ?               contextual key help
-  H               quick plugin guide
-  d / A           review due / review all active cards
-  c               collection check
-  R               reload the collection
-  q               close the hub
-  Esc             clear Cards search/filter first, then close
+  Tab / S-Tab     Next / previous page
+  C               Switch collection
+  ?               Current page keys
+  H               Open the short plugin guide
+  Ctrl-W w        Focus the other pane
+  j / k           Select in the primary pane, or scroll the focused pane
+  Ctrl-D / Ctrl-U Scroll half a page
+  PageDown / Up   Scroll half a page
+  gg / G          Top / bottom
+  d / A           Review due / all active cards
+  c               Check the collection
+  R               Reload
+  q               Close
 
-Navigation acts on the focused pane. In Overview and Cards, j / k changes the
-selection in the primary pane and scrolls in the secondary pane. Stats scrolls
-whichever pane is focused.
+Overview groups cards by tags and makes the due queue its primary action.
+`r` reviews the selected tag group, while `a`, `p`, and `e` add, preview, or
+edit a card.
 
-Overview groups cards by tag and keeps due review as the primary action:
+Cards is the working list:
 
-  Enter           review the complete due queue
-  r               review due cards in the selected tag group
-  j / k           select the next / previous card
-  a               add a card to `default_file`
-  p / e           preview / edit the selected card
+  /               Search card text, tags, type, source, date, and state
+  f               Choose a state, Card Clinic, or card type
+  o               Cycle due, front, state, and source sorting
+  X               Clear search and view
+  Esc             Clear an active view; otherwise close the workspace
+  Enter / r       Review the selected active, valid card
+  p / e           Preview / edit
+  x               Suspend or resume
+  b               Bury until tomorrow or unbury
+  D               Delete the exact source block after confirmation
 
-Cards is a searchable browser for the entire collection:
+Invalid cards remain visible as [INVALID] and may be edited. A closed invalid
+block may also be deleted; an unclosed block needs its missing @end first.
+Invalid cards cannot be reviewed or scheduled. Deleting from an unloaded
+source first saves the previous complete file as
+<source>.flashcards-backup. Deleting from an open modified buffer leaves the
+change unsaved for inspection or normal undo.
 
-  /               search card text, tags, source, dates, and states
-  f               choose a timing, lifecycle, or availability filter
-  o               cycle due, front, state, and source sorting
-  X               clear search and filter
-  j / k           select the next / previous card
-  Enter / r       review the selected active card
-  x               suspend or resume the selected card
-  b               bury until tomorrow or unbury the selected card
-  D               confirm and delete the selected source block
-  p / e           preview / edit the selected card
+Card Clinic is a Cards view selected with `f`. It includes an active card when
+its lapse count reaches leech_threshold, two of its last three reviews were
+Again, its latest rating was Again, or two of its last three reviews used
+hints. Undo events are respected; suspended and buried cards are excluded.
 
-Invalid blocks, including every copy of a duplicate stable ID, appear as
-`[INVALID]` rows. They remain searchable and have an `invalid` filter. Press
-`e` to repair the source or `D` to delete that exact block; review, suspend,
-and bury actions stay disabled.
+The detail pane shows non-redundant reasons for a card's inclusion and a
+recall trail with the newest rating on the right. Stats uses the same evidence
+in its Needs attention section.
 
-Deletion checks that the parsed source has not changed and works through a
-loaded buffer when present. A dirty source remains dirty and must be written
-manually, leaving normal buffer undo available. For an unloaded source, the
-previous complete source is saved to `<source>.flashcards-backup` before the
-source is atomically replaced; the next unloaded-source deletion replaces that
-backup. Historical review events are retained in `reviews.jsonl`.
+==============================================================================
+COMPOSER AND CARD TYPES                      *neorg-flashcards-composer*
 
-For valid cards, `e` opens the same structured, value-only composer used for
-creation and preserves the ID and scheduling metadata. Invalid blocks open as
-raw source so their structure can be repaired directly.
+The composer shows one protected row per field. Names, required marks,
+placeholders, validation messages, and the target file are decorations, not
+editable text. Backspace, word deletion, and Delete cannot cross a value's
+boundary.
 
-Stats combines activity and collection analytics. Use `d` for due review,
-`A` for an active-card cram session, or `R` to refresh its data. Both Stats
-panes use the common scrolling keys above. Heatmap cells vary both their glyph
-and their theme-linked activity highlight, so color is not the only signal.
+Insert-mode keys:
+
+  Enter           Next field; save and return from the final field
+  Tab / S-Tab     Next / previous field
+  Ctrl-S          Save and return
+  Ctrl-N          Save and start another card
+  Esc             Return to Normal mode
+
+Normal-mode keys:
+
+  j / k           Select a field
+  Enter / i       Edit the selected field
+  Ctrl-S          Save and return
+  Ctrl-N          Save and start another card
+  ?               Show all form keys
+  q / Esc         Cancel; confirm first when the draft changed
+
+A multiline field appears as one protected preview row. Press Enter on it to
+open a focused editor containing only the value. Ctrl-S applies the long text
+to the parent draft; Esc cancels it. Changed text gets a discard confirmation.
+Applying does not save the card until the parent composer is saved.
+
+Bundled card types:
+
+  japanese              Japanese recognition
+  japanese_production   Produce Japanese from English
+  japanese_kanji        Kanji reading and meaning
+  japanese_sentence     Sentence translation and context
+  chinese               Chinese recognition
+  question_answer       General long-form questions
+  term_definition       Terms, definitions, and examples
+  code_output           Predict and explain output; code is never executed
+
+A custom schema has label, front, and fields. Every field needs a key. Useful
+field flags are required, reveal, multiline, and typed_answer. A typed_answer
+field must also set reveal = true.
+>
+  local term = {
+    label = "Term and definition",
+    front = "term",
+    fields = {
+      { key = "term", title = "Term", required = true },
+      {
+        key = "definition",
+        title = "Definition",
+        required = true,
+        reveal = true,
+        multiline = true,
+      },
+      { key = "tags", title = "Tags" },
+    },
+  }
+<
+
+presets.only(...) raises when a preset name is unknown, so a typo cannot
+quietly remove a card type.
 
 ==============================================================================
 REVIEW                                             *neorg-flashcards-review*
 
-Review keys are local to the floating review window:
+Review-window keys:
 
-  Space / Enter   reveal the answer; a revealed card must be rated
-  j / k           browse next / previous pending card
-  ?               shortcuts for the current review state
-  h               show a progressively larger answer hint
-  t               type and check an answer
-  1               Again: save score 1 and retry once later this session
-  2               Hard: save score 2 and remove the card from the queue
-  3               Good: save score 3 and remove the card from the queue
-  u               undo the latest accepted rating
-  b               bury until tomorrow and remove from this session
-  x               suspend and remove from this session
-  e               edit the card in the structured composer
-  q / Esc         close review
+  Enter / Space   Reveal the answer
+  h               Show a progressive hint
+  t               Type and compare an enabled answer
+  1 / 2 / 3       Again / Hard / Good
+  j / k           Browse pending cards
+  u               Undo the latest rating
+  b               Bury until tomorrow
+  x               Suspend
+  e               Edit the current card
+  ?               Show keys for the current review state
+  q / Esc         Close review
 
-Pressing 1, 2, or 3 before reveal only reveals the answer. Press the rating
-again after checking it. The revealed view shows the next interval for all
-three ratings.
+A rating pressed before reveal reveals first. Press it again after checking
+the answer. The revealed view previews every next interval. Again requeues a
+card once later in the current session, so Again cannot create an endless
+retry loop.
 
-Again requeues a card only once per session, so the queue is finite. When the
-queue is empty, a completion screen reports elapsed time, ratings, retries,
-hints, buried cards, and suspended cards. `u` can still undo the last rating
-from that screen.
+Typed answers are for short values and exist only for card types with
+typed_answer fields. Comparison ignores case, outer spaces, and repeated
+whitespace, then chooses the closest enabled reveal value. A near miss aligns
+Yours and Answer; a middle dot marks missing text so color is not required.
+The result never selects a rating. Typed text and difference details stay in
+memory for the current attempt and are not written to card source or review
+history. The built-in prompt entry is removed from Neovim input history. A
+custom vim.ui.input implementation controls any history of its own.
 
-Rating labels use NeorgFlashcardsAgain, NeorgFlashcardsHard, and
-NeorgFlashcardsGood. They link to the theme's DiagnosticError,
-DiagnosticWarn, and DiagnosticOk groups by default and can be changed through
-`ui.rating_highlights`.
+Anki-style cloze markers work in any field:
 
-Ratings update an already loaded, modified source buffer without writing over
-its unsaved edits. The matching JSONL history event waits in memory until you
-save that source. Undoing the rating before the save removes the queued event.
-A source changed after review collection is rejected instead of risking an
-update to the wrong card.
+  {{c1::answer}}
+  {{c1::answer|hint}}
+
+They show as [...] or [hint] before reveal and as plain text afterward.
 
 ==============================================================================
-COLLECTIONS AND CARD FORMAT                 *neorg-flashcards-card-format*
-                                           *neorg-flashcards-collections*
+STORED CARD FORMAT                            *neorg-flashcards-card-format*
 
-Keep one or more `.norg` files under `flashcards_dir`. Collection commands
-scan that directory recursively. Use |:Flashcards| `review file` for the
-current chapter, `review tag grammar` across chapters, or `review all` for an
-active-card collection cram session.
-
-The collection root is also the write boundary. The composer and
-`default_file` cannot target a path outside it. A running setup also refuses a
-different directory that later appears at the configured root path.
-
-Cards are plain Neorg blocks:
+Cards are plain @flashcard blocks:
 >
   @flashcard japanese
   id: fc_0123456789abcdef01234567
   japanese: 勉強
   reading: べんきょう
   english: study
-  tags: jlpt vocab
+  notes: |
+    Common noun and する verb.
+    Often used in 勉強します.
+  tags: jlpt-n5 study
   score: 2
-  reviewed: 2026-07-01
-  due: 2026-07-02 08:30
-  interval: 0.5
+  reviewed: 2026-08-22
+  due: 2026-08-22 18:00
+  interval: 0.25
   ease: 2.5
-  reps: 6
+  reps: 4
   lapses: 1
-  lifecycle: review
+  lifecycle: learning
   availability: active
   @end
 <
 
-Every card needs a unique `id:` plus its schema fields marked
-`required = true`; the composer creates the ID automatically. Ratings maintain
-`score`, `reviewed`, `due`, `interval`, `ease`, `reps`, `lapses`, and
-`lifecycle`. Bury and suspend actions maintain `availability`; a buried card
-also gets an `available_at` timestamp.
+Every card needs a collection-unique stable id and every schema-required
+field. The composer creates the ID. Ratings maintain score, reviewed, due,
+interval, ease, reps, lapses, and lifecycle. Bury and suspend maintain
+availability and available_at.
+
+Long values use `field: |`. Every content line starts two spaces beyond its
+card directive; further indentation belongs to the value. An empty value line
+contains those two storage spaces. @end aligns with @flashcard, including when
+a card is below an indented Neorg node. There is no implicit continuation
+syntax: a free-standing line is reported as invalid.
 
 ==============================================================================
 SCHEDULING                                   *neorg-flashcards-scheduling*
 
-Ratings use a small SM-2-style rule set:
+The three ratings use these defaults:
 
-  1 Again   due after `again_minutes` (default 10); ease drops by 0.2
-  2 Hard    interval grows by 1.2, starting at `hard_hours` (default 6)
-  3 Good    interval grows by ease, starting at `good_days` (default 3)
+  1 Again   10 minutes; ease -0.20, not below 1.30
+  2 Hard     6 hours first; previous interval x 1.20 afterward
+  3 Good     3 days first; previous interval x current ease afterward;
+             ease +0.05, not above 2.80
 
-Hard and Good intervals cannot exceed `max_interval_days` (default 365).
+Hard and Good intervals are capped at 365 days. Multiplication spaces out a
+remembered card; the cap prevents unbounded growth. Again resets its delay to
+ten minutes.
 
-The hub presents three independent state axes:
+Every scheduling value is a positive finite number:
 
-  Lifecycle    new, learning, review, relearning
-               Inferred when absent and written after ratings.
+  again_minutes        10
+  hard_hours            6
+  good_days             3
+  starting_ease         2.5
+  min_ease              1.3
+  max_ease              2.8
+  max_interval_days   365
 
-  Timing       due, overdue, scheduled
-               `due` is absent or reached today, predates today, or is still
-               in the future.
+min_ease must not exceed starting_ease, which must not exceed max_ease.
+good_days must not exceed max_interval_days.
 
-  Availability active, suspended, buried
-               Controls whether normal due review can select the card.
+Card state has three independent axes:
 
-Suspended cards remain outside due review until resumed. A buried card is
-treated as active again after `available_at`; the built-in bury action uses
-midnight tomorrow.
+  Lifecycle     new, learning, review, relearning
+  Timing        due, overdue, scheduled
+  Availability  active, suspended, buried
+
+Buried cards return at midnight the next day. Suspended cards stay out until
+resumed. Review all ignores due time as an explicit cram mode, but still
+excludes buried and suspended cards.
 
 ==============================================================================
 HEALTH, HISTORY, AND STATS                         *neorg-flashcards-data*
 
-Every v0.2 card needs a stable, collection-unique `id:`. The composer creates
-one automatically. ID-less v0.1 blocks remain visible as invalid cards but
-cannot be reviewed. There is no automatic migration command; back up and
-convert the blocks before switching versions. See |neorg-flashcards-upgrade|.
+|:Flashcards| check and |:checkhealth| neorg_flashcards report parser and
+schema errors, missing or duplicate IDs, malformed scheduling data, leeches,
+and history problems. Every copy of a duplicate ID is excluded from review;
+the plugin cannot safely decide which source owns that schedule and history.
 
-`:Flashcards check` reports parser and schema failures, missing and duplicate
-IDs, duplicate fronts, malformed due dates or numeric fields, invalid
-lifecycle values, and leeches. The leech threshold is configurable and
-defaults to eight lapses. Invalid schema blocks and every copy of a duplicate
-ID are excluded from review but remain visible on the Cards page for repair.
-Other warnings do not make an otherwise valid card unreviewable.
-`:checkhealth neorg_flashcards` reports the same setup and collection health
-through Neovim's health UI.
+Normal events are appended as versioned JSON objects to reviews.jsonl inside
+their collection. Events include collection_id and card_type as well as stable
+card identity, timestamps, ratings, scheduling snapshots, hint use, duration,
+and session context. Undo appends a compensating event.
 
-Persisted ratings and card-state changes append versioned JSON events to
-`reviews.jsonl` under `flashcards_dir` (or `history_file` when configured).
-Events can carry card ID, rating, timestamp, duration, hint use, scheduling
-states, and session context. Undo appends a compensating rating event instead
-of rewriting the ledger. When the source buffer is already modified, matching
-events are queued until that source is saved; undo before the save cancels its
-pending rating. A failed history append stays in a durable outbox under
-Neovim's state directory and is retried on later writes, focus, setup, and
-exit. Print its directory with:
+An older event without collection_id inherits the scope of its ledger. An
+event explicitly naming another collection is reported and excluded from
+analytics for the active collection.
+
+When a source buffer has unsaved changes, its event waits in memory until the
+source is written. Undo before that write removes the pending event. If the
+source persisted but the ledger append failed, an outbox under stdpath(state)
+keeps the event for retry on writes, focus, setup, and exit.
+
+Stats includes totals, streak, 7/30/90-day retention, 30-day ratings, card
+states, leeches, median answer time, estimated workload, an activity heatmap,
+a seven-day forecast, tag sizes, and the Card Clinic attention list.
+
+==============================================================================
+THEME COLORS                                      *neorg-flashcards-colors*
+
+Again, Hard, and Good link to DiagnosticError, DiagnosticWarn, and
+DiagnosticOk by default. Heat levels link to NonText, Comment, DiagnosticHint,
+DiagnosticInfo, and DiagnosticOk. These links follow the active colorscheme.
+
+Override links or provide exact attributes when a theme makes them unclear:
 >
-  :lua print(vim.fn.stdpath("state") .. "/neorg-flashcards/outbox")
+  ui = {
+    rating_highlights = {
+      again = { fg = "#ff5f5f", bold = true },
+      hard = { fg = "#e5c07b" },
+      good = { fg = "#98c379" },
+    },
+  }
 <
 
-Stats includes total and today's reviews, streak, 7/30/90-day retention,
-30-day answer distribution, lifecycle and availability counts, leeches,
-median answer time, an estimated due workload, a responsive activity heatmap,
-and a seven-day forecast. It also lists the largest tag groups and the cards
-with the lowest saved rating.
+Overrides return after a colorscheme change. Labels, glyphs, and written state
+also carry meaning, so color is never the only signal.
 
 ==============================================================================
-CLOZE AND TYPED ANSWERS                            *neorg-flashcards-cloze*
+UPGRADE AND TROUBLESHOOTING                       *neorg-flashcards-upgrade*
 
-Any field may contain Anki-style cloze markers:
->
-  @flashcard japanese
-  id: fc_cloze_tokyo
-  japanese: 東京は{{c1::日本}}の首都です
-  english: Tokyo is the capital of {{c1::Japan|country}}
-  @end
-<
+Version 0.3 replaces the v0.2 single-collection setup. It does not register
+compatibility options or old commands. Read docs/UPGRADING.md before updating
+a working configuration.
 
-Before reveal, a marker shows as `[...]`, or `[country]` when it has a hint.
-After reveal, it unwraps to the answer. Press `t` during review to compare a
-typed answer with the reveal fields using UTF-8-aware fuzzy matching. You
-still choose the rating yourself.
+Common problems:
 
-==============================================================================
-TROUBLESHOOTING                         *neorg-flashcards-troubleshooting*
+  :Flashcards is missing
+        Confirm the plugin loaded and setup() ran. Check :messages.
 
-`:Flashcards` is missing ~
-Confirm that the plugin is installed and setup() completed. For lazy.nvim,
-open `:Lazy` and inspect `:messages`. For a native optional package, run
-`packadd luixbits-neorg-flashcards.nvim` before requiring the Lua module.
+  setup() raises an error
+        Read the full error. Unknown options are rejected. Check that every
+        collection has path, default_card_type, and at least one schema.
 
-setup() reports an error ~
-Read the complete error in `:messages`. Compare the configuration with
-|neorg-flashcards-configuration|. `default_file` must be a .norg file inside
-`flashcards_dir`, and Neovim must be able to create and write the root.
+  The workspace shows no cards
+        Save a .norg file below the active collection path, press R, then run
+        :Flashcards check. Also confirm the collection named in the heading.
 
-The hub has no cards ~
-Save a .norg file under `flashcards_dir`, press `R`, then run
-`:Flashcards check`. Invalid blocks are visible on Cards with the `invalid`
-filter.
+  A due queue is empty
+        Normal review includes active new and due cards. Use Stats for the
+        next due time or A for the explicit all-active cram queue.
 
-Nothing is due ~
-Normal review includes new, due, active cards. Open Stats for the next due
-time, or press `A` for an explicit all-active-card cram session.
+  A collection root moved
+        Restore it, or update setup and restart Neovim so the new directory
+        identity is pinned.
 
-The collection root moved or was replaced ~
-Restore the configured directory. After an intentional move, update the paths
-and call setup() again, or restart Neovim, so the new root identity is pinned.
+  A history/outbox warning persists
+        Check write access to reviews.jsonl and stdpath(state). Focus or
+        restart Neovim to retry. Do not delete queued events as a first fix.
 
-Neorg syntax or concealing is missing ~
-The flashcard UI works without Neorg. If Neorg was intended, confirm that it
-loaded and run `:checkhealth neorg`.
-
-A history or outbox warning persists ~
-Check write access to reviews.jsonl and Neovim's state directory. Focus or
-restart Neovim to retry. Inspect the outbox path shown in
-|neorg-flashcards-data|; do not delete pending events as a first repair.
-
-A card was deleted by mistake ~
-For a loaded source, use normal buffer undo before closing it. For an unloaded
-source, inspect `<source>.flashcards-backup`. Close Neovim and compare the
-backup with the current file before restoring the older complete source.
-
-==============================================================================
-RELEASE SCOPE AND UPGRADE                         *neorg-flashcards-upgrade*
-
-Version 0.2 targets Neovim 0.10.4 or newer on Linux and macOS. Windows path
-handling is best effort. This release supports one configured collection, one
-local history ledger, custom schemas, and the built-in three-rating scheduler.
-Named collections, daily quotas, scheduler adapters, audio, sync, and import
-or export tools are not part of 0.2.
-
-The v0.1 `:NeorgFlashcard*` commands and suffix keymaps were removed. No
-compatibility aliases remain. Replace them with |:Flashcards| routes and one
-optional global hub mapping before updating. Rename the setup option
-`languages` to `schemas`; NVF users must rename `languagePresets` to
-`schemaPresets`. Before switching, back up the collection and manually convert
-every v0.1 card to the canonical v0.2 fields with a unique `id:`. Then run
-`:Flashcards check` before reviewing.
-
-The complete command mapping and path checks are in `docs/UPGRADING.md` in the
-plugin repository.
+  A card was deleted accidentally
+        Use normal buffer undo for an open source. For an unloaded source,
+        compare it with <source>.flashcards-backup before restoring.
 
 ==============================================================================
 LUA API                                           *neorg-flashcards-lua-api*
 
-The primary entry points are public functions on the plugin module:
->
-  local flashcards = require("neorg_flashcards")
-  vim.keymap.set("n", "<leader>nc", flashcards.overview,
-    { desc = "Open flashcards" })
-<
+Commands call public functions on require("neorg_flashcards"):
 
-Result contracts:
+  setup(opts)
+        Validate and configure the workspace. Returns true; raises on invalid
+        configuration.
 
-- setup() returns true after valid configuration and errors on invalid
-  options.
-- UI and session functions return a boolean. True means the synchronous
-  request was accepted; false means it was rejected or had no effect. For
-  `vim.ui` prompts, true only means the prompt started; its callback receives
-  the later answer.
-- Source mutations return `ok, message, persisted`. `ok` says whether the
-  change was accepted. `message` is nil when nothing needs explaining;
-  otherwise it describes the result, warning, or error. A successful false
-  `persisted` value means an open modified buffer still needs to be saved.
-  Failed mutations always return `persisted = false`.
-- Queries return data. Validation returns status, cards, and diagnostics.
-- command() returns every result from the routed function. |:Flashcards|
-  ignores those values.
+  active_collection()
+        Return a defensive copy of the active collection.
 
-                                                  *neorg-flashcards-functions*
-setup({opts})             Configure and return true; invalid options error.
-                          See |neorg-flashcards-setup|.
-command({args})           Dispatch |:Flashcards| routes and return the result.
-open_flashcards()         Create or open `default_file`.
-add_kind({kind})          Add in the current collection `.norg`, or in
-                          `default_file` from a non-`.norg` buffer or the hub.
-add_to_default({kind})    Card form targeting `default_file`.
-validate_file()           Return ok, valid cards, and current-buffer errors.
-validate_collection()     Return ok, cards, health issues, and parser/history
-                          diagnostics.
-review_all()              Review all active, valid collection cards.
-review_due()              Review due and new active cards, oldest first.
-review_file()             Review the current file.
-review_tag({tag})         Review one tag; prompt when omitted.
-review_score({score})     Review an again/hard/good/new rating bucket.
-overview({opts})          Open the hub; view is overview/cards/stats.
-cards() / stats()         Open the corresponding hub page.
-close_review()            Close the review popup.
-flip_or_next()            Reveal the current answer.
-next_card()               Browse the next pending card.
-previous_card()           Browse the previous pending card.
-rate_current({score})     Rate 1/2/3; return ok, message, persisted.
-edit_current_card()       Edit the current valid card in the card form.
-type_answer()             Typed-answer mode for the current card.
-hint_current()            Reveal the next progressive answer hint.
-undo_last_rating()        Undo the latest rating; return the mutation triple.
-bury_current()            Bury until tomorrow; return the mutation triple.
-suspend_current()         Suspend the card; return the mutation triple.
-get_review_state()        Return a copy of the review session state.
-toggle_suspend({card})    Toggle suspension; return the mutation triple.
-edit_card({card}, {context})
-                          Edit in the form; `context.invalid = true` opens
-                          source for structural repair.
-delete_card({card})       Delete the exact source block; return the mutation
-                          triple. The low-level call does not confirm.
-bury_card({card})         Bury until tomorrow; return the mutation triple.
-toggle_bury({card})       Toggle burial; return the mutation triple.
-open_card({card})         Open a parsed card at its source block.
-help()                    Open the quick guide.
+  select_collection(id) / choose_collection()
+        Switch directly or open the collection picker.
 
-vim:tw=78:ts=8:ft=help:norl:
+  command(args?)
+        Dispatch the same routes as |:Flashcards|.
+
+  overview(opts?) / cards() / stats()
+        Open the workspace. opts.view accepts overview, cards, or stats.
+
+  open_flashcards()
+        Create or open the active collection's default_file.
+
+  add_kind(type?) / add_to_default(type?)
+        Choose or directly open the composer. add_to_default ignores the
+        current source file.
+
+  validate_file()
+        Return ok, valid_cards, errors for the current buffer.
+
+  validate_collection()
+        Return ok, cards, health_issues, diagnostics.
+
+  review_due() / review_all() / review_file()
+  review_tag(tag?) / review_score(score?)
+        Start the corresponding finite review queue.
+
+  close_review() / flip_or_next() / next_card() / previous_card()
+  hint_current() / type_answer() / get_review_state()
+        Control or inspect the active review session.
+
+  rate_current(1|2|3)
+  undo_last_rating() / bury_current() / suspend_current()
+        Mutate the current review card.
+
+  toggle_suspend(card) / bury_card(card) / toggle_bury(card)
+  delete_card(card)
+        Mutate a parsed card and return ok, message, persisted. delete_card is
+        a low-level call and does not show the Cards-page confirmation.
+
+  edit_current_card() / edit_card(card, context?) / open_card(card)
+        Open a card in the composer or at its source.
+
+  help()
+        Open the short plugin guide.
+
+UI-opening and control functions return whether the synchronous request was
+accepted. A vim.ui prompt may return true before its callback receives a later
+answer. active_collection() and get_review_state() return data; validation
+calls return their documented status and diagnostics. Source mutations return
+ok, message, persisted. A successful result with persisted=false changed an
+open modified buffer that still needs saving.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

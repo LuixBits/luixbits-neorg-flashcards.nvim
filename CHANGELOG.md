@@ -2,7 +2,41 @@
 
 All notable changes to this project will be documented here.
 
-## Unreleased
+## 0.3.0 - Unreleased
+
+- Replaced the flat single-root setup with required named collections. Each
+  collection owns its path, default file, schemas, default card type, scheduler
+  settings, leech threshold, and `reviews.jsonl`; overlapping roots and shared
+  ledger files are rejected. Removed v0.2 setup keys are not translated into an
+  implicit collection.
+- Added a buffer-local collection picker on `C`, the
+  `:Flashcards collection [id]` route, active-collection labels, command
+  completion, and collection-scoped Cards, Stats, health, review, and history.
+  An active form or review cannot be retargeted by switching collections or
+  re-running setup. An open idle hub reloads against the new configuration.
+- Changed the NVF `schemaPresets` option from a list to an attribute set keyed by
+  collection ID. Its opt-in keymap remains one exact hub mapping, `<leader>nc`.
+- Added bundled `question_answer`, `term_definition`, `code_output`, Japanese
+  production, kanji, and sentence card types. Bare add uses the only configured
+  type or opens a type picker, and Cards can filter by type.
+- Added schema-gated multiline fields. Long values are stored as explicit
+  `field: |` blocks with a two-space container indent relative to the card
+  directive and edited in a focused scratch buffer from the protected composer.
+  Scalar field syntax is unchanged; implicit v0.2 continuation lines require
+  conversion.
+- Added a `typed_answer` field capability. The `t` review action appears only
+  for cards with opted-in reveal values, shows an aligned exact/close/miss
+  comparison, removes built-in prompt entries from Neovim input history, bounds
+  fuzzy-comparison work, and leaves the attempt in memory instead of card source
+  or review history.
+- Added Card Clinic inside the Cards filter picker. It derives transparent
+  attention reasons from lapses, effective recent ratings, and hint use; the
+  card detail pane shows those reasons and a recent recall trail. Stats points
+  users from its Needs attention summary to the same Cards view.
+- Added `collection_id` and `card_type` to new review events without changing
+  the ledger version. A v0.2 ledger remains readable when its existing root is
+  assigned to one named collection. An event that explicitly names another
+  collection is reported and excluded from that ledger's analytics.
 
 - Removed the generic Overview and Stats subtitles. Help popups now advertise
   their native `/` search and `n`/`N` match navigation.
@@ -14,9 +48,9 @@ All notable changes to this project will be documented here.
   lifecycle state; timing is now consistently due, overdue, or scheduled.
 - Limited rating colors to generated controls and summaries so words such as
   `Good` in card content keep the normal card highlight.
-- Added pinned lazy.nvim and Nix examples, a native-package install path, an
-  end-to-end first-card walkthrough, a full configuration reference, and
-  practical troubleshooting steps.
+- Added lazy.nvim and Nix examples for the unreleased main branch, a
+  native-package install path, an end-to-end first-card walkthrough, a full
+  configuration reference, and practical troubleshooting steps.
 - Added the canonical `:help neorg-flashcards` entry and made the shorter `H`
   window identify itself as a quick guide with current shortcuts.
 - Moved the identical source and history token-lock lifecycle into one tested
