@@ -6,9 +6,10 @@ Local flashcards for Neorg notes in Neovim.
 
 `luixbits-neorg-flashcards.nvim` keeps language-learning cards in plain `.norg`
 files, then gives you a full-tab hub for browsing, adding, and analyzing them
-plus a floating review UI for studying them. It is intentionally
-local-first: no Anki, no server, no sync account, and no database outside your
-notes.
+plus a floating review UI for studying them. It is local-first: no Anki, no
+server, no sync account, and no external database. Cards and normal review
+history stay in the collection. If a history write fails, the pending event is
+temporarily kept under Neovim's state directory for automatic retry.
 
 ## Index
 
@@ -28,6 +29,7 @@ notes.
 - [Flashcard Hub and Stats](#flashcard-hub-and-stats)
 - [Cloze and Typed Answers](#cloze-and-typed-answers)
 - [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
 - [Language Presets](#language-presets)
 - [Suggested Keymaps](#suggested-keymaps)
 - [Lua API](#lua-api)
@@ -73,6 +75,8 @@ notes.
 
 Neorg is optional. The plugin reads and writes the card blocks itself; it does
 not require a Neorg workspace, Anki, SQLite, a server, or an account.
+The hub and review UI require Neovim; another editor can read or edit the plain
+`.norg` files but cannot run the plugin.
 
 ## Neorg or Plain Neovim?
 
@@ -94,6 +98,11 @@ the protocol here; no note-taking mothership has to be docked. Files ending in
 
 ### lazy.nvim with Neorg
 
+Install LuaRocks before using this path. Neorg's current
+[lazy.nvim installation](https://github.com/nvim-neorg/neorg#lazy.nvim) uses it
+to install Neorg's dependencies. The flashcard-only path below does not require
+LuaRocks.
+
 Configure Neorg as its own plugin spec. This follows Neorg's stable lazy.nvim
 setup; customize its modules separately if you want more than the defaults:
 
@@ -111,6 +120,8 @@ Then add the flashcard plugin:
 ```lua
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
+  version = "0.2.x",
+  cmd = "Flashcards",
   dependencies = {
     "nvim-neorg/neorg",
   },
@@ -138,6 +149,8 @@ Omit the dependency when you only want the flashcard workflow:
 ```lua
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
+  version = "0.2.x",
+  cmd = "Flashcards",
   config = function()
     local presets = require("neorg_flashcards.presets")
 
@@ -154,6 +167,42 @@ Omit the dependency when you only want the flashcard workflow:
 The source file will be plain text, while the review and help windows still
 work normally.
 
+`version = "0.2.x"` accepts v0.2 patch releases but does not cross the next
+breaking minor release.
+
+### Native package or another plugin manager
+
+On Linux or macOS, clone v0.2.0 into Neovim's native optional-package
+directory:
+
+```sh
+plugin_root="$(nvim --headless --clean \
+  '+lua io.write(vim.fn.stdpath("data") .. "/site/pack/luixbits/opt")' \
+  +qa 2>/dev/null)"
+mkdir -p "$plugin_root"
+git clone --branch v0.2.0 --depth 1 \
+  https://github.com/LuixBits/luixbits-neorg-flashcards.nvim.git \
+  "$plugin_root/luixbits-neorg-flashcards.nvim"
+```
+
+Load the package and configure it from `init.lua`:
+
+```lua
+vim.cmd.packadd("luixbits-neorg-flashcards.nvim")
+
+local presets = require("neorg_flashcards.presets")
+require("neorg_flashcards").setup({
+  flashcards_dir = vim.fn.expand("~/notes/flashcards"),
+  default_file = vim.fn.expand("~/notes/flashcards/cards.norg"),
+  default_kind = "japanese",
+  schemas = presets.only("japanese"),
+})
+```
+
+Restart Neovim and run `:Flashcards`. Other plugin managers need to install the
+same repository at a v0.2 tag, load it before the setup call, and run the same
+Lua configuration.
+
 ### Local Checkout
 
 Use the same setup while developing from a local directory. Add Neorg as a
@@ -163,6 +212,7 @@ dependency only if your normal Neovim configuration uses it:
 {
   dir = "~/projects/nvim-plugins/luixbits-neorg-flashcards.nvim",
   name = "luixbits-neorg-flashcards.nvim",
+  cmd = "Flashcards",
   config = function()
     local presets = require("neorg_flashcards.presets")
 
@@ -182,7 +232,7 @@ The repository exposes a flake package and a small NVF module. Add it as a
 flake input:
 
 ```nix
-inputs.luixbits-neorg-flashcards.url = "github:LuixBits/luixbits-neorg-flashcards.nvim";
+inputs.luixbits-neorg-flashcards.url = "github:LuixBits/luixbits-neorg-flashcards.nvim?ref=v0.2.0";
 ```
 
 Import the module next to your NVF/Home Manager setup:
@@ -209,6 +259,13 @@ Import the module next to your NVF/Home Manager setup:
     };
   };
 }
+```
+
+When this is a NixOS module rather than a Home Manager module, import the
+equivalent output:
+
+```nix
+inputs.luixbits-neorg-flashcards.nixosModules.nvf
 ```
 
 The module adds the plugin package to NVF, emits the Lua `setup` call, and only
@@ -250,14 +307,28 @@ in {
 }
 ```
 
+Update the pinned input after changing the flake URL:
+
+```sh
+nix flake update luixbits-neorg-flashcards
+```
+
+Then run the normal Home Manager or NixOS activation command for the
+configuration that imports the module. After activation, `:Flashcards` is
+available; `<leader>nc` also opens it when `keymaps.enable = true`.
+
 ## Quick Start
 
 1. Choose the Neorg or plain-Neovim installation.
 2. Configure `flashcards_dir`, `default_file`, and at least one schema.
 3. Run `:Flashcards`, or map it to `<leader>nc`, to open the hub.
-4. Press `a` to add a card. The form writes a stable ID automatically.
-5. Press `Enter` on Overview to study the due queue.
-6. In review, reveal with `Space` or `Enter`, then press `1`, `2`, or `3`.
+4. Press `a`, fill every required field, then press `Ctrl-S`. You can also press
+   `Enter` through the fields; `Enter` on the last field saves. The form creates
+   the stable ID and returns to Overview, where the card appears as `NEW`.
+5. Press `Enter` on Overview. New cards are included in the due queue.
+6. Reveal with `Space` or `Enter`, then press `1`, `2`, or `3` to rate the card.
+7. Press `?` anywhere in the hub, review, or form for current shortcuts. Use
+   `:help neorg-flashcards` for the complete manual.
 
 `default_file` may be nested, and its parent directories are created when it is
 opened. It must resolve inside `flashcards_dir`. The composer rejects a current
@@ -500,8 +571,8 @@ Overview, Cards, and Stats; `Tab` / `Shift-Tab` cycle pages. The winbar shows
 the active page and keeps a compact current-page shortcut ribbon visible even
 with a global statusline. Press `?` for all keys available on the current page.
 
-Navigation follows the pane under the cursor. Press `Ctrl-W W` (the
-`<C-w>w` key sequence), or click a pane, to move focus. In the primary
+Navigation follows the pane under the cursor. Press `<C-w>w` (`Ctrl-W`, then
+`w`), or click a pane, to move focus. In the primary
 Overview and Cards pane, `j` / `k` and the arrow keys change the selected card.
 In Stats, or while the secondary pane is focused, they scroll normally. Use
 `Ctrl-D` / `Ctrl-U` or PageDown / PageUp for half pages and `gg` / `G` for the
@@ -598,6 +669,13 @@ require("neorg_flashcards").setup({
       hard = { link = "DiagnosticWarn" },
       good = { link = "DiagnosticOk" },
     },
+    heatmap_highlights = {
+      [0] = { link = "NonText" },
+      [1] = { link = "Comment" },
+      [2] = { link = "DiagnosticHint" },
+      [3] = { link = "DiagnosticInfo" },
+      [4] = { link = "DiagnosticOk" },
+    },
   },
   scheduling = {
     again_minutes = 10,
@@ -622,7 +700,24 @@ require("neorg_flashcards").setup({
 | `leech_threshold` | Lapse count used by stats and health checks; defaults to 8. |
 | `ui.show_shortcuts` | Show compact hub, review, and form hints; `?` help remains available when false. |
 | `ui.rating_highlights` | Highlight definitions for Again, Hard, and Good; defaults link to the matching diagnostic groups. |
+| `ui.heatmap_highlights` | Highlight definitions for activity levels 0 through 4; defaults use theme groups. |
 | `on_review(event)` | Optional observer called after a review or card-state change reaches its source file. |
+
+Scheduling options accept positive finite numbers:
+
+| Option | Default | Meaning |
+| --- | ---: | --- |
+| `scheduling.again_minutes` | `10` | Delay after Again; the in-session retry still happens once. |
+| `scheduling.hard_hours` | `6` | First Hard interval. |
+| `scheduling.good_days` | `3` | First Good interval. |
+| `scheduling.starting_ease` | `2.5` | Ease assigned to a new card. |
+| `scheduling.min_ease` | `1.3` | Lowest ease after repeated Again ratings. |
+| `scheduling.max_ease` | `2.8` | Highest ease after repeated Good ratings. |
+| `scheduling.max_interval_days` | `365` | Upper bound for Hard and Good intervals. |
+
+`min_ease` cannot exceed `starting_ease`, which cannot exceed `max_ease`.
+`good_days` cannot exceed `max_interval_days`. `leech_threshold` must be a
+positive integer.
 
 Set `flashcards_dir` and `default_file` together. Setup rejects a
 `default_file` that resolves outside the collection root, and add-card writes
@@ -637,8 +732,13 @@ If the root is moved or replaced while Neovim is running, collection reads and
 writes stop with an error; restore it and rerun `setup()`, or restart Neovim.
 
 `on_review` observes a completed source-file change; it cannot cancel that
-change. A failed ledger append may still be waiting in the retry outbox when
-the callback runs. Callback errors are reported without breaking review.
+change. `event.type` is `review` or `card_state`; `event.event` identifies the
+specific action, such as `rated`, `undo`, `suspended`, or `buried`. Every event
+includes `card_id`, `path`, and a timestamp. `rated` events also include
+`rating`, `before`, `after`, duration, hint, and session data. Additional event
+fields may be added in later compatible releases. A failed ledger append may
+still be waiting in the retry outbox when the callback runs. Callback errors
+are reported without breaking review.
 
 `schemas` maps a flashcard kind, such as `japanese`, to its field schema:
 
@@ -660,6 +760,33 @@ Fields with `required = true` must exist before a card can be reviewed. Fields
 with `reveal = true` appear after you reveal the answer. Optional `title`,
 `placeholder`, and `help` values control the composer's virtual label, empty
 field example, and selected-field hint without changing the stored card.
+
+Schema names start with a lowercase letter and may contain lowercase letters,
+numbers, `_`, or `-`. Every schema requires a non-empty `fields` list and an
+explicit `front` that names one of those fields. Field keys follow the same
+rule without `-`, must be unique inside the schema, and cannot reuse the
+scheduler-owned names shown in [Card Format](#card-format). `label`, `title`,
+`default`, `placeholder`, and `help` are strings; `required` and `reveal` are
+booleans. Unknown options are rejected during setup.
+
+`ui.heatmap_highlights` maps activity levels `0` through `4` to Neovim
+highlight tables. Its defaults link to `NonText`, `Comment`, `DiagnosticHint`,
+`DiagnosticInfo`, and `DiagnosticOk`. The heatmap glyph also changes with
+activity, so it remains readable when a theme makes two levels similar. The
+links are semantic theme defaults, not a guaranteed light-to-dark gradient.
+
+## Troubleshooting
+
+| Symptom | Check and repair |
+| --- | --- |
+| `:Flashcards` is not a command | Confirm the plugin is installed and its `setup()` call ran. In lazy.nvim, open `:Lazy` and check `:messages`. For a native package, keep the `packadd` call before `require("neorg_flashcards")`. Restart Neovim after correcting the config. |
+| `setup()` stops with an error | Read the complete error in `:messages`. Check the option names and types above, confirm `default_file` is a `.norg` file inside `flashcards_dir`, and confirm Neovim can create and write the collection directory. |
+| The hub shows no cards | Save the file with a `.norg` suffix under `flashcards_dir`, press `R`, then run `:Flashcards check`. Invalid blocks remain on Cards under the `invalid` filter. |
+| The due queue is empty | New, due, active cards enter the normal queue. Open Stats for the next due time, or press `A` for an explicit all-active-card cram session. |
+| The collection root was moved or replaced | Restore the configured directory. After an intentional move, update the paths and rerun `setup()`, or restart Neovim, so the new root identity is pinned. |
+| Neorg syntax or concealing is missing | The flashcard UI still works without Neorg. If Neorg was intended, confirm it loaded and run `:checkhealth neorg`. |
+| A history or outbox warning persists | Check write access to `reviews.jsonl` and Neovim's state directory. Focus Neovim or restart it to retry. Inspect the queue location with `:lua print(vim.fn.stdpath("state") .. "/neorg-flashcards/outbox")`; do not delete pending events as a first repair. |
+| A card was deleted by mistake | For a loaded source, use normal buffer undo before closing it. For an unloaded source, inspect `<source>.flashcards-backup`; close Neovim and compare it with the current file before restoring the older complete source. |
 
 ## Language Presets
 

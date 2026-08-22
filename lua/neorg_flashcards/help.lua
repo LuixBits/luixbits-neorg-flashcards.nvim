@@ -38,7 +38,7 @@ end
 
 function M.open()
   popup.open(state, {
-    title = " Flashcards Help ",
+    title = " Flashcards Quick Guide ",
     footer = " q close ",
     min_width = 62,
     max_width = 78,
@@ -59,15 +59,15 @@ function M.open()
     "Default kind: " .. default_kind(),
     "Kinds: " .. configured_kinds(),
     "",
-    "Open the hub: :Flashcards",
-    "  1 Overview · 2 Cards · 3 Stats · Tab next page · ? keys",
-    "  Ctrl-W W switch pane · Enter/r review · d due · A all",
-    "  a add · e edit",
-    "  j/k line · Ctrl-D/U half page · gg/G top/bottom",
+    "Hub: 1 Overview · 2 Cards · 3 Stats · Tab pages · ? keys",
+    "  <C-w>w pane · j/k line · Ctrl-D/U half-page · gg/G ends",
+    "Overview: Enter/r review · d/A queues · a add · e edit",
+    "Cards: Enter/r review · a add · / search · f filter · o sort",
+    "  x suspend · b bury · D delete · p preview · e edit",
+    "Stats: d due · A all · R refresh",
     "",
-    "Cards: / search · f filter · o sort · x suspend · b bury · D delete",
-    "Collection: c open problems · R refresh",
-    "Card form: Enter next · Ctrl-S save · Ctrl-N save+new while adding",
+    "Collection: c open problems · H quick guide · R refresh",
+    "Card form: Enter next/save · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",
     "",
     "Review: Enter/Space reveal · h hint · t type answer",
@@ -76,6 +76,8 @@ function M.open()
     "",
     "Command routes: :Flashcards overview|cards|stats|review|add",
     "                open|check|help",
+    "",
+    "Full manual: :help neorg-flashcards",
   })
 end
 

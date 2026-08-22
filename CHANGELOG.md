@@ -10,6 +10,11 @@ All notable changes to this project will be documented here.
   distinct activity glyphs, and a compact legend.
 - Limited rating colors to generated controls and summaries so words such as
   `Good` in card content keep the normal card highlight.
+- Added pinned lazy.nvim and Nix examples, a native-package install path, an
+  end-to-end first-card walkthrough, a full configuration reference, and
+  practical troubleshooting steps.
+- Added the canonical `:help neorg-flashcards` entry and made the shorter `H`
+  window identify itself as a quick guide with current shortcuts.
 
 ## 0.2.0 - 2026-08-22
 

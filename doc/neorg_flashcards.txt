@@ -1,19 +1,21 @@
-*neorg_flashcards.txt* Local Neorg flashcards
+*neorg-flashcards* *neorg_flashcards.txt* Local Neorg flashcards
 
 ==============================================================================
 CONTENTS                                         *neorg-flashcards-contents*
 
 1. Setup                         |neorg-flashcards-setup|
-2. Primary command               |neorg-flashcards-commands|
-3. Global keymap                 |neorg-flashcards-keymaps|
-4. Flashcard hub                 |neorg-flashcards-hub|
-5. Review                        |neorg-flashcards-review|
-6. Collections and card format   |neorg-flashcards-card-format|
-7. Scheduling and state          |neorg-flashcards-scheduling|
-8. Health, history, and stats    |neorg-flashcards-data|
-9. Cloze and typed answers       |neorg-flashcards-cloze|
-10. Release scope and upgrade    |neorg-flashcards-upgrade|
-11. Lua API                      |neorg-flashcards-lua-api|
+2. Configuration                 |neorg-flashcards-configuration|
+3. Primary command               |neorg-flashcards-commands|
+4. Global keymap                 |neorg-flashcards-keymaps|
+5. Flashcard hub                 |neorg-flashcards-hub|
+6. Review                        |neorg-flashcards-review|
+7. Collections and card format   |neorg-flashcards-card-format|
+8. Scheduling and state          |neorg-flashcards-scheduling|
+9. Health, history, and stats    |neorg-flashcards-data|
+10. Cloze and typed answers      |neorg-flashcards-cloze|
+11. Troubleshooting              |neorg-flashcards-troubleshooting|
+12. Release scope and upgrade    |neorg-flashcards-upgrade|
+13. Lua API                      |neorg-flashcards-lua-api|
 
 ==============================================================================
 SETUP                                               *neorg-flashcards-setup*
@@ -36,6 +38,13 @@ schema:
         hard = { link = "DiagnosticWarn" },
         good = { link = "DiagnosticOk" },
       },
+      heatmap_highlights = {
+        [0] = { link = "NonText" },
+        [1] = { link = "Comment" },
+        [2] = { link = "DiagnosticHint" },
+        [3] = { link = "DiagnosticInfo" },
+        [4] = { link = "DiagnosticOk" },
+      },
     },
   })
 <
@@ -44,8 +53,12 @@ Use `presets.only("chinese")` for Chinese, or pass a custom `schemas`
 table. Neorg is optional. Card storage and collection scans always use
 `.norg` files, but the plugin reads those files directly.
 
-`default_file` must resolve inside `flashcards_dir`. The same root is the
-write boundary for the card form: a current `.norg` file outside it is rejected
+When Neorg is installed through lazy.nvim, install LuaRocks first. The
+flashcard-only installation does not need it. See the current instructions:
+https://github.com/nvim-neorg/neorg#lazy.nvim
+
+`default_file` must be inside `flashcards_dir`, which is also the card-form
+write boundary. A current `.norg` file outside it is rejected
 instead of receiving a card. A custom `history_file` must be a separate
 `.jsonl` file inside the root, so history cannot be appended to a card source.
 Unknown setup, scheduling, UI, schema, and field options are rejected so
@@ -67,10 +80,10 @@ the review UI follows the active colorscheme. If a theme makes those colors
 indistinguishable, replace a link with exact attributes such as
 `again = { fg = "#ff5f5f", bold = true }`.
 
-An optional `on_review(event)` callback observes a review or card-state change
-after its source file is persisted. It cannot cancel the change, and its
-ledger append may still be queued for retry. Callback errors are reported
-without stopping review.
+`ui.heatmap_highlights` configures activity levels 0 through 4. The defaults
+link to NonText, Comment, DiagnosticHint, DiagnosticInfo, and DiagnosticOk.
+The glyph changes with activity too, so these links are not expected to form
+a guaranteed light-to-dark gradient in every theme.
 
 The repository's NVF module exposes `programs.nvf.neorg-flashcards`. Its
 keymap options are:
@@ -80,6 +93,51 @@ keymap options are:
 
 With `enable = true` and `prefix = "<leader>nc"`, the module creates one
 global mapping: `<leader>nc` opens |:Flashcards|.
+
+==============================================================================
+CONFIGURATION                              *neorg-flashcards-configuration*
+
+Top-level options:
+
+  flashcards_dir           Collection root and card-write boundary.
+  default_file             .norg file used outside another collection file.
+  default_kind             Schema used when add has no kind argument.
+  schemas                  Non-empty map of card schemas.
+  history_file             Optional .jsonl ledger inside the collection root.
+  leech_threshold          Positive integer; default 8.
+  scheduling               Interval options listed below.
+  ui.show_shortcuts        Persistent compact hints; default true.
+  ui.rating_highlights     Again, Hard, and Good Neovim highlight tables.
+  ui.heatmap_highlights    Activity highlight tables at levels 0 through 4.
+  on_review                Optional callback after a source change persists.
+
+Every scheduling value must be a positive finite number:
+
+  scheduling.again_minutes       10       Again delay
+  scheduling.hard_hours           6       first Hard interval
+  scheduling.good_days            3       first Good interval
+  scheduling.starting_ease        2.5     new-card ease
+  scheduling.min_ease             1.3     lower ease bound
+  scheduling.max_ease             2.8     upper ease bound
+  scheduling.max_interval_days  365       Hard and Good interval cap
+
+`min_ease` must not exceed `starting_ease`, and `starting_ease` must not
+exceed `max_ease`. `good_days` must not exceed `max_interval_days`.
+
+Schema names start with a lowercase letter and may contain lowercase letters,
+numbers, `_`, or `-`. Each schema needs a non-empty `fields` list and an
+explicit `front` naming one of those fields. Field keys follow the same rule
+without `-`, are unique inside the schema, and cannot use scheduler-owned
+metadata names. String field options are `label`, `title`, `default`,
+`placeholder`, and `help`; `required` and `reveal` are booleans.
+
+`on_review(event)` receives a copy after the source change is persisted. The
+event has `type` (`review` or `card_state`), an action in `event.event`,
+`card_id`, `path`, and a timestamp. `rated` events also carry `rating`,
+`before`, `after`, duration, hint, and session data.
+The callback cannot cancel the change. A history append may still be queued
+for retry. Callback errors do not stop review. Compatible releases may add
+fields.
 
 ==============================================================================
 PRIMARY COMMAND                                 *neorg-flashcards-commands*
@@ -131,7 +189,8 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
         Check the whole collection. See |neorg-flashcards-data|.
 
   :Flashcards help
-        Open the short in-editor guide.
+        Open the quick in-editor guide. The complete manual is available at
+        |neorg-flashcards| with `:help neorg-flashcards`.
 
 ==============================================================================
 GLOBAL KEYMAP                                   *neorg-flashcards-keymaps*
@@ -159,7 +218,7 @@ Common keys:
 
   1 / 2 / 3       Overview / Cards / Stats
   Tab / Shift-Tab next / previous page
-  Ctrl-W W        focus the other pane; clicking a pane also focuses it
+  Ctrl-W then w   focus the other pane; clicking a pane also focuses it
   j / k, Up / Down
                     select in the primary list; otherwise scroll
   Ctrl-D / Ctrl-U  scroll the focused pane by half a page
@@ -167,7 +226,7 @@ Common keys:
                     scroll the focused pane by half a page
   gg / G            first/last item, or top/bottom of the focused pane
   ?               contextual key help
-  H               full plugin guide
+  H               quick plugin guide
   d / A           review due / review all active cards
   c               collection check
   R               reload the collection
@@ -217,7 +276,8 @@ raw source so their structure can be repaired directly.
 
 Stats combines activity and collection analytics. Use `d` for due review,
 `A` for an active-card cram session, or `R` to refresh its data. Both Stats
-panes use the common scrolling keys above.
+panes use the common scrolling keys above. Heatmap cells vary both their glyph
+and their theme-linked activity highlight, so color is not the only signal.
 
 ==============================================================================
 REVIEW                                             *neorg-flashcards-review*
@@ -326,7 +386,7 @@ midnight tomorrow.
 ==============================================================================
 HEALTH, HISTORY, AND STATS                         *neorg-flashcards-data*
 
-Every v0.2 card requires a stable, collection-unique `id:`. The composer writes
+Every v0.2 card needs a stable, collection-unique `id:`. The composer creates
 one automatically. ID-less v0.1 blocks remain visible as invalid cards but
 cannot be reviewed. There is no automatic migration command; back up and
 convert the blocks before switching versions. See |neorg-flashcards-upgrade|.
@@ -348,7 +408,10 @@ of rewriting the ledger. When the source buffer is already modified, matching
 events are queued until that source is saved; undo before the save cancels its
 pending rating. A failed history append stays in a durable outbox under
 Neovim's state directory and is retried on later writes, focus, setup, and
-exit.
+exit. Print its directory with:
+>
+  :lua print(vim.fn.stdpath("state") .. "/neorg-flashcards/outbox")
+<
 
 Stats includes total and today's reviews, streak, 7/30/90-day retention,
 30-day answer distribution, lifecycle and availability counts, leeches,
@@ -374,6 +437,46 @@ typed answer with the reveal fields using UTF-8-aware fuzzy matching. You
 still choose the rating yourself.
 
 ==============================================================================
+TROUBLESHOOTING                         *neorg-flashcards-troubleshooting*
+
+`:Flashcards` is missing ~
+Confirm that the plugin is installed and setup() completed. For lazy.nvim,
+open `:Lazy` and inspect `:messages`. For a native optional package, run
+`packadd luixbits-neorg-flashcards.nvim` before requiring the Lua module.
+
+setup() reports an error ~
+Read the complete error in `:messages`. Compare the configuration with
+|neorg-flashcards-configuration|. `default_file` must be a .norg file inside
+`flashcards_dir`, and Neovim must be able to create and write the root.
+
+The hub has no cards ~
+Save a .norg file under `flashcards_dir`, press `R`, then run
+`:Flashcards check`. Invalid blocks are visible on Cards with the `invalid`
+filter.
+
+Nothing is due ~
+Normal review includes new, due, active cards. Open Stats for the next due
+time, or press `A` for an explicit all-active-card cram session.
+
+The collection root moved or was replaced ~
+Restore the configured directory. After an intentional move, update the paths
+and call setup() again, or restart Neovim, so the new root identity is pinned.
+
+Neorg syntax or concealing is missing ~
+The flashcard UI works without Neorg. If Neorg was intended, confirm that it
+loaded and run `:checkhealth neorg`.
+
+A history or outbox warning persists ~
+Check write access to reviews.jsonl and Neovim's state directory. Focus or
+restart Neovim to retry. Inspect the outbox path shown in
+|neorg-flashcards-data|; do not delete pending events as a first repair.
+
+A card was deleted by mistake ~
+For a loaded source, use normal buffer undo before closing it. For an unloaded
+source, inspect `<source>.flashcards-backup`. Close Neovim and compare the
+backup with the current file before restoring the older complete source.
+
+==============================================================================
 RELEASE SCOPE AND UPGRADE                         *neorg-flashcards-upgrade*
 
 Version 0.2 targets Neovim 0.10.4 or newer on Linux and macOS. Windows path
@@ -382,8 +485,8 @@ local history ledger, custom schemas, and the built-in three-rating scheduler.
 Named collections, daily quotas, scheduler adapters, audio, sync, and import
 or export tools are not part of 0.2.
 
-The v0.1 `:NeorgFlashcard*` commands and suffix keymaps were removed. There are
-no compatibility aliases. Replace them with |:Flashcards| routes and one
+The v0.1 `:NeorgFlashcard*` commands and suffix keymaps were removed. No
+compatibility aliases remain. Replace them with |:Flashcards| routes and one
 optional global hub mapping before updating. Rename the setup option
 `languages` to `schemas`; NVF users must rename `languagePresets` to
 `schemaPresets`. Before switching, back up the collection and manually convert

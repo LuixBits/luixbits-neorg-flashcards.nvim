@@ -34,7 +34,7 @@ local catalog = {
       hints = { cards = "delete" },
       capability = "delete",
     }),
-    action({ "H" }, "plugin_help", "Open the full plugin guide", HUB, { capability = "help" }),
+    action({ "H" }, "plugin_help", "Open the quick plugin guide", HUB, { capability = "help" }),
     action({ "1" }, "overview", "Open Overview", HUB),
     action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),
     action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
@@ -58,7 +58,7 @@ local catalog = {
       },
     }),
     action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", HUB, {
-      hint_key = "C-W W",
+      hint_key = "<C-w>w",
       hints = { overview = "pane", cards = "pane", stats = "pane" },
     }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
@@ -284,7 +284,7 @@ local function display_key(key)
     ["<C-n>"] = "Ctrl-N",
     ["<C-d>"] = "Ctrl-D",
     ["<C-u>"] = "Ctrl-U",
-    ["<C-w>w"] = "Ctrl-W W",
+    ["<C-w>w"] = "Ctrl-W W (<C-w>w)",
     ["<PageDown>"] = "PageDown",
     ["<PageUp>"] = "PageUp",
   }

@@ -10,9 +10,9 @@ The architectural choices behind this plan live in
 
 ## 0.2: Finish the unified workspace
 
-Status: release candidate (2026-08-22)
+Status: released as v0.2.0 (2026-08-22)
 
-The 0.2 release replaces the command-per-action interface with one workspace.
+The 0.2 release replaced the command-per-action interface with one workspace.
 
 - Keep one command, `:Flashcards`, and one optional NVF shortcut.
 - Remove old `:NeorgFlashcard*` aliases, hidden route nicknames, the NVF suffix
@@ -24,7 +24,8 @@ The 0.2 release replaces the command-per-action interface with one workspace.
   explicit save and save-and-new actions, and transactional persistence.
 - Add `ui.show_shortcuts`, defaulting to `true`, to hide persistent shortcut
   chrome without hiding the mappings or contextual help.
-- Keep the broader guide at `:Flashcards help` and hub `H`.
+- Keep the quick guide at `:Flashcards help` and hub `H`; keep the complete
+  manual at `:help neorg-flashcards`.
 - Require users upgrading from v0.1 to back up and manually convert ID-less
   blocks and aliased fields before switching. UI commands, keymaps,
   configuration aliases, and an automatic data migration are not carried
@@ -32,7 +33,7 @@ The 0.2 release replaces the command-per-action interface with one workspace.
 - Keep the finished Overview, Cards, Stats, finite review queue, stable IDs,
   health checks, and JSONL analytics from the unified-hub work.
 
-Release checks:
+Release checks completed before v0.2.0:
 
 1. Exercise every `:Flashcards` route and its completion.
 2. Compare installed mappings, compact hints, and `?` output in every UI state.
