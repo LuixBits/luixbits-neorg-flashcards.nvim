@@ -83,6 +83,15 @@ return function(T)
     return false
   end
 
+  for card_type, expected_label in pairs({
+    japanese = "Japanese word → reading + English",
+    japanese_production = "English → Japanese word",
+    japanese_kanji = "Kanji → reading + meaning",
+    japanese_sentence = "Japanese sentence → English",
+  }) do
+    assert_equal(presets[card_type].label, expected_label, card_type .. " names its practice direction")
+  end
+
   do
     assert_true(flashcards.setup(one_type_workspace("one-type")), "the one-type workspace is configured")
     local select_calls = 0
@@ -94,8 +103,33 @@ return function(T)
     assert_true(opened, "one configured card type opens the form directly")
     assert_equal(select_calls, 0, "one card type does not show an unnecessary picker")
     assert_true(form.is_open(), "the direct one-type path opens the composer")
-    assert_contains(current_title(), "Japanese recognition", "the direct path uses the only configured card type")
+    assert_contains(
+      current_title(),
+      "Japanese word → reading + English",
+      "the direct path uses the only configured card type"
+    )
     assert_true(form.close({ force = true }), "the one-type composer closes cleanly")
+
+    local collection_select_calls = 0
+    local collection_notice = ""
+    local notify_original = vim.notify
+    vim.notify = function(message)
+      collection_notice = tostring(message)
+    end
+    local handled = with_select(function()
+      collection_select_calls = collection_select_calls + 1
+    end, function()
+      return flashcards.choose_collection()
+    end)
+    vim.notify = notify_original
+    assert_true(handled, "choosing from one collection is handled without a picker")
+    assert_equal(collection_select_calls, 0, "one collection does not show a pointless picker")
+    assert_contains(collection_notice, "Japanese is the only configured collection", "the notice names the collection")
+    assert_contains(
+      collection_notice,
+      ":help neorg-flashcards-configuration",
+      "the notice points to collection setup help"
+    )
   end
 
   do
@@ -112,9 +146,14 @@ return function(T)
     assert_true(not form.is_open(), "opening the picker does not create a draft before a choice")
     assert_equal(picker_items[1], "japanese", "the default card type appears first")
     assert_equal(picker_items[2], "term_definition", "the picker contains every configured card type")
+    assert_equal(
+      picker_options.prompt,
+      "What do you want to practice?",
+      "the card-type picker asks a plain practice question"
+    )
     assert_contains(
       picker_options.format_item("japanese"),
-      "● Japanese recognition",
+      "● Japanese word → reading + English",
       "the picker marks and labels the default card type"
     )
     assert_true(type(picker_callback) == "function", "the picker provides a selection callback")

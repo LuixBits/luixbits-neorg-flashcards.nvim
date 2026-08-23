@@ -252,6 +252,14 @@ function M.choose_collection()
   end
   local expected_workspace = workspace
   local ids = collections.ids(expected_workspace)
+  if #ids == 1 then
+    local only_collection = collections.get(expected_workspace, ids[1])
+    util.notify(
+      only_collection.label
+        .. " is the only configured collection. See :help neorg-flashcards-configuration to add another."
+    )
+    return true
+  end
   vim.ui.select(ids, {
     prompt = "Flashcard collection",
     format_item = function(id)
@@ -481,7 +489,7 @@ local function choose_card_type(callback)
     return callback(ids[1])
   end
   vim.ui.select(ids, {
-    prompt = "Card type",
+    prompt = "What do you want to practice?",
     format_item = function(id)
       local card_schema = schema.for_kind(expected_config, id)
       local marker = id == expected_config.default_card_type and "● " or "  "

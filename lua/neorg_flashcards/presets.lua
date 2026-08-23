@@ -1,7 +1,7 @@
 local M = {}
 
 M.japanese = {
-  label = "Japanese recognition",
+  label = "Japanese word → reading + English",
   front = "japanese",
   fields = {
     {
@@ -214,7 +214,7 @@ M.code_output = {
 }
 
 M.japanese_production = {
-  label = "Japanese production",
+  label = "English → Japanese word",
   front = "english",
   fields = {
     {
@@ -258,7 +258,7 @@ M.japanese_production = {
 }
 
 M.japanese_kanji = {
-  label = "Japanese kanji",
+  label = "Kanji → reading + meaning",
   front = "kanji",
   fields = {
     {
@@ -310,7 +310,7 @@ M.japanese_kanji = {
 }
 
 M.japanese_sentence = {
-  label = "Japanese sentence",
+  label = "Japanese sentence → English",
   front = "japanese",
   fields = {
     {

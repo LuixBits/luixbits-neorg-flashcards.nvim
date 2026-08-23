@@ -9,23 +9,21 @@ local state = {
 
 local config = {}
 
-local function configured_kinds()
+local function card_type_summary()
   local kinds = vim.tbl_keys(config.schemas or {})
   table.sort(kinds)
 
   if #kinds == 0 then
-    return "none"
+    return "Card types: none"
   end
 
-  return table.concat(kinds, ", ")
-end
-
-local function default_card_type()
-  if config.default_card_type and config.default_card_type ~= "" then
-    return config.default_card_type
+  local default = config.schemas and config.schemas[config.default_card_type] or nil
+  local default_label = default and default.label or config.default_card_type or kinds[1]
+  if #kinds == 1 then
+    return "Card type: " .. default_label
   end
 
-  return "not set"
+  return string.format("Card types: %d configured · default %s", #kinds, default_label)
 end
 
 function M.setup(opts)
@@ -61,8 +59,7 @@ function M.open()
     "Collection: " .. (config.label or config.id or ""),
     "Folder: " .. (config.path or ""),
     "Files: .norg (Neorg itself is optional)",
-    "Default card type: " .. default_card_type(),
-    "Kinds: " .. configured_kinds(),
+    card_type_summary(),
     "",
     "Hub: 1 Overview · 2 Cards · 3 Stats · Tab pages · ? keys",
     "  <C-w>w pane · j/k line · Ctrl-D/U half-page · gg/G ends",
@@ -71,7 +68,7 @@ function M.open()
     "  x suspend · b bury · D delete · p preview · e edit",
     "Stats: d due · A all · R refresh",
     "",
-    "Collection: C switch · c open problems · H quick guide · R refresh",
+    "Collections: add in setup · C switch · c check · R refresh",
     "Card form: Enter next/save · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",
     "",
