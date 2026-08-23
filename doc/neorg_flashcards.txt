@@ -69,25 +69,16 @@ Example with Japanese and computer science:
       japanese = {
         label = "Japanese",
         path = vim.fn.expand("~/notes/flashcards/japanese"),
-        default_file = "inbox.norg",
+        default_file = "cards.norg",
         default_card_type = "japanese",
-        schemas = presets.only(
-          "japanese",
-          "japanese_production",
-          "japanese_kanji",
-          "japanese_sentence"
-        ),
+        schemas = presets.only("japanese"),
       },
       computer_science = {
         label = "Computer Science",
         path = vim.fn.expand("~/notes/flashcards/computer-science"),
-        default_file = "inbox.norg",
+        default_file = "cards.norg",
         default_card_type = "question_answer",
-        schemas = presets.only(
-          "question_answer",
-          "term_definition",
-          "code_output"
-        ),
+        schemas = presets.only("question_answer"),
       },
     },
   })
@@ -125,7 +116,13 @@ Setup creates missing collection directories and pins their resolved identity
 for the session. Moving, replacing, or retargeting one makes operations stop.
 Run setup again, normally by restarting Neovim, after an intentional move.
 
-Press `C` in the workspace to choose a collection. The active collection name
+Add a collection by adding another entry to the setup `collections` table. It
+needs its own path, default_card_type, and schemas. Setup creates its
+directory when needed. Restart Neovim, or rerun setup, after changing the
+configuration.
+
+Press `C` in the workspace to switch between configured collections. It does
+not create a collection or edit your configuration. The active collection name
 is shown in page headings. Switching is blocked while a composer or review is
 open, keeping the current draft and session attached to their original data.
 
@@ -147,8 +144,10 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
         Choose a collection, or switch directly when [id] is supplied.
 
   :Flashcards add [type]
-        Open the composer. One configured type opens directly; several types
-        open a picker. Supplying [type] skips the picker.
+        Open the composer for the active collection. One configured type opens
+        directly. A picker appears only when that collection explicitly
+        enables several types. It asks "What do you want to practice?"
+        Supplying [type] skips the picker.
 
         From a .norg file inside the active collection, the card is added at
         the cursor. From another buffer or the workspace, it is added to the
@@ -285,14 +284,20 @@ Applying does not save the card until the parent composer is saved.
 
 Bundled card types:
 
-  japanese              Japanese recognition
-  japanese_production   Produce Japanese from English
-  japanese_kanji        Kanji reading and meaning
-  japanese_sentence     Sentence translation and context
+  japanese              Japanese word → reading + English
+  japanese_production   English → Japanese word
+  japanese_kanji        Kanji → reading + meaning
+  japanese_sentence     Japanese sentence → English
   chinese               Chinese recognition
   question_answer       General long-form questions
   term_definition       Terms, definitions, and examples
   code_output           Predict and explain output; code is never executed
+
+The minimal setup enables only `japanese`. See a Japanese word, then recall
+its reading and English meaning. The other Japanese directions are optional.
+Production starts with English and asks for a Japanese word. Kanji cards ask
+for a reading and meaning. Sentence cards ask for an English translation. Add
+their IDs to presets.only only when you want `a` to offer those choices.
 
 A custom schema has label, front, and fields. Every field needs a key. Useful
 field flags are required, reveal, multiline, and typed_answer. A typed_answer

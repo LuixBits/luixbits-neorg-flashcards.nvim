@@ -70,12 +70,7 @@ With Neorg:
           path = vim.fn.expand("~/notes/flashcards/japanese"),
           default_file = "cards.norg",
           default_card_type = "japanese",
-          schemas = presets.only(
-            "japanese",
-            "japanese_production",
-            "japanese_kanji",
-            "japanese_sentence"
-          ),
+          schemas = presets.only("japanese"),
         },
       },
     })
@@ -136,8 +131,7 @@ with `dir = "~/projects/luixbits-neorg-flashcards.nvim"`.
 ## First run
 
 1. Run `:Flashcards`.
-2. Press `a` to add a card. If the collection has several card types, choose
-   one; a collection with one type skips the picker.
+2. Press `a` to add a card. With the setup above, the composer opens directly.
 3. Fill the required fields and press `Ctrl-S`.
 4. Press `Enter` in Overview to review everything due now.
 5. Reveal with `Space` or `Enter`, then rate with `1`, `2`, or `3`.
@@ -156,11 +150,17 @@ vim.keymap.set("n", "<leader>nc", "<cmd>Flashcards<CR>", {
 })
 ```
 
-## Keep subjects separate
+`a` asks for a card type only when the active collection explicitly enables
+several. In that case, the “What do you want to practice?” picker shows the
+enabled types. It never asks which collection to use; the page heading shows
+the active one.
+
+## Add another collection
 
 A collection owns one directory, one review-history file, its card types, and
 its scheduling settings. Collection directories cannot overlap, and two
-collections cannot share a history file.
+collections cannot share a history file. Add another entry to `collections`
+when you want to keep a subject separate:
 
 ```lua
 local presets = require("neorg_flashcards.presets")
@@ -171,34 +171,29 @@ require("neorg_flashcards").setup({
     japanese = {
       label = "Japanese",
       path = vim.fn.expand("~/notes/flashcards/japanese"),
-      default_file = "inbox.norg",
+      default_file = "cards.norg",
       default_card_type = "japanese",
-      schemas = presets.only(
-        "japanese",
-        "japanese_production",
-        "japanese_kanji",
-        "japanese_sentence"
-      ),
+      schemas = presets.only("japanese"),
     },
     computer_science = {
       label = "Computer Science",
       path = vim.fn.expand("~/notes/flashcards/computer-science"),
-      default_file = "inbox.norg",
+      default_file = "cards.norg",
       default_card_type = "question_answer",
-      schemas = presets.only(
-        "question_answer",
-        "term_definition",
-        "code_output"
-      ),
+      schemas = presets.only("question_answer"),
     },
   },
 })
 ```
 
-Press `C` anywhere in the workspace to switch collections, or run
-`:Flashcards collection [id]`. The heading always names the active collection.
-Switching is blocked while a composer or review session is open so a draft or
-rating cannot drift into another subject.
+Setup creates either directory when it is missing. Restart Neovim, then press
+`C` anywhere in the workspace to switch between the configured collections, or
+run `:Flashcards collection computer_science`. `C` does not create a collection
+or edit your configuration. Switching is blocked while a composer or review
+session is open so a draft or rating cannot drift into another subject.
+
+Each collection above enables one card type, so `a` opens its composer directly.
+Add more types only when you want the extra choice described below.
 
 Use as many `.norg` files as you like inside a collection:
 
@@ -319,20 +314,25 @@ card; the parent composer still does that.
 
 Bundled types:
 
-| ID | Front | Intended use |
+| ID | Direction | Intended use |
 | --- | --- | --- |
-| `japanese` | Japanese | Recognition with reading and English typed checks |
-| `japanese_production` | English | Produce the Japanese answer |
-| `japanese_kanji` | Kanji | Reading, meaning, example, and notes |
-| `japanese_sentence` | Japanese sentence | Translation and sentence context |
+| `japanese` | Japanese word → reading + English | Recognize a word or expression |
+| `japanese_production` | English → Japanese word | Produce the Japanese word or expression |
+| `japanese_kanji` | Kanji → reading + meaning | Study one kanji, with an optional example |
+| `japanese_sentence` | Japanese sentence → English | Understand a sentence in context |
 | `chinese` | Chinese | Pinyin and English recognition |
 | `question_answer` | Question | General study prompts with long answers |
 | `term_definition` | Term | Definitions and examples |
 | `code_output` | Code | Predict output and explain it; code is never executed |
 
-Pass only the types useful in a collection. If there is one, `a` opens it
-directly. If there are several, the default appears first in a short picker.
-An explicit `:Flashcards add term_definition` skips that picker.
+The default example enables only Japanese word → reading + English. The other
+three Japanese directions are optional: reverse the prompt to produce a word,
+study one kanji, or translate a sentence. Add their IDs to `presets.only(...)`
+when you want those choices. If a collection has one configured type, `a` opens
+it directly. If you explicitly configure several, `a` opens the “What do you
+want to practice?” picker with the default type first. An explicit
+`:Flashcards add term_definition` skips that picker.
+
 `presets.only(...)` raises on an unknown name, so a typo cannot quietly remove
 a card type.
 
@@ -620,17 +620,8 @@ Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:
     enable = true;
 
     schemaPresets = {
-      japanese = [
-        "japanese"
-        "japanese_production"
-        "japanese_kanji"
-        "japanese_sentence"
-      ];
-      computer_science = [
-        "question_answer"
-        "term_definition"
-        "code_output"
-      ];
+      japanese = [ "japanese" ];
+      computer_science = [ "question_answer" ];
     };
 
     setupOpts = {
@@ -659,6 +650,12 @@ Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:
   };
 }
 ```
+
+To add a collection with NVF, add its ID in two places: once under
+`setupOpts.collections` for its path and defaults, and once under
+`schemaPresets` for its bundled card types. The `computer_science` entries above
+are the complete second-collection recipe. `C` can switch to it after the new
+configuration loads; it does not create it.
 
 `schemaPresets` is keyed by collection ID and merges bundled schemas into that
 collection. The module creates exactly one optional global mapping: the exact

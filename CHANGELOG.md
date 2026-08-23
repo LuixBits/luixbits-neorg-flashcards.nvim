@@ -12,13 +12,17 @@ All notable changes to this project will be documented here.
 - Added a buffer-local collection picker on `C`, the
   `:Flashcards collection [id]` route, active-collection labels, command
   completion, and collection-scoped Cards, Stats, health, review, and history.
+  The picker switches collections defined in setup; it does not create them.
   An active form or review cannot be retargeted by switching collections or
   re-running setup. An open idle hub reloads against the new configuration.
 - Changed the NVF `schemaPresets` option from a list to an attribute set keyed by
   collection ID. Its opt-in keymap remains one exact hub mapping, `<leader>nc`.
-- Added bundled `question_answer`, `term_definition`, `code_output`, Japanese
-  production, kanji, and sentence card types. Bare add uses the only configured
-  type or opens a type picker, and Cards can filter by type.
+- Added bundled `question_answer`, `term_definition`, and `code_output` types.
+  Japanese collections can opt into `English → Japanese word`,
+  `Kanji → reading + meaning`, and `Japanese sentence → English` beside the
+  default `Japanese word → reading + English` type. Default examples keep one
+  type per collection. Bare add opens it directly and shows a picker only when
+  the active collection explicitly enables several; Cards can filter by type.
 - Added schema-gated multiline fields. Long values are stored as explicit
   `field: |` blocks with a two-space container indent relative to the card
   directive and edited in a focused scratch buffer from the protected composer.
