@@ -36,10 +36,10 @@ return function(T)
     vim.fn.writefile(card_lines, card_path)
     vim.fn.writefile(card_lines, outside_card_path)
 
-    flashcards.setup({
-      flashcards_dir = configured_root,
+    T.setup({
+      path = configured_root,
       default_file = card_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     })
     local retargeted_card = parser.parse_file(card_path)[1]
@@ -52,7 +52,7 @@ return function(T)
       cards = { retargeted_card },
     })
     assert_true(not source_ok, "card writes refuse a collection path retargeted after setup")
-    assert_contains(source_error, "flashcards_dir", "retargeted card writes explain which boundary changed")
+    assert_contains(source_error, "path", "retargeted card writes explain which boundary changed")
     assert_equal(
       table.concat(vim.fn.readfile(outside_card_path), "\n"),
       table.concat(card_lines, "\n"),
@@ -69,13 +69,13 @@ return function(T)
     }))
     local history_ok, history_error = history.append(retargeted_event)
     assert_true(not history_ok, "history append refuses a collection path retargeted after setup")
-    assert_contains(history_error, "flashcards_dir", "retargeted history explains which boundary changed")
+    assert_contains(history_error, "path", "retargeted history explains which boundary changed")
     assert_equal(
       vim.fn.filereadable(outside_root .. "/" .. history.FILENAME),
       0,
       "refused history append does not create history in the replacement collection"
     )
-    flashcards.setup(T.config)
+    T.setup(T.config)
   end
 
   do
@@ -83,10 +83,10 @@ return function(T)
     local configured_root = vim.fn.tempname()
     local moved_root = configured_root .. "-moved"
     vim.fn.mkdir(configured_root, "p")
-    flashcards.setup({
-      flashcards_dir = configured_root,
+    T.setup({
+      path = configured_root,
       default_file = configured_root .. "/cards.norg",
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     })
 
@@ -126,7 +126,7 @@ return function(T)
       table.concat(baseline_lines, "\n"),
       "refused captured history append does not mutate the moved original history"
     )
-    flashcards.setup(T.config)
+    T.setup(T.config)
   end
 
   do
@@ -134,13 +134,13 @@ return function(T)
     local configured_root = vim.fn.tempname()
     local moved_root = configured_root .. "-moved"
     local same_path_config = {
-      flashcards_dir = configured_root,
+      path = configured_root,
       default_file = configured_root .. "/cards.norg",
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     vim.fn.mkdir(configured_root, "p")
-    flashcards.setup(same_path_config)
+    T.setup(same_path_config)
 
     local old_destination, old_capture_error = history.capture()
     assert_true(
@@ -157,7 +157,7 @@ return function(T)
     local renamed, rename_error = uv.fs_rename(configured_root, moved_root)
     assert_true(renamed, "first setup root can be moved for same-path reconfiguration: " .. tostring(rename_error))
     assert_equal(vim.fn.mkdir(configured_root, "p"), 1, "same-path reconfiguration receives a fresh ordinary directory")
-    flashcards.setup(same_path_config)
+    T.setup(same_path_config)
     local new_destination, new_capture_error = history.capture()
     assert_true(
       new_destination ~= nil,
@@ -191,7 +191,7 @@ return function(T)
       table.concat(baseline_lines, "\n"),
       "stale destination cannot mutate the moved original history"
     )
-    flashcards.setup(T.config)
+    T.setup(T.config)
   end
 
   do
@@ -205,10 +205,10 @@ return function(T)
     vim.fn.writefile(outside_lines, outside_path)
     vim.fn.writefile({ "* Safe buffer" }, sentinel_path)
 
-    flashcards.setup({
-      flashcards_dir = collection_root,
+    T.setup({
+      path = collection_root,
       default_file = default_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     })
     local linked, link_error = uv.fs_symlink(outside_path, default_path)
@@ -240,17 +240,17 @@ return function(T)
     assert_equal(uv.fs_lstat(default_path).type, "link", "refused commands leave the unsafe link in place for repair")
     assert_contains(
       table.concat(messages, "\n"),
-      "flashcards_dir",
+      "path",
       "unsafe open and add report the configured collection boundary"
     )
     vim.cmd("silent! bwipeout!")
-    flashcards.setup(T.config)
+    T.setup(T.config)
   end
 
   do
     local boundary_dir = vim.fn.tempname()
     vim.fn.mkdir(boundary_dir, "p")
-    local boundary_config = { flashcards_dir = boundary_dir }
+    local boundary_config = { path = boundary_dir }
     local captured_destination = history.path(boundary_config)
     local outside_history = vim.fn.tempname() .. ".jsonl"
     vim.fn.writefile({ "outside evidence" }, outside_history)
@@ -261,7 +261,11 @@ return function(T)
     }))
     local config_ok, config_error = history.append(boundary_event, boundary_config)
     assert_true(not config_ok, "history refuses a configured destination redirected outside its collection")
-    assert_contains(config_error, "inside flashcards_dir", "history boundary failure names the collection constraint")
+    assert_contains(
+      config_error,
+      "inside the collection path",
+      "history boundary failure names the collection constraint"
+    )
     local captured_ok, captured_error = history.append(boundary_event, captured_destination)
     assert_true(not captured_ok, "history refuses a captured destination replaced by a symbolic link")
     assert_contains(captured_error, "symbolic link", "captured history refusal names the unsafe replacement")
@@ -274,7 +278,7 @@ return function(T)
 
   do
     local merge_dir = vim.fn.tempname()
-    local merge_config = { flashcards_dir = merge_dir }
+    local merge_config = { path = merge_dir }
     local first = assert(history.new_event({ values = { id = "fc_outbox_merge_first" } }, 3, os.time(), {
       event_id = "outbox-merge-first",
     }))
@@ -321,9 +325,10 @@ return function(T)
       "@end",
     }, corrupt_path)
     local corrupt_config = {
-      flashcards_dir = corrupt_dir,
+      id = "test",
+      path = corrupt_dir,
       default_file = corrupt_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     local valid_event = assert(history.new_event({ values = { id = "fc_outbox_corrupt" } }, 3, os.time(), {
@@ -334,7 +339,7 @@ return function(T)
     vim.fn.mkdir(vim.fn.fnamemodify(corrupt_outbox, ":h"), "p")
     vim.fn.writefile({ vim.json.encode(valid_event), corrupt_line }, corrupt_outbox)
 
-    flashcards.setup(corrupt_config)
+    T.setup(corrupt_config)
     local drained_entries, drained_errors = history.read(corrupt_config)
     assert_equal(#drained_errors, 0, "valid peer from a mixed outbox reaches history")
     assert_equal(#drained_entries, 1, "setup drains the valid line beside corrupt evidence")
@@ -348,7 +353,7 @@ return function(T)
     assert_equal(#pending_after_drain, 0, "only the corrupt evidence remains queued")
     assert_equal(#corrupt_errors, 1, "preserved corrupt evidence remains visible to health checks")
 
-    flashcards.setup(corrupt_config)
+    T.setup(corrupt_config)
     assert_equal(
       vim.fn.readfile(corrupt_outbox)[1],
       corrupt_line,
@@ -371,13 +376,14 @@ return function(T)
     local linked, link_error = (vim.uv or vim.loop).fs_symlink(real_dir, alias_dir, { dir = true })
     assert_true(linked ~= nil, "symlink fixture can be created: " .. tostring(link_error))
     local real_config = {
-      flashcards_dir = real_dir,
+      id = "test",
+      path = real_dir,
       default_file = real_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     local alias_config = vim.tbl_deep_extend("force", {}, real_config, {
-      flashcards_dir = alias_dir,
+      path = alias_dir,
       default_file = alias_dir .. "/cards.norg",
     })
     assert_equal(history.path(alias_config), history.path(real_config), "symlink spellings share history identity")
@@ -391,7 +397,7 @@ return function(T)
       event_id = "outbox-symlink-event",
     }))
     assert_true(history.write_outbox(real_config, { linked_event }), "real-path spelling writes the retry event")
-    flashcards.setup(alias_config)
+    T.setup(alias_config)
     local linked_entries, linked_errors = history.read(real_config)
     assert_equal(#linked_errors, 0, "symlink-drained history remains readable")
     assert_equal(#linked_entries, 1, "alias setup discovers and drains the real-path retry")
@@ -411,9 +417,10 @@ return function(T)
       "@end",
     }, restart_path)
     local restart_config = {
-      flashcards_dir = restart_dir,
+      id = "test",
+      path = restart_dir,
       default_file = restart_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     local restart_event = assert(history.new_event({ values = { id = "fc_outbox_restart" } }, 3, os.time(), {
@@ -423,7 +430,7 @@ return function(T)
     assert_true(outbox_ok, "failed review history can be persisted: " .. tostring(outbox_error))
     assert_equal(vim.fn.filereadable(history.outbox_path(restart_config)), 1, "restart outbox exists before setup")
 
-    flashcards.setup(restart_config)
+    T.setup(restart_config)
     local restarted_entries, restarted_errors = history.read(restart_config)
     assert_equal(#restarted_errors, 0, "restart-drained history remains readable")
     assert_equal(#restarted_entries, 1, "setup loads and drains persisted retry events")
@@ -444,10 +451,10 @@ return function(T)
     }, failure_path)
 
     local observed_event = nil
-    flashcards.setup({
-      flashcards_dir = failure_dir,
+    T.setup({
+      path = failure_dir,
       default_file = failure_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
       on_review = function(event)
         observed_event = event
@@ -474,7 +481,7 @@ return function(T)
     vim.cmd("Flashcards review file")
     assert_true(review_engine.rate_current(3), "source rating succeeds when history append fails")
     flashcards.close_review()
-    local queued_outbox, queued_outbox_errors = history.read_outbox({ flashcards_dir = failure_dir })
+    local queued_outbox, queued_outbox_errors = history.read_outbox({ id = "test", path = failure_dir })
     assert_equal(#queued_outbox_errors, 0, "failed-history outbox remains readable")
     assert_equal(#queued_outbox, 1, "failed persisted rating is durably queued before retry")
 
@@ -483,7 +490,8 @@ return function(T)
     overview.refresh = refresh_original
     vim.cmd("doautocmd FocusGained")
     local recovered_entries, recovered_errors = history.read({
-      flashcards_dir = failure_dir,
+      id = "test",
+      path = failure_dir,
     })
     assert_equal(append_attempts, 1, "persisted rating attempts history append once")
     assert_true(
@@ -519,12 +527,12 @@ return function(T)
       "@end",
     }, contention_path)
     local contention_config = {
-      flashcards_dir = contention_dir,
+      path = contention_dir,
       default_file = contention_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
-    flashcards.setup(contention_config)
+    T.setup(contention_config)
     vim.cmd.edit(vim.fn.fnameescape(contention_path))
 
     local append_original = history.append
@@ -589,15 +597,15 @@ return function(T)
     }, new_path)
 
     local old_config = {
-      flashcards_dir = old_dir,
+      path = old_dir,
       default_file = old_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     local new_config = {
-      flashcards_dir = new_dir,
+      path = new_dir,
       default_file = new_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
     }
     local old_history_path = history.path(old_config)
@@ -615,14 +623,14 @@ return function(T)
       return append_original(event, destination)
     end
 
-    flashcards.setup(old_config)
+    T.setup(old_config)
     vim.cmd.edit(vim.fn.fnameescape(old_path))
     vim.cmd("Flashcards review file")
     assert_true(review_engine.rate_current(3), "first failed-history rating persists its source")
     assert_true(review_engine.rate_current(2), "second failed-history rating persists its source")
     flashcards.close_review()
 
-    flashcards.setup(new_config)
+    T.setup(new_config)
     vim.cmd.edit(vim.fn.fnameescape(new_path))
     vim.cmd("Flashcards review file")
     assert_true(review_engine.rate_current(3), "a stale history path does not block the new destination")
@@ -662,10 +670,10 @@ return function(T)
     }, state_path)
 
     local state_events = {}
-    flashcards.setup({
-      flashcards_dir = state_dir,
+    T.setup({
+      path = state_dir,
       default_file = state_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
       on_review = function(event)
         table.insert(state_events, event)
@@ -678,7 +686,7 @@ return function(T)
     local suspended_event = state_events[#state_events]
     assert_equal(suspended_event.event, "suspended", "suspend emits a card-state event")
     assert_equal(suspended_event.card_id, "fc_state_event", "card-state events keep the canonical card ID")
-    local stored_state_events, stored_state_errors = history.read({ flashcards_dir = state_dir })
+    local stored_state_events, stored_state_errors = history.read({ path = state_dir })
     assert_equal(#stored_state_errors, 0, "persisted state events remain readable")
     assert_equal(#stored_state_events, 1, "state events are written to history")
     assert_true(
@@ -701,10 +709,10 @@ return function(T)
     vim.cmd("Flashcards review file")
     assert_true(flashcards.suspend_current(), "dirty-buffer state changes are accepted in memory")
     flashcards.close_review()
-    local before_state_save = history.read({ flashcards_dir = state_dir })
+    local before_state_save = history.read({ path = state_dir })
     assert_equal(#before_state_save, 1, "dirty-buffer state events wait for their source save")
     vim.cmd("write")
-    local after_state_save = history.read({ flashcards_dir = state_dir })
+    local after_state_save = history.read({ path = state_dir })
     assert_equal(#after_state_save, 2, "saving a dirty source flushes its pending state event")
     assert_equal(after_state_save[2].card_id, "fc_pending_state_event", "pending state history keeps card identity")
     vim.cmd("silent! bwipeout!")
@@ -718,13 +726,13 @@ return function(T)
       "@end",
     }, direct_state_path)
     local direct_card = parser.parse_file(direct_state_path)[1]
-    local before_direct = history.read({ flashcards_dir = state_dir })
+    local before_direct = history.read({ path = state_dir })
     local direct_ok, direct_message, direct_persisted = flashcards.toggle_suspend(direct_card, {
       cards = { direct_card },
     })
     assert_true(direct_ok, direct_message)
     assert_true(direct_persisted, "public card-state changes persist an unloaded source")
-    local after_direct, direct_errors = history.read({ flashcards_dir = state_dir })
+    local after_direct, direct_errors = history.read({ path = state_dir })
     assert_equal(#direct_errors, 0, "public card-state history remains readable")
     assert_equal(#after_direct, #before_direct + 1, "public card-state changes append history")
     assert_equal(after_direct[#after_direct].event, "suspended", "public state history names the transition")
@@ -735,9 +743,9 @@ return function(T)
     )
 
     vim.cmd("Flashcards cards")
-    local before_hub = history.read({ flashcards_dir = state_dir })
+    local before_hub = history.read({ path = state_dir })
     overview.toggle_suspend()
-    local after_hub, hub_errors = history.read({ flashcards_dir = state_dir })
+    local after_hub, hub_errors = history.read({ path = state_dir })
     assert_equal(#hub_errors, 0, "hub card-state history remains readable")
     assert_equal(#after_hub, #before_hub + 1, "hub card-state changes append history")
     assert_equal(after_hub[#after_hub].type, "card_state", "hub writes a card-state event")
@@ -755,10 +763,10 @@ return function(T)
       "@end",
     }, hidden_path)
 
-    flashcards.setup({
-      flashcards_dir = hidden_dir,
+    T.setup({
+      path = hidden_dir,
       default_file = hidden_path,
-      default_kind = "japanese",
+      default_card_type = "japanese",
       schemas = presets.only("japanese"),
       ui = { show_shortcuts = false },
     })
