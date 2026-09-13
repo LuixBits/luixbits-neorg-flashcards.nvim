@@ -10,6 +10,4 @@ tmp/
 PLAN.md
 TODO.md
 *.local.md
-video/node_modules/
-video/out/
 /graphify-out/

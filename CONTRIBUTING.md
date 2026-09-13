@@ -13,8 +13,7 @@ Required:
 - Lua 5.4 when running the standalone syntax check.
 
 Neorg is optional for normal use, but the integration suite exercises it. Nix
-can provide the complete release check environment. Node.js is needed only for
-changes under `video/`.
+can provide the complete release check environment.
 
 Run the main checks from the repository root:
 
@@ -33,15 +32,6 @@ nix flake check --print-build-logs
 
 Without Nix, `scripts/test.sh` also runs StyLua and Luacheck when those commands
 are installed.
-
-Video changes have their own checks:
-
-```sh
-npm ci --prefix video
-npm run check --prefix video
-npm run compositions --prefix video
-npm run still --prefix video
-```
 
 ## Pull requests
 

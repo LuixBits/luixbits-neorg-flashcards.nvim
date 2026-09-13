@@ -64,6 +64,8 @@ All notable changes to this project will be documented here.
   return values. Collection validation includes history diagnostics.
 - Added Luacheck to local and Nix validation and fixed the complete initial
   warning set without broad per-file suppressions.
+- Removed the Remotion explainer subproject under `video/` together with its
+  CI job; the YouTube explainer content no longer lives in this repository.
 
 ## 0.2.0 - 2026-08-22
 
