@@ -34,7 +34,11 @@ local catalog = {
       hints = { cards = "delete" },
       capability = "delete",
     }),
-    action({ "H" }, "plugin_help", "Open the full plugin guide", HUB, { capability = "help" }),
+    action({ "H" }, "plugin_help", "Open the quick plugin guide", HUB, { capability = "help" }),
+    action({ "C" }, "collection", "Switch collection", HUB, {
+      hints = { overview = "collection", cards = "collection", stats = "collection" },
+      capability = "collection",
+    }),
     action({ "1" }, "overview", "Open Overview", HUB),
     action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),
     action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
@@ -58,7 +62,7 @@ local catalog = {
       },
     }),
     action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", HUB, {
-      hint_key = "C-W W",
+      hint_key = "<C-w>w",
       hints = { overview = "pane", cards = "pane", stats = "pane" },
     }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
@@ -90,7 +94,7 @@ local catalog = {
     action({ "/" }, "search", "Search cards", { "cards" }, {
       hints = { cards = "search" },
     }),
-    action({ "f" }, "filter", "Choose a card state filter", { "cards" }, { hints = { cards = "filter" } }),
+    action({ "f" }, "filter", "Choose a card view or type", { "cards" }, { hints = { cards = "view" } }),
     action({ "o" }, "sort", "Cycle card sorting", { "cards" }, { hints = { cards = "sort" } }),
     action({ "X" }, "clear", "Clear search and filter", { "cards" }),
     action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "cards" }, {
@@ -146,6 +150,7 @@ local catalog = {
     }),
     action({ "t" }, "type_answer", "Type and check the answer", { "review_question" }, {
       hints = { review_question = "type" },
+      capability = "type_answer",
     }),
     action({ "1" }, "rate_again", "Rate Again", REVIEW_ACTIVE, {
       descriptions = {
@@ -284,7 +289,7 @@ local function display_key(key)
     ["<C-n>"] = "Ctrl-N",
     ["<C-d>"] = "Ctrl-D",
     ["<C-u>"] = "Ctrl-U",
-    ["<C-w>w"] = "Ctrl-W W",
+    ["<C-w>w"] = "Ctrl-W W (<C-w>w)",
     ["<PageDown>"] = "PageDown",
     ["<PageUp>"] = "PageUp",
   }
@@ -322,7 +327,7 @@ local function keys_for_help(item)
   return table.concat(keys, " / ")
 end
 
-function M.title(context, capabilities)
+function M.title(context, _)
   return context_titles[context] or "Flashcard keys"
 end
 
@@ -421,8 +426,14 @@ function M.help_lines(context, capabilities)
     end
   end
   table.insert(lines, "")
+  table.insert(lines, "  /                 find text in this help window")
+  table.insert(lines, "  n / N             next / previous match")
   table.insert(lines, "  q / Esc / ?       close this help window")
   return lines
+end
+
+function M.help_footer()
+  return " / find · n/N matches · q/Esc/? close "
 end
 
 function M.description(surface, name, context)

@@ -1,6 +1,8 @@
 -- A full-tab flashcard hub with Overview, Cards, and Stats pages.
 
 local actions = require("neorg_flashcards.ui.actions")
+local card_insights = require("neorg_flashcards.card_insights")
+local highlights = require("neorg_flashcards.highlights")
 local popup = require("neorg_flashcards.popup")
 local review = require("neorg_flashcards.review")
 local schedule = require("neorg_flashcards.schedule")
@@ -13,31 +15,9 @@ local M = {}
 local GLYPH = "●"
 local PAGES = { "overview", "cards", "stats" }
 local SORTS = { "due", "front", "state", "source" }
+local filter_label
 
-local HIGHLIGHTS = {
-  due = "NeorgFlashcardsDue",
-  overdue = "NeorgFlashcardsOverdue",
-  soon = "NeorgFlashcardsSoon",
-  scheduled = "NeorgFlashcardsScheduled",
-  new = "NeorgFlashcardsNew",
-  learning = "NeorgFlashcardsLearning",
-  review = "NeorgFlashcardsReview",
-  relearning = "NeorgFlashcardsLearning",
-  suspended = "NeorgFlashcardsSuspended",
-  buried = "NeorgFlashcardsBuried",
-  invalid = "NeorgFlashcardsInvalid",
-  active = "NeorgFlashcardsActive",
-  title = "NeorgFlashcardsGroupTitle",
-  muted = "NeorgFlashcardsMuted",
-  selected = "NeorgFlashcardsSelected",
-  heading = "NeorgFlashcardsHeading",
-  accent = "NeorgFlashcardsAccent",
-  action = "NeorgFlashcardsPrimaryAction",
-  table_header = "NeorgFlashcardsTableHeader",
-  again = "NeorgFlashcardsAgain",
-  hard = "NeorgFlashcardsHard",
-  good = "NeorgFlashcardsGood",
-}
+local HIGHLIGHTS = vim.tbl_extend("force", {}, highlights.groups.hub, highlights.groups.rating)
 
 local config = {}
 local handlers = {}
@@ -54,6 +34,9 @@ local state = {
   all_cards = {},
   invalid_cards = {},
   groups = {},
+  history_entries = {},
+  history_errors = {},
+  insights = { by_card = {}, by_id = {}, attention = {} },
   entries = {},
   sel = 1,
   card_entries = {},
@@ -85,57 +68,16 @@ local function same_hub(token)
     and M.is_open()
 end
 
-local function define_rating_highlight(name, fallback)
-  local rating_highlights = type(config.ui) == "table" and config.ui.rating_highlights or nil
-  local configured = type(rating_highlights) == "table" and rating_highlights[name] or nil
-  local value = type(configured) == "table" and vim.deepcopy(configured) or { link = fallback }
-  if vim.tbl_isempty(value) then
-    value = { link = fallback }
-  end
-  local ok, err = pcall(vim.api.nvim_set_hl, 0, HIGHLIGHTS[name], value)
-  if ok then
-    return
-  end
-  util.notify(
-    string.format("Invalid ui.rating_highlights.%s (%s); using %s", name, tostring(err), fallback),
-    vim.log.levels.WARN
-  )
-  vim.api.nvim_set_hl(0, HIGHLIGHTS[name], { link = fallback })
-end
-
-local function define_highlights()
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.due, { link = "DiagnosticWarn", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.overdue, { link = "DiagnosticError", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.soon, { link = "DiagnosticWarn", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.scheduled, { link = "DiagnosticOk", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.new, { link = "DiagnosticInfo", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.learning, { link = "Special", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.review, { link = "Type", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.suspended, { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.buried, { link = "NonText", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.invalid, { link = "DiagnosticError", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.active, { link = "DiagnosticOk", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.title, { link = "Title", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.muted, { link = "Comment", default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.selected, { link = "Visual", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.heading, { link = "Title", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.accent, { link = "Special", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.action, { link = "IncSearch", bold = true, default = true })
-  vim.api.nvim_set_hl(0, HIGHLIGHTS.table_header, { link = "Identifier", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsTabActive", { link = "TabLineSel", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsTabInactive", { link = "TabLine", default = true })
-  vim.api.nvim_set_hl(0, "NeorgFlashcardsFooter", { link = "StatusLine", default = true })
-  define_rating_highlight("again", "DiagnosticError")
-  define_rating_highlight("hard", "DiagnosticWarn")
-  define_rating_highlight("good", "DiagnosticOk")
-end
-
 local function lower(value)
   return util.trim(value):lower()
 end
 
 local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
+end
+
+local function collection_label()
+  return util.trim(config.label) ~= "" and util.trim(config.label) or (config.id or "Collection")
 end
 
 local function card_state(card, now)
@@ -148,8 +90,7 @@ end
 
 local function is_ready(card, now)
   local status = card_state(card, now)
-  return status.availability == "active"
-    and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
+  return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
 end
 
 local function card_tags(card)
@@ -188,7 +129,7 @@ local function card_answer(card)
 end
 
 local function card_source(card)
-  return util.path_label(card.path, config.flashcards_dir)
+  return util.path_label(card.path, config.path)
 end
 
 local function invalid_messages(descriptor)
@@ -331,10 +272,10 @@ local function count_states(cards, now)
         result.due = result.due + 1
       elseif status.timing == "overdue" then
         result.overdue = result.overdue + 1
-      elseif status.timing == "scheduled" or status.timing == "soon" then
+      elseif status.timing == "scheduled" then
         result.scheduled = result.scheduled + 1
       end
-      if status.timing == "new" or status.timing == "due" or status.timing == "overdue" then
+      if status.timing == "due" or status.timing == "overdue" then
         result.ready = result.ready + 1
         if status.lifecycle == "new" then
           result.ready_new = result.ready_new + 1
@@ -345,13 +286,20 @@ local function count_states(cards, now)
   return result
 end
 
+local function refresh_history_insights()
+  local entries, errors = stats.read_history()
+  state.history_entries = entries or {}
+  state.history_errors = errors or {}
+  state.insights = card_insights.build(config, state.all_cards, state.history_entries)
+end
+
 local function status_label(status)
   if status.availability == "suspended" then
     return "SUSPENDED", HIGHLIGHTS.suspended
   elseif status.availability == "buried" then
     return "BURIED", HIGHLIGHTS.buried
   end
-  local labels = { overdue = "OVERDUE", due = "DUE", soon = "SOON", scheduled = "SCHEDULED", new = "NEW" }
+  local labels = { overdue = "OVERDUE", due = "DUE", scheduled = "SCHEDULED" }
   return labels[status.timing] or status.timing:upper(), HIGHLIGHTS[status.timing] or HIGHLIGHTS.muted
 end
 
@@ -372,14 +320,16 @@ local function status_text(card, now)
   local status = card_state(card, now)
   if status.availability ~= "active" then
     return status.availability
-  elseif status.timing == "new" then
-    return "new"
-  elseif status.timing == "due" or status.timing == "overdue" then
-    return "due " .. util.trim(card.values.due)
-  elseif status.timing == "soon" then
-    return "soon · " .. util.trim(card.values.due)
   end
-  return util.trim(card.values.due)
+  local due = util.trim(card.values.due)
+  if status.timing == "due" then
+    return due == "" and "due now" or "due · " .. due
+  elseif status.timing == "overdue" then
+    return "overdue · " .. due
+  elseif status.timing == "scheduled" then
+    return "scheduled · " .. due
+  end
+  return status.timing
 end
 
 local function selected_overview_entry()
@@ -452,8 +402,7 @@ local function build_overview()
   local minutes = counts.ready == 0 and 0 or math.max(1, math.ceil(counts.ready / 3))
   local lines, spans, entries = {}, {}, {}
 
-  add_line(lines, spans, " Flashcards", HIGHLIGHTS.heading)
-  add_line(lines, spans, " A calm place to decide what to study next.", HIGHLIGHTS.muted)
+  add_line(lines, spans, " Flashcards · " .. collection_label(), HIGHLIGHTS.heading)
   add_line(lines, spans, "")
   add_line(lines, spans, " TODAY", HIGHLIGHTS.title)
   local action = string.format("  ▸  REVIEW DUE   %d ready", counts.ready)
@@ -492,14 +441,10 @@ local function build_overview()
     ),
     HIGHLIGHTS.muted
   )
-  add_line(
-    lines,
-    spans,
-    "  " .. GLYPH .. " due   " .. GLYPH .. " soon   " .. GLYPH .. " scheduled   " .. GLYPH .. " new"
-  )
+  add_line(lines, spans, "  " .. GLYPH .. " overdue   " .. GLYPH .. " due   " .. GLYPH .. " scheduled")
   local legend_line = #lines
   local at = 2
-  for _, key in ipairs({ "due", "soon", "scheduled", "new" }) do
+  for _, key in ipairs({ "overdue", "due", "scheduled" }) do
     add_span(spans, legend_line, at, at + #GLYPH, HIGHLIGHTS[key])
     at = at + #GLYPH + #" " + #key + 3
   end
@@ -558,7 +503,7 @@ end
 local function build_overview_side()
   local now = os.time()
   local cards = state.all_cards
-  local log_entries, log_errors = stats.read_history()
+  local log_entries, log_errors = state.history_entries, state.history_errors
   local width = side_width()
   local weeks = math.max(4, math.min(14, math.floor((width - 8) / 2)))
   local lines, spans = {}, {}
@@ -608,11 +553,13 @@ end
 
 local function searchable_text(card, now)
   local status = card_state(card, now)
+  local card_schema = schema.for_kind(config, card.kind) or {}
   return table
     .concat({
       card_front(card),
       card_answer(card),
       card.kind or "",
+      card_schema.label or "",
       card.values.tags or "",
       card_source(card),
       card.values.due or "",
@@ -646,15 +593,19 @@ end
 local function matches_filter(card, now, filter)
   if filter == "all" then
     return true
+  elseif filter == "clinic" then
+    local insight = state.insights.by_card[card]
+    return insight and insight.needs_attention or false
+  elseif filter:sub(1, 5) == "type:" then
+    return card.kind == filter:sub(6)
   end
   local status = card_state(card, now)
   if filter == "ready" then
-    return status.availability == "active"
-      and (status.timing == "new" or status.timing == "due" or status.timing == "overdue")
+    return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
   elseif filter == "due" then
     return status.availability == "active" and (status.timing == "due" or status.timing == "overdue")
   elseif filter == "scheduled" then
-    return status.availability == "active" and (status.timing == "scheduled" or status.timing == "soon")
+    return status.availability == "active" and status.timing == "scheduled"
   elseif filter == "suspended" or filter == "buried" then
     return status.availability == filter
   elseif filter == "new" or filter == "learning" or filter == "review" or filter == "relearning" then
@@ -742,14 +693,15 @@ local function build_cards_browser()
   local lines, spans, entries = {}, {}, {}
   local width = main_width()
   local total_blocks = #state.all_cards + #state.invalid_cards
-  add_line(lines, spans, " Cards", HIGHLIGHTS.heading)
+  local page_title = state.filter == "clinic" and " Card clinic" or " Cards"
+  add_line(lines, spans, page_title .. " · " .. collection_label(), HIGHLIGHTS.heading)
   local scope = string.format(
     " %d shown of %d blocks · %d reviewable · %d invalid · filter: %s · sort: %s",
     #browser_entries,
     total_blocks,
     #state.all_cards,
     #state.invalid_cards,
-    state.filter,
+    filter_label(state.filter),
     state.sort
   )
   if state.query ~= "" then
@@ -767,8 +719,19 @@ local function build_cards_browser()
     )
     return lines, spans, entries
   elseif #browser_entries == 0 then
-    add_line(lines, spans, "  No cards match this view", HIGHLIGHTS.heading)
-    add_line(lines, spans, "  Press X or Esc to clear the search and filter.", HIGHLIGHTS.muted)
+    add_line(
+      lines,
+      spans,
+      state.filter == "clinic" and "  Nothing needs attention" or "  No cards match this view",
+      HIGHLIGHTS.heading
+    )
+    add_line(
+      lines,
+      spans,
+      state.filter == "clinic" and "  Recent reviews look steady. Press X or Esc to see every card."
+        or "  Press X or Esc to clear the search and filter.",
+      HIGHLIGHTS.muted
+    )
     return lines, spans, entries
   end
 
@@ -802,7 +765,7 @@ local function build_cards_browser()
       label = "[" .. status_name .. "]"
       due = util.trim(card.values.due)
       answer = card_answer(card)
-      if due == "" and (status.timing == "new" or status.timing == "due" or status.timing == "overdue") then
+      if due == "" and (status.timing == "due" or status.timing == "overdue") then
         due = "now"
       end
     end
@@ -847,6 +810,58 @@ local function detail_hint(status)
   return "Try to answer before reading the back; recognition is deceptively easy."
 end
 
+local function short_interval(seconds)
+  seconds = tonumber(seconds)
+  if not seconds then
+    return "—"
+  elseif seconds < 3600 then
+    return string.format("%dm", math.max(1, math.floor(seconds / 60 + 0.5)))
+  elseif seconds < 86400 then
+    return string.format("%dh", math.max(1, math.floor(seconds / 3600 + 0.5)))
+  end
+  return string.format("%dd", math.max(1, math.floor(seconds / 86400 + 0.5)))
+end
+
+local function append_recall_trail(lines, spans, insight)
+  add_line(lines, spans, "")
+  add_line(lines, spans, " Recall trail · newest on the right", HIGHLIGHTS.title)
+  local trail = card_insights.recall_trail(insight, side_width() < 44 and 4 or 6, config.scheduling)
+  if #trail == 0 then
+    add_line(lines, spans, "  No reviews yet", HIGHLIGHTS.muted)
+    return
+  end
+
+  local rating_line = "  "
+  local rating_positions = {}
+  local intervals = {}
+  for index, step in ipairs(trail) do
+    if index > 1 then
+      rating_line = rating_line .. " ─── "
+    end
+    local start_col = #rating_line
+    rating_line = rating_line .. tostring(step.rating)
+    table.insert(rating_positions, { start_col = start_col, rating = step.rating })
+    table.insert(intervals, short_interval(step.interval_seconds))
+  end
+  add_line(lines, spans, rating_line)
+  local rating_line_number = #lines
+  local rating_highlights = {
+    [1] = HIGHLIGHTS.again,
+    [2] = HIGHLIGHTS.hard,
+    [3] = HIGHLIGHTS.good,
+  }
+  for _, position in ipairs(rating_positions) do
+    add_span(
+      spans,
+      rating_line_number,
+      position.start_col,
+      position.start_col + 1,
+      rating_highlights[position.rating] or HIGHLIGHTS.muted
+    )
+  end
+  add_line(lines, spans, "  " .. table.concat(intervals, "     "), HIGHLIGHTS.muted)
+end
+
 local function build_card_detail()
   local entry = state.page == "cards" and selected_card_entry() or nil
   local lines, spans = {}, {}
@@ -879,7 +894,13 @@ local function build_card_detail()
     end
     add_line(lines, spans, "")
     add_line(lines, spans, " Block", HIGHLIGHTS.title)
-    add_line(lines, spans, "  Kind: " .. tostring(card.kind or "unknown"), HIGHLIGHTS.muted)
+    local invalid_schema = schema.for_kind(config, card.kind)
+    add_line(
+      lines,
+      spans,
+      "  Card type: " .. (invalid_schema and invalid_schema.label or tostring(card.kind or "unknown")),
+      HIGHLIGHTS.muted
+    )
     if schema.card_id(card) then
       add_line(lines, spans, "  ID: " .. schema.card_id(card), HIGHLIGHTS.muted)
     end
@@ -902,6 +923,8 @@ local function build_card_detail()
     return lines, spans
   end
   local status = card_state(card, os.time())
+  local card_schema = schema.for_kind(config, card.kind) or {}
+  local insight = state.insights.by_card[card] or { reviews = {}, reasons = {} }
   local badge_line = " "
   for _, badge in ipairs(status_badges(status)) do
     local start_col = #badge_line
@@ -924,6 +947,7 @@ local function build_card_detail()
   end
   add_line(lines, spans, "")
   add_line(lines, spans, " Scheduling", HIGHLIGHTS.title)
+  add_line(lines, spans, "  Card type    " .. (card_schema.label or card.kind), HIGHLIGHTS.muted)
   add_line(lines, spans, "  Lifecycle    " .. status.lifecycle, HIGHLIGHTS.muted)
   add_line(lines, spans, "  Availability " .. status.availability, HIGHLIGHTS.muted)
   add_line(
@@ -951,6 +975,19 @@ local function build_card_detail()
     "  Last rating   " .. (util.trim(card.values.score) ~= "" and util.trim(card.values.score) or "—"),
     HIGHLIGHTS.muted
   )
+  if #insight.reasons > 0 then
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Why it is here", HIGHLIGHTS.title)
+    for _, reason in ipairs(insight.reasons) do
+      add_line(
+        lines,
+        spans,
+        "  " .. GLYPH .. " " .. truncate(reason.message, math.max(20, side_width() - 6)),
+        HIGHLIGHTS.overdue
+      )
+    end
+  end
+  append_recall_trail(lines, spans, insight)
   add_line(lines, spans, "")
   add_line(lines, spans, " Source", HIGHLIGHTS.title)
   add_line(lines, spans, "  " .. truncate(card_source(card), math.max(20, side_width() - 4)), HIGHLIGHTS.muted)
@@ -992,7 +1029,6 @@ local function build_stats_insights()
   local counts = count_states(state.all_cards, now)
   local lines, spans = {}, {}
   add_line(lines, spans, " Study health", HIGHLIGHTS.heading)
-  add_line(lines, spans, " A useful overview of the collection you have today.", HIGHLIGHTS.muted)
   add_line(lines, spans, "")
   add_line(lines, spans, " Queue", HIGHLIGHTS.title)
   add_line(
@@ -1060,31 +1096,28 @@ local function build_stats_insights()
       )
     end
   end
-  local again_cards = {}
-  for _, card in ipairs(state.all_cards) do
-    if schema.card_score(card) == 1 then
-      table.insert(again_cards, card)
-    end
-  end
+  local attention = state.insights.attention or {}
   add_line(lines, spans, "")
   add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
-  if #again_cards == 0 then
+  if #attention == 0 then
     add_line(
       lines,
       spans,
-      counts.total == 0 and "  Statistics appear after you add cards."
-        or "  No cards currently carry the lowest rating.",
+      counts.total == 0 and "  Statistics appear after you add cards." or "  No cards need attention right now.",
       HIGHLIGHTS.muted
     )
   else
-    for index = 1, math.min(5, #again_cards) do
+    for index = 1, math.min(5, #attention) do
+      local insight = attention[index]
+      local reason = insight.reasons[1] and insight.reasons[1].message or "recent reviews"
       add_line(
         lines,
         spans,
-        "  " .. GLYPH .. " " .. truncate(card_front(again_cards[index]), math.max(20, main_width() - 8)),
+        "  " .. GLYPH .. " " .. truncate(card_front(insight.card) .. " · " .. reason, math.max(20, main_width() - 8)),
         HIGHLIGHTS.overdue
       )
     end
+    add_line(lines, spans, "  Open Cards and choose f → Card clinic to work through them.", HIGHLIGHTS.muted)
   end
   return lines, spans
 end
@@ -1097,16 +1130,6 @@ local function add_optional_stats_section(lines, spans, name, ...)
   if not ok then
     return false
   end
-  if name == "ratings_section" then
-    local rating_groups = {
-      DiagnosticError = HIGHLIGHTS.again,
-      DiagnosticWarn = HIGHLIGHTS.hard,
-      DiagnosticOk = HIGHLIGHTS.good,
-    }
-    for _, span in ipairs(section_spans or {}) do
-      span.hl = rating_groups[span.hl] or span.hl
-    end
-  end
   add_line(lines, spans, "")
   append_section(lines, spans, section_lines, section_spans)
   return true
@@ -1115,11 +1138,11 @@ end
 local function build_full_stats()
   local now = os.time()
   local cards = state.all_cards
-  local log_entries, log_errors = stats.read_history()
+  local log_entries, log_errors = state.history_entries, state.history_errors
   local width = side_width()
   local weeks = math.max(4, math.min(20, math.floor((width - 8) / 2)))
   local lines, spans = {}, {}
-  add_line(lines, spans, " Analytics", HIGHLIGHTS.heading)
+  add_line(lines, spans, " Analytics · " .. collection_label(), HIGHLIGHTS.heading)
   add_line(lines, spans, "")
   if log_errors and #log_errors > 0 then
     add_line(
@@ -1177,12 +1200,12 @@ local function statusline_escape(text)
 end
 
 local function tab_bar()
-  local chunks = { "%#NeorgFlashcardsHeading#  Flashcards  " }
+  local chunks = { "%#" .. HIGHLIGHTS.heading .. "#  " .. statusline_escape(collection_label()) .. "  " }
   for index, page in ipairs(PAGES) do
     local label = page:sub(1, 1):upper() .. page:sub(2)
-    local hl = page == state.page and "NeorgFlashcardsTabActive" or "NeorgFlashcardsTabInactive"
+    local hl = page == state.page and HIGHLIGHTS.tab_active or HIGHLIGHTS.tab_inactive
     table.insert(chunks, string.format("%%#%s# %d %s ", hl, index, label))
-    table.insert(chunks, "%#NeorgFlashcardsMuted# ")
+    table.insert(chunks, "%#" .. HIGHLIGHTS.muted .. "# ")
   end
   return table.concat(chunks)
 end
@@ -1201,11 +1224,11 @@ local function apply_chrome()
       -- primary pane and use the always-visible secondary winbar as the key
       -- ribbon. The statusline remains a useful fallback for simpler setups.
       if pane == state.side and show_shortcuts() then
-        vim.wo[pane.win].winbar = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
+        vim.wo[pane.win].winbar = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
       else
         vim.wo[pane.win].winbar = nav
       end
-      vim.wo[pane.win].statusline = "%#NeorgFlashcardsFooter#" .. statusline_escape(footer)
+      vim.wo[pane.win].statusline = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
     end
   end
 end
@@ -1543,7 +1566,7 @@ end
 function M.context_help()
   popup.open(key_help, {
     title = " " .. state.page:sub(1, 1):upper() .. state.page:sub(2) .. " keys ",
-    footer = " q/Esc close ",
+    footer = actions.help_footer(),
     min_width = 48,
     max_width = 72,
     min_height = 12,
@@ -1599,6 +1622,7 @@ end
 
 local FILTERS = {
   { value = "all", label = "All cards" },
+  { value = "clinic", label = "Card clinic" },
   { value = "invalid", label = "Invalid blocks" },
   { value = "ready", label = "Ready now" },
   { value = "overdue", label = "Overdue" },
@@ -1611,6 +1635,20 @@ local FILTERS = {
   { value = "suspended", label = "Suspended" },
   { value = "buried", label = "Buried" },
 }
+
+filter_label = function(value)
+  if value:sub(1, 5) == "type:" then
+    local id = value:sub(6)
+    local card_schema = schema.for_kind(config, id)
+    return "Type · " .. (card_schema and card_schema.label or id)
+  end
+  for _, filter in ipairs(FILTERS) do
+    if filter.value == value then
+      return filter.label
+    end
+  end
+  return value
+end
 
 function M.choose_filter()
   local token = hub_token()
@@ -1630,8 +1668,19 @@ function M.choose_filter()
     end
     table.insert(choices, { value = filter.value, label = filter.label, count = count })
   end
+  local kinds = vim.tbl_keys(config.schemas or {})
+  table.sort(kinds)
+  for _, kind in ipairs(kinds) do
+    local count = 0
+    for _, card in ipairs(state.all_cards) do
+      if card.kind == kind then
+        count = count + 1
+      end
+    end
+    table.insert(choices, { value = "type:" .. kind, label = filter_label("type:" .. kind), count = count })
+  end
   vim.ui.select(choices, {
-    prompt = "Card state filter",
+    prompt = "Card view",
     format_item = function(item)
       return string.format("%s %-14s %d", item.value == state.filter and "●" or " ", item.label, item.count)
     end,
@@ -1753,6 +1802,7 @@ function M.refresh()
   state.all_cards = cards
   state.invalid_cards = invalid or {}
   state.groups = group_cards(cards, os.time())
+  refresh_history_insights()
   render()
 end
 
@@ -1848,6 +1898,8 @@ local function dispatch(action)
     if not call_handler("on_help") then
       M.context_help()
     end
+  elseif action == "collection" then
+    call_handler("on_collection")
   elseif action == "overview" or action == "cards" or action == "stats" then
     M.show(action)
   elseif action == "next_page" then
@@ -2010,7 +2062,7 @@ function M.open(collect, opts)
   provider = collect or provider
   if not provider then
     util.notify("Flashcard collection provider is not configured", vim.log.levels.ERROR)
-    return
+    return false
   end
   local cards, errors, invalid = provider()
   cards = cards or {}
@@ -2020,9 +2072,19 @@ function M.open(collect, opts)
   state.all_cards = cards
   state.invalid_cards = invalid or {}
   state.groups = group_cards(cards, os.time())
+  refresh_history_insights()
+  if opts.reset_browser then
+    state.sel = 1
+    state.card_sel = 1
+    state.selected_card_key = nil
+    state.query = ""
+    state.filter = "all"
+    state.sort = "due"
+  end
   state.sel = opts.sel or state.sel or 1
   state.capabilities = {
     add = type(handlers.on_add) == "function",
+    collection = type(handlers.on_collection) == "function",
     help = type(handlers.on_help) == "function",
     check = type(handlers.on_check) == "function",
     suspend = type(handlers.on_toggle_suspend) == "function",
@@ -2050,12 +2112,12 @@ function M.open(collect, opts)
     apply_layout()
   end
   M.show(opts.view or state.page or "overview")
+  return M.is_open()
 end
 
 function M.setup(opts, extra_handlers)
   config = opts or {}
   handlers = extra_handlers or {}
-  define_highlights()
   local group = vim.api.nvim_create_augroup("neorg_flashcards_overview", { clear = true })
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
@@ -2065,10 +2127,6 @@ function M.setup(opts, extra_handlers)
         render()
       end
     end,
-  })
-  vim.api.nvim_create_autocmd("ColorScheme", {
-    group = group,
-    callback = define_highlights,
   })
   vim.api.nvim_create_autocmd("WinClosed", {
     group = group,

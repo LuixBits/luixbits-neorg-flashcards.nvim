@@ -1,4 +1,5 @@
 return function(T)
+  local fs_lock = require("neorg_flashcards.fs_lock")
   local parser = require("neorg_flashcards.parser")
   local store = require("neorg_flashcards.store")
 
@@ -6,6 +7,27 @@ return function(T)
   local assert_equal = T.assert_equal
   local assert_contains = T.assert_contains
   local config = T.config
+
+  do
+    local lock_path = vim.fn.tempname() .. ".lock"
+    local first, first_err = fs_lock.acquire(lock_path, { wait_ms = 20 })
+    assert_true(first ~= nil, "shared file lock can be acquired: " .. tostring(first_err))
+
+    local blocked, _, reason = fs_lock.acquire(lock_path, { wait_ms = 0 })
+    assert_equal(blocked, nil, "a live owner keeps a second caller out")
+    assert_equal(reason, "timeout", "lock contention has a stable failure reason")
+
+    local successor = "99999999:successor-token"
+    vim.fn.writefile({ successor }, lock_path)
+    fs_lock.release(first)
+    assert_equal(vim.fn.readfile(lock_path)[1], successor, "an old holder cannot remove a successor token")
+    vim.fn.delete(lock_path)
+
+    local final, final_err = fs_lock.acquire(lock_path, { wait_ms = 20 })
+    assert_true(final ~= nil, "released file lock can be reacquired: " .. tostring(final_err))
+    fs_lock.release(final)
+    assert_equal(vim.fn.filereadable(lock_path), 0, "the current owner removes its lock on release")
+  end
 
   local card_path = vim.fn.tempname() .. ".norg"
   vim.fn.writefile({
@@ -253,7 +275,7 @@ return function(T)
       { field = "score", value = "3" },
     }, { allowed_root = symlink_dir })
     assert_true(not escape_ok, "source updates refuse a symlink target outside allowed_root")
-    assert_contains(escape_message, "flashcards_dir", "outside-root source refusal names the collection boundary")
+    assert_contains(escape_message, "path", "outside-root source refusal names the collection boundary")
     assert_equal(
       table.concat(vim.fn.readfile(outside_target), "\n"),
       table.concat(outside_lines, "\n"),
@@ -274,7 +296,7 @@ return function(T)
     assert_true(swapped, "runtime boundary fixture redirects its source: " .. tostring(swap_error))
     local swap_ok, swap_message = store.delete_card(swap_card, { allowed_root = symlink_dir })
     assert_true(not swap_ok, "deletion rechecks the source boundary after collection")
-    assert_contains(swap_message, "flashcards_dir", "runtime boundary refusal explains the collection constraint")
+    assert_contains(swap_message, "path", "runtime boundary refusal explains the collection constraint")
     assert_equal(
       table.concat(vim.fn.readfile(outside_target), "\n"),
       table.concat(outside_lines, "\n"),

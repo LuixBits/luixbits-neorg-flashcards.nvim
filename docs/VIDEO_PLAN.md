@@ -5,7 +5,7 @@
 Explain the storage model and the three study scopes in about 90 seconds:
 
 - current `.norg` file = current chapter;
-- every `.norg` file under `flashcards_dir` = full collection;
+- every `.norg` file under the active collection path = full collection;
 - one tag = a topic spanning several chapters.
 
 The video must also make one compatibility boundary unambiguous: the plugin
