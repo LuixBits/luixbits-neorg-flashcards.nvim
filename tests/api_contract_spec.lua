@@ -44,8 +44,8 @@ return function(T)
   assert_true(flashcards.add_kind("japanese"), "add_kind falls back from a non-file buffer")
   assert_true(form.close({ force = true }), "the fallback add fixture closes cleanly")
   assert_equal(
-    vim.fs.normalize(vim.api.nvim_buf_get_name(0)),
-    vim.fs.normalize(contract_config.default_file),
+    T.canonical_path(vim.api.nvim_buf_get_name(0)),
+    T.canonical_path(contract_config.default_file),
     "add_kind targets default_file outside a collection buffer"
   )
   assert_true(flashcards.command("add japanese"), "command returns the routed form-open result")
