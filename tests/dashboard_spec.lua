@@ -10,6 +10,8 @@ return function(T)
   local current_popup = T.current_popup
   local current_tab_text = T.current_tab_text
   local assert_buffer_maps = T.assert_buffer_maps
+  local assert_buffer_maps_absent = T.assert_buffer_maps_absent
+  local window_footer = T.window_footer
   local collection_dir = T.collection_dir
 
   local invalid_ui_path = collection_dir .. "/invalid-ui.norg"
@@ -40,8 +42,10 @@ return function(T)
   assert_contains(overview_text, "untagged", "overview groups cards without tags")
   assert_contains(overview_text, "nature · 2 cards · 2 due", "overview counts cards and due per group")
   assert_contains(overview_text, "▸", "overview shows the selected card marker")
-  assert_contains(overview_text, "● due", "overview shows the color legend")
+  assert_contains(overview_text, "● overdue   ● due   ● scheduled", "overview shows every timing state")
+  assert_true(not overview_text:find("● soon", 1, true), "overview does not advertise an unused timing state")
   assert_contains(overview_text, "山 — mountain", "card lines show front and reveal")
+  assert_contains(overview_text, "due now", "a new card has an honest ready-now label")
   assert_buffer_maps(overview_popup, {
     "q",
     "<Esc>",
@@ -79,9 +83,10 @@ return function(T)
     "c",
     "R",
   })
+  assert_buffer_maps_absent(overview_popup, { "s" })
   assert_true(#vim.api.nvim_buf_get_extmarks(overview_popup, -1, 0, -1, {}) > 0, "overview paints highlight extmarks")
 
-  vim.cmd("Flashcards add")
+  vim.cmd("Flashcards add japanese")
   assert_true(form.is_open(), "the hub routes command-line add into the protected composer")
   form.close({ force = true })
   assert_true(overview.is_open(), "closing a hub composer returns to the intact hub")
@@ -166,12 +171,15 @@ return function(T)
   assert_contains(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "D delete", "Cards ribbon exposes deletion")
 
   overview.context_help()
-  local _, invalid_help_text = current_popup()
+  local invalid_help_buf, invalid_help_text = current_popup()
   assert_true(
     not invalid_help_text:find("Review the selected card", 1, true),
     "invalid-card help does not advertise a blocked review action"
   )
   assert_contains(invalid_help_text, "Edit the selected card", "invalid-card help retains its repair action")
+  assert_contains(window_footer(), "/ find", "hub help advertises native search")
+  assert_buffer_maps_absent(invalid_help_buf, { "/", "n", "N" })
+  assert_true(vim.fn.search("Edit the selected card") > 0, "native search finds a current hub action")
   overview.help_close()
 
   local invalid_disk_before = table.concat(vim.fn.readfile(invalid_ui_path), "\n")
@@ -283,9 +291,9 @@ return function(T)
   end
   overview.choose_filter()
   vim.ui.select = select_original
-  assert_equal(filter_prompt, "Card state filter", "Cards filtering names the state dimension")
+  assert_equal(filter_prompt, "Card view", "Cards filtering covers states and card types")
   local _, filtered_text = current_popup()
-  assert_contains(filtered_text, "filter: new", "Cards browser renders the active lifecycle filter")
+  assert_contains(filtered_text, "filter: New", "Cards browser renders the active lifecycle filter")
   overview.clear_browser()
 
   overview.toggle_suspend()
@@ -444,7 +452,7 @@ return function(T)
   vim.cmd.edit(vim.fn.fnameescape(background_target))
   vim.cmd("Flashcards")
   vim.cmd("tabprevious")
-  vim.cmd("Flashcards add")
+  vim.cmd("Flashcards add japanese")
   assert_true(form.is_open(), "add still opens from a normal file while the hub exists in another tab")
   assert_contains(
     T.decoration_text(vim.api.nvim_get_current_buf()),

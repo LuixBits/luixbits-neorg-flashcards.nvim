@@ -52,13 +52,30 @@ let
     else
       throw "Cannot render ${valueType} as Lua";
 
-  presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.schemaPresets;
+  collectionPresetLua = concatMapStringsSep "\n" (
+    collectionId:
+    let
+      collectionKey = builtins.toJSON collectionId;
+      presetArgs = concatMapStringsSep ", " builtins.toJSON cfg.schemaPresets.${collectionId};
+    in
+    optionalString (cfg.schemaPresets.${collectionId} != [ ]) ''
+      assert(
+        opts.collections and opts.collections[${collectionKey}],
+        "schemaPresets references an unknown collection: ${collectionId}"
+      )
+      opts.collections[${collectionKey}].schemas = vim.tbl_deep_extend(
+        "force",
+        presets.only(${presetArgs}),
+        opts.collections[${collectionKey}].schemas or {}
+      )
+    ''
+  ) (builtins.attrNames cfg.schemaPresets);
 
   setupLua = ''
     local opts = ${toLua cfg.setupOpts}
-    ${optionalString (cfg.schemaPresets != [ ]) ''
+    ${optionalString (cfg.schemaPresets != { }) ''
       local presets = require("neorg_flashcards.presets")
-      opts.schemas = vim.tbl_deep_extend("force", presets.only(${presetArgs}), opts.schemas or {})
+      ${collectionPresetLua}
     ''}
     require("neorg_flashcards").setup(opts)
   '';
@@ -86,33 +103,49 @@ in
     setupOpts = mkOption {
       type = types.attrsOf types.anything;
       default = {
-        default_kind = "japanese";
+        default_collection = "japanese";
+        collections.japanese = {
+          path = "~/notes/flashcards";
+          default_file = "cards.norg";
+          default_card_type = "japanese";
+        };
       };
       example = {
-        flashcards_dir = "~/notes/flashcards";
-        default_file = "~/notes/flashcards/cards.norg";
-        default_kind = "japanese";
+        default_collection = "japanese";
+        collections.japanese = {
+          label = "Japanese";
+          path = "~/notes/japanese/flashcards";
+          default_file = "cards.norg";
+          default_card_type = "japanese";
+        };
       };
       description = ''
         Options passed to `require("neorg_flashcards").setup(...)`.
-        The default selects the bundled Japanese schema so enabling the module
-        is immediately usable. Use `schemaPresets` for other bundled Lua
-        presets, or set `schemas` directly for custom schemas.
+        The default configures one Japanese collection so enabling the module
+        is immediately usable. Use `schemaPresets` for bundled Lua schemas, or
+        set `collections.<id>.schemas` directly for custom schemas.
       '';
     };
 
     schemaPresets = mkOption {
-      type = types.listOf types.str;
-      default = [ "japanese" ];
-      example = [
-        "japanese"
-        "chinese"
-      ];
+      type = types.attrsOf (types.listOf types.str);
+      default = {
+        japanese = [ "japanese" ];
+      };
+      example = {
+        japanese = [ "japanese" ];
+        computer_science = [
+          "question_answer"
+          "term_definition"
+          "code_output"
+        ];
+      };
       description = ''
-        Bundled schema presets to merge into `setupOpts.schemas` via
+        Bundled schema presets keyed by collection ID. Each list is merged into
+        `setupOpts.collections.<id>.schemas` via
         `require("neorg_flashcards.presets").only(...)`. Japanese is enabled
-        by default; set this to an empty list when supplying only custom
-        schemas.
+        by default; set this to an empty attribute set when every collection
+        supplies only custom schemas.
       '';
     };
 

@@ -1,6 +1,7 @@
 -- Versioned, append-only review history. Corrupt lines are reported and
 -- skipped independently, so one interrupted append never hides good history.
 
+local fs_lock = require("neorg_flashcards.fs_lock")
 local identity = require("neorg_flashcards.identity")
 local schedule = require("neorg_flashcards.schedule")
 local util = require("neorg_flashcards.util")
@@ -95,32 +96,32 @@ end
 
 local function validate_captured_identity(path, captured_identity)
   local destination = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path), ":p"))
-  local identity = captured_identity or captured_destinations[destination]
-  if not identity then
+  local captured = captured_identity or captured_destinations[destination]
+  if not captured then
     return true
   end
 
-  if identity.root then
-    local _, root_err = util.resolve_pinned_directory(identity.root)
+  if captured.root then
+    local _, root_err = util.resolve_pinned_directory(captured.root)
     if root_err then
       return false, root_err
     end
   end
 
   local parent = canonical_path(vim.fn.fnamemodify(destination, ":h"))
-  if parent ~= identity.parent then
+  if parent ~= captured.parent then
     return false, "review history parent changed since it was captured; run setup again"
   end
   local stat = (vim.uv or vim.loop).fs_stat(parent)
   if stat and stat.type ~= "directory" then
     return false, "review history parent is no longer a directory"
-  elseif identity.dev ~= nil and identity.ino ~= nil then
-    if not stat or stat.dev ~= identity.dev or stat.ino ~= identity.ino then
+  elseif captured.dev ~= nil and captured.ino ~= nil then
+    if not stat or stat.dev ~= captured.dev or stat.ino ~= captured.ino then
       return false, "review history parent was replaced since it was captured; run setup again"
     end
   elseif stat then
-    identity.dev = stat.dev
-    identity.ino = stat.ino
+    captured.dev = stat.dev
+    captured.ino = stat.ino
   end
   return true
 end
@@ -144,10 +145,14 @@ local function is_destination(value)
   return type(value) == "table" and value._neorg_flashcards_history_destination == true
 end
 
-local function new_destination(path, root)
+local function new_destination(path, root, collection_id)
   local destination = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(path), ":p"))
   local parent = canonical_path(vim.fn.fnamemodify(destination, ":h"))
   local stat = (vim.uv or vim.loop).fs_stat(parent)
+  local normalized_collection_id
+  if not util.isempty(collection_id) then
+    normalized_collection_id = util.trim(collection_id)
+  end
   local captured = {
     _neorg_flashcards_history_destination = true,
     path = destination,
@@ -155,85 +160,19 @@ local function new_destination(path, root)
     dev = stat and stat.dev or nil,
     ino = stat and stat.ino or nil,
     root = type(root) == "table" and vim.deepcopy(root) or nil,
+    collection_id = normalized_collection_id,
   }
   local root_key = captured.root
       and table.concat({ captured.root.canonical or "", captured.root.dev or "", captured.root.ino or "" }, ":")
     or ""
-  local key_parts = { destination, root_key, parent, captured.dev or "", captured.ino or "" }
+  local key_parts =
+    { destination, root_key, captured.collection_id or "", parent, captured.dev or "", captured.ino or "" }
   for index, value in ipairs(key_parts) do
     value = tostring(value)
     key_parts[index] = string.format("%d:%s", #value, value)
   end
   captured.key = vim.fn.sha256(table.concat(key_parts, "|"))
   return captured
-end
-
-local function lock_token(path)
-  local ok_read, lines = pcall(vim.fn.readfile, path)
-  if not ok_read or #lines ~= 1 then
-    return nil
-  end
-  return lines[1]
-end
-
-local function release_lock(lock)
-  local uv = vim.uv or vim.loop
-  if lock.fd then
-    pcall(uv.fs_close, lock.fd)
-  end
-  if lock_token(lock.path) == lock.token then
-    pcall(uv.fs_unlink, lock.path)
-  end
-end
-
-local function create_lock(path)
-  local uv = vim.uv or vim.loop
-  local fd, open_err, open_code = uv.fs_open(path, "wx", 384)
-  if not fd then
-    return nil, open_err, open_code
-  end
-  local token = string.format("%s:%s", vim.fn.getpid(), uv.hrtime())
-  local written, write_err = uv.fs_write(fd, token, 0)
-  if not written then
-    pcall(uv.fs_close, fd)
-    pcall(uv.fs_unlink, path)
-    return nil, write_err
-  end
-  pcall(uv.fs_fsync, fd)
-  return { fd = fd, path = path, token = token }
-end
-
-local function remove_dead_owner_lock(path)
-  local uv = vim.uv or vim.loop
-  local token = lock_token(path)
-  local owner = token and tonumber(token:match("^(%d+):")) or nil
-  if not owner then
-    return false
-  end
-  local _, _, kill_code = uv.kill(owner, 0)
-  if kill_code ~= "ESRCH" or lock_token(path) ~= token then
-    return false
-  end
-  local removed = uv.fs_unlink(path)
-  return removed ~= nil or lock_token(path) == nil
-end
-
--- Only one process may reap a dead owner's lock. The reaper keeps the original
--- pathname in place until it has confirmed the same dead-owner token twice;
--- no successor can acquire the original lock during that check.
-local function recover_dead_lock(lock_path)
-  local reaper_path = lock_path .. ".reap"
-  local reaper, _, reaper_code = create_lock(reaper_path)
-  if not reaper and reaper_code == "EEXIST" and remove_dead_owner_lock(reaper_path) then
-    reaper = create_lock(reaper_path)
-  end
-  if not reaper then
-    return false
-  end
-
-  local recovered = remove_dead_owner_lock(lock_path)
-  release_lock(reaper)
-  return recovered
 end
 
 -- JSONL updates use a small cross-process lock file. All plugin instances
@@ -246,30 +185,15 @@ local function acquire_lock(path, label)
     return nil, parent_err
   end
 
-  local uv = vim.uv or vim.loop
   local lock_path = path .. ".lock"
-  local deadline = uv.hrtime() + LOCK_WAIT_MS * 1000000
-  while true do
-    local lock, open_err, open_code = create_lock(lock_path)
-    if lock then
-      return lock
-    end
-    if open_code ~= "EEXIST" then
-      return nil, string.format("could not lock %s: %s", label, tostring(open_err))
-    end
-    if recover_dead_lock(lock_path) then
-      -- Retry acquisition immediately after removing the confirmed dead owner.
-    elseif uv.hrtime() >= deadline then
-      return nil,
-        string.format(
-          "timed out waiting for %s lock; remove %s only if no Neovim instance is using it",
-          label,
-          lock_path
-        )
-    else
-      uv.sleep(2)
-    end
+  local lock, lock_err, reason = fs_lock.acquire(lock_path, { wait_ms = LOCK_WAIT_MS })
+  if lock then
+    return lock
+  elseif reason == "timeout" then
+    return nil,
+      string.format("timed out waiting for %s lock; remove %s only if no Neovim instance is using it", label, lock_path)
   end
+  return nil, string.format("could not lock %s: %s", label, tostring(lock_err))
 end
 
 local function with_lock(path, label, callback, destination)
@@ -283,11 +207,11 @@ local function with_lock(path, label, callback, destination)
   end
   path_ok, path_err = validate_captured_path(path, destination)
   if not path_ok then
-    release_lock(lock)
+    fs_lock.release(lock)
     return false, path_err
   end
   local ok, result, detail = pcall(callback)
-  release_lock(lock)
+  fs_lock.release(lock)
   if not ok then
     return false, string.format("could not update %s: %s", label, tostring(result))
   end
@@ -405,10 +329,10 @@ function M.path(source)
   end
 
   local opts = source_config(source)
-  if util.isempty(opts.flashcards_dir) then
-    return nil, "flashcards_dir is not configured"
+  if util.isempty(opts.path) then
+    return nil, "collection path is not configured"
   end
-  local root_spec = opts._collection_root or opts.flashcards_dir
+  local root_spec = opts._root or opts.path
   local root, root_err = util.resolve_pinned_directory(root_spec)
   if not root then
     return nil, root_err
@@ -418,10 +342,10 @@ function M.path(source)
   if not destination:match("%.jsonl$") then
     return nil, "review history destination must be a .jsonl file separate from card sources"
   elseif not util.resolved_path_is_within(destination, root) then
-    return nil, "review history destination must be inside flashcards_dir"
+    return nil, "review history destination must be inside the collection path"
   end
   if type(root_spec) ~= "table" and not captured_destinations[destination] then
-    root_spec = util.pin_directory(opts.flashcards_dir)
+    root_spec = util.pin_directory(opts.path)
   end
   remember_captured_destination(destination, root_spec, false)
   return destination
@@ -441,22 +365,22 @@ function M.capture(source)
     return nil, path_err
   end
   if type(source) == "string" then
-    local identity = captured_destinations[path]
-    local destination = new_destination(path, identity and identity.root or nil)
-    if identity then
-      destination.parent = identity.parent
-      destination.dev = identity.dev
-      destination.ino = identity.ino
+    local captured = captured_destinations[path]
+    local destination = new_destination(path, captured and captured.root or nil)
+    if captured then
+      destination.parent = captured.parent
+      destination.dev = captured.dev
+      destination.ino = captured.ino
     end
     return destination
   end
 
   local opts = source_config(source)
-  local root_spec = opts._collection_root
+  local root_spec = opts._root
   if type(root_spec) ~= "table" then
-    root_spec = util.pin_directory(opts.flashcards_dir)
+    root_spec = util.pin_directory(opts.path)
   end
-  return new_destination(path, root_spec)
+  return new_destination(path, root_spec, opts.id)
 end
 
 function M.destination_key(source)
@@ -605,6 +529,17 @@ local function normalize_event(event)
     end
   end
 
+  for _, field in ipairs({ "collection_id", "card_type" }) do
+    if normalized[field] ~= nil then
+      normalized[field] = util.trim(normalized[field])
+      if normalized[field] == "" then
+        normalized[field] = nil
+      elseif not normalized[field]:match("^[a-z][a-z0-9_-]*$") then
+        return nil, "review event has an invalid " .. field
+      end
+    end
+  end
+
   if normalized.duration_ms ~= nil then
     normalized.duration_ms = math.max(0, math.floor(tonumber(normalized.duration_ms) or 0))
   end
@@ -717,6 +652,20 @@ function M.append(event, source)
   local path, path_err = M.path(destination)
   if util.isempty(path) then
     return false, path_err or "review history path is not configured"
+  end
+  if destination.collection_id then
+    if not util.isempty(normalized.collection_id) and normalized.collection_id ~= destination.collection_id then
+      return false,
+        string.format(
+          "review event belongs to collection %s, not %s",
+          tostring(normalized.collection_id),
+          destination.collection_id
+        )
+    end
+    normalized.collection_id = destination.collection_id
+  end
+  if util.isempty(normalized.card_type) and type(normalized.card_ref) == "table" then
+    normalized.card_type = util.trim(normalized.card_ref.kind)
   end
 
   local ok_encode, line = pcall(encode, normalized)
@@ -912,7 +861,47 @@ function M.append_review(card, score, now, details, source)
   return M.append(event, source)
 end
 
-local function read_jsonl(path, entries, errors)
+-- Undo remains in the append-only ledger as a compensating event. Explicit
+-- event IDs are authoritative even when clock changes make an undo sort before
+-- the rating it cancels. Older undo records without an ID keep their original
+-- sequential meaning and cancel the latest preceding matching rating.
+function M.effective_entries(entries)
+  local explicitly_undone = {}
+  for _, entry in ipairs(entries or {}) do
+    if entry.event == "undo" then
+      local undo_of = util.trim(entry.undo_of)
+      if undo_of ~= "" then
+        explicitly_undone[undo_of] = true
+      end
+    end
+  end
+
+  local active = {}
+  for _, entry in ipairs(entries or {}) do
+    if entry.event == "undo" then
+      if util.isempty(entry.undo_of) then
+        for index = #active, 1, -1 do
+          local candidate = active[index]
+          local same_card = entry.card_id == nil or candidate.card_id == entry.card_id
+          local same_rating = entry.rating == nil or candidate.rating == entry.rating
+          if candidate.event == "rated" and same_card and same_rating then
+            table.remove(active, index)
+            break
+          end
+        end
+      end
+    elseif entry.type == "review" then
+      local event_id = util.trim(entry.event_id)
+      local cancelled = entry.event == "rated" and event_id ~= "" and explicitly_undone[event_id]
+      if not cancelled then
+        table.insert(active, entry)
+      end
+    end
+  end
+  return active
+end
+
+local function read_jsonl(path, entries, errors, expected_collection_id)
   local lines, read_err = read_lines(path)
   if not lines then
     table.insert(errors, string.format("%s: %s", path, read_err))
@@ -926,7 +915,24 @@ local function read_jsonl(path, entries, errors)
         table.insert(errors, string.format("%s:%d: invalid JSON review event", path, index))
       else
         local event, event_err = normalize_event(raw)
-        if event then
+        if
+          event
+          and expected_collection_id
+          and event.collection_id
+          and event.collection_id ~= expected_collection_id
+        then
+          table.insert(
+            errors,
+            string.format(
+              "%s:%d: review event belongs to collection %s, not %s",
+              path,
+              index,
+              event.collection_id,
+              expected_collection_id
+            )
+          )
+        elseif event then
+          event.collection_id = event.collection_id or expected_collection_id
           event._history_order = #entries + 1
           table.insert(entries, event)
         else
@@ -944,7 +950,7 @@ function M.read(source)
   if destination then
     local path, path_err = M.path(destination)
     if path then
-      read_jsonl(path, entries, errors)
+      read_jsonl(path, entries, errors, destination.collection_id)
     elseif path_err then
       table.insert(errors, path_err)
     end

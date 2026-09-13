@@ -14,7 +14,7 @@ return function(T)
   local test_root = T.test_root
   local config = T.config
 
-  local collection_dir = config.flashcards_dir
+  local collection_dir = config.path
   local nested_dir = collection_dir .. "/course"
   vim.fn.mkdir(nested_dir, "p")
 
@@ -38,7 +38,7 @@ return function(T)
   }, chapter_two_path)
 
   local collection_config = {
-    flashcards_dir = collection_dir,
+    path = collection_dir,
     schemas = presets.only("japanese"),
   }
   local collected_cards, collection_errors = parser.collect_flashcards(collection_config)
@@ -216,7 +216,7 @@ return function(T)
 
   vim.cmd.edit(vim.fn.fnameescape(chapter_one_path))
   local linked_cards, linked_errors = parser.collect_flashcards({
-    flashcards_dir = linked_collection,
+    path = linked_collection,
     schemas = collection_config.schemas,
   })
   assert_equal(#linked_errors, 0, "symlinked collection has no errors")

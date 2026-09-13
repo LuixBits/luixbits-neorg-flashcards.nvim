@@ -23,12 +23,16 @@ bash scripts/test.sh
 bash scripts/check-clean-install.sh
 ```
 
-If you have Nix, run the same package, formatting, documentation, workflow,
-headless, and Neorg integration checks used for release validation:
+If you have Nix, run the same package, Lua formatting and static analysis,
+documentation, workflow, headless, and Neorg integration checks used for
+release validation:
 
 ```sh
 nix flake check --print-build-logs
 ```
+
+Without Nix, `scripts/test.sh` also runs StyLua and Luacheck when those commands
+are installed.
 
 Video changes have their own checks:
 

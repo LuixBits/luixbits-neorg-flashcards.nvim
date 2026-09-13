@@ -35,7 +35,7 @@
         let
           plugin = pkgs.vimUtils.buildVimPlugin {
             pname = "luixbits-neorg-flashcards.nvim";
-            version = "0.2.0";
+            version = "0.3.0";
             src = self;
           };
         in
@@ -95,9 +95,24 @@
                   {
                     programs.nvf.neorg-flashcards = {
                       enable = true;
-                      schemaPresets = [ "japanese" ];
+                      schemaPresets = {
+                        chinese = [ "chinese" ];
+                        japanese = [ "japanese" ];
+                      };
                       setupOpts = {
-                        default_kind = "japanese";
+                        default_collection = "japanese";
+                        collections = {
+                          chinese = {
+                            path = "~/notes/chinese/flashcards";
+                            default_file = "cards.norg";
+                            default_card_type = "chinese";
+                          };
+                          japanese = {
+                            path = "~/notes/japanese/flashcards";
+                            default_file = "cards.norg";
+                            default_card_type = "japanese";
+                          };
+                        };
                         ui.show_shortcuts = false;
                       };
                       keymaps.enable = true;
@@ -126,12 +141,21 @@
             assert (builtins.head cfg.keymaps).action == "<cmd>Flashcards<CR>";
             assert lib.hasInfix "require(\"neorg_flashcards\").setup" cfg.luaConfigRC.neorg-flashcards;
             assert lib.hasInfix "presets.only(\"japanese\")" cfg.luaConfigRC.neorg-flashcards;
-            assert lib.hasInfix "opts.schemas" cfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "opts.collections[\"japanese\"].schemas" cfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "presets.only(\"chinese\")" cfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "opts.collections[\"chinese\"].schemas" cfg.luaConfigRC.neorg-flashcards;
+            assert !(lib.hasInfix "opts.schemas =" cfg.luaConfigRC.neorg-flashcards);
+            assert lib.hasInfix "[\"default_collection\"] = \"japanese\"" cfg.luaConfigRC.neorg-flashcards;
             assert lib.hasInfix "[\"show_shortcuts\"] = false" cfg.luaConfigRC.neorg-flashcards;
             assert builtins.length defaultCfg.startPlugins == 1;
             assert builtins.length defaultCfg.keymaps == 0;
             assert lib.hasInfix "presets.only(\"japanese\")" defaultCfg.luaConfigRC.neorg-flashcards;
-            assert lib.hasInfix "[\"default_kind\"] = \"japanese\"" defaultCfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "opts.collections[\"japanese\"].schemas"
+              defaultCfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "[\"default_collection\"] = \"japanese\""
+              defaultCfg.luaConfigRC.neorg-flashcards;
+            assert lib.hasInfix "[\"default_card_type\"] = \"japanese\""
+              defaultCfg.luaConfigRC.neorg-flashcards;
             pkgs.runCommand "luixbits-neorg-flashcards-nvf-module-eval" { } ''
               touch "$out"
             '';
@@ -162,6 +186,17 @@
               ''
                 cd ${self}
                 stylua --check lua tests
+                touch "$out"
+              '';
+
+          luaLint =
+            pkgs.runCommand "luixbits-neorg-flashcards-lua-lint"
+              {
+                nativeBuildInputs = [ pkgs.luaPackages.luacheck ];
+              }
+              ''
+                cd ${self}
+                luacheck lua tests scripts
                 touch "$out"
               '';
 

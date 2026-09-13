@@ -25,10 +25,15 @@ vim.fn.writefile({
 }, cards)
 
 flashcards.setup({
-  flashcards_dir = vim.fn.fnamemodify(cards, ":h"),
-  default_file = cards,
-  default_kind = "japanese",
-  schemas = presets.only("japanese"),
+  default_collection = "japanese",
+  collections = {
+    japanese = {
+      path = vim.fn.fnamemodify(cards, ":h"),
+      default_file = cards,
+      default_card_type = "japanese",
+      schemas = presets.only("japanese"),
+    },
+  },
 })
 
 assert(vim.fn.exists(":Flashcards") == 2, "unified :Flashcards command was not registered")

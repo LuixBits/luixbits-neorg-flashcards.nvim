@@ -1,7 +1,8 @@
 # ADR 0003: Scope state and history to a collection
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-21
+- Accepted: 2026-08-22
 
 ## Context
 
@@ -18,21 +19,29 @@ history write is open also risks sending state to the wrong destination.
 - New history events include `collection_id` and `card_type`. These additive
   fields do not require a new ledger version.
 - Review, form, parser, history, health, and stats operations receive an
-  immutable collection context. An open session keeps the context it started
-  with even if the hub later switches collections.
+  immutable collection context. An open form or review blocks collection
+  switching, and delayed writes retain the context captured when they started.
 - Stats read only the active collection's cards and history.
-- Pending and failed writes remain keyed by canonical history path.
+- Pending and failed writes are keyed by a captured destination identity that
+  includes the canonical history path, pinned root, and collection ID.
 
 ## Migration
 
-Existing ledgers require an explicit ownership migration before collection
-switching is enabled. Events without a collection ID are not assigned by
-guessing from their current path, and a previously mixed ledger is not split
-automatically because old entries may not contain enough evidence. Ambiguous
-events stop the migration and require user input.
+A v0.2 ledger can stay at the same path when its root becomes one named
+collection. Existing version-1 events without `collection_id` or `card_type`
+remain readable because the ledger itself belongs to that collection. New
+events receive both fields when they are appended; the ledger does not need a
+rewrite or a new event version.
+
+A previously mixed ledger is not split automatically because old entries may
+not contain enough evidence. The user must assign those events before using
+separate roots. Any durable retry queue should also be drained before changing
+the collection identity; queues are not adopted under a new identity by path
+alone.
 
 ## Consequences
 
 Retention, streaks, forecasts, due counts, and retry queues cannot leak from
-one subject into another. Renaming a collection ID after it has history will
-need an explicit migration.
+one subject into another. The same card ID can exist in unrelated collections
+without a collision. Renaming a collection after it has history requires an
+explicit metadata and retry-queue migration to keep the audit trail coherent.

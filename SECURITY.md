@@ -7,12 +7,13 @@ Older tags are not maintained.
 
 ## Local filesystem boundary
 
-The configured `flashcards_dir` is the plugin's read and write boundary. Setup
-creates it when absent, then pins the resolved directory identity for that
-setup session. Card creation, `:Flashcards open`, source changes, and history
-writes use guarded paths inside that root.
+Each configured collection `path` is a separate read and write boundary. Setup
+creates missing roots, rejects overlapping collections and shared ledgers, then
+pins every resolved directory identity for that session. Card creation,
+`:Flashcards open`, source changes, and history writes use guarded paths inside
+the owning collection's root.
 
-If the root is moved, replaced, or retargeted through a symlink while Neovim is
+If a root is moved, replaced, or retargeted through a symlink while Neovim is
 running, collection operations fail instead of following the replacement.
 Restore the original directory and rerun `setup()`, or restart Neovim, after an
 intentional move.
