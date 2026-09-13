@@ -99,6 +99,9 @@ return function(T)
     local relative_cwd = test_root .. "/relative-cwd"
     vim.fn.mkdir(relative_cwd, "p")
     vim.cmd("cd " .. vim.fn.fnameescape(relative_cwd))
+    -- getcwd resolves symlinks such as macOS /var, so anchor expectations to
+    -- the cwd seen during prepare rather than to the tempname path.
+    local prepare_cwd = vim.fn.getcwd()
     local workspace, errors = collections.prepare({
       default_collection = "notes",
       collections = {
@@ -112,7 +115,7 @@ return function(T)
 
     assert_true(workspace ~= nil, "relative collection paths are accepted: " .. error_text(errors))
     local context = collections.active(workspace)
-    local expected_root = vim.fs.normalize(relative_cwd .. "/notes/japanese")
+    local expected_root = vim.fs.normalize(prepare_cwd .. "/notes/japanese")
     assert_equal(context.path, expected_root, "a relative collection path is frozen during prepare")
     assert_equal(
       context.default_file,
