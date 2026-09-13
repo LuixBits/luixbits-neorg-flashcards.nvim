@@ -18,15 +18,28 @@ post-write hook could leave the card on disk while the form still appeared
 unsaved, so retrying created a duplicate. The form did not show its target or
 protect a changed draft when closing.
 
+General question, definition, code, and sentence cards also need fields that
+can contain paragraphs or code. Letting those lines spill into the protected
+form would bring back the structural ambiguity that the composer removed.
+
 ## Decision
 
-- The composer buffer contains one raw, single-line value for each schema
-  field. Labels, required marks, placeholders, field help, validation, target
-  context, and save status are extmark decorations rather than buffer text.
+- The composer buffer contains one protected row for each schema field. Scalar
+  rows hold the raw one-line value. A field with `multiline = true` holds a
+  first-line preview while its complete value stays in the structured draft.
+  Labels, required marks, placeholders, field help, validation, target context,
+  and save status are extmark decorations rather than buffer text.
 - Line-count changes are rejected and the last valid draft is restored. A
   Backspace, word deletion, and Delete are also stopped at value boundaries so
-  they cannot join adjacent fields. A separate multiline editor will be
-  designed before code or long-explanation card types are enabled.
+  they cannot join adjacent fields.
+- Enter on a multiline field opens a focused scratch editor. `Ctrl-S` applies
+  the complete value; `Esc` or `q` cancels it. Cancelling changed text requires
+  confirmation, and the parent form cannot close behind an unresolved editor.
+- Multiline values use an explicit on-disk block. The header is `field: |` and
+  each value line has a two-space container indent. Only fields declared with
+  `multiline = true` accept the block form; scheduler and identity fields never
+  do. Single-line values keep `field: value`, and implicit continuation lines
+  remain invalid rather than being guessed.
 - The file path and card type are captured when the composer opens. Later hub
   or window changes cannot redirect that draft.
 - Required fields are validated together, errors remain visible beside their
@@ -59,7 +72,8 @@ cause duplicate cards on retry. Structured edit makes ordinary content
 changes consistent with creation without hiding malformed source that needs
 manual repair.
 
-Schemas may provide `title`, `placeholder`, and `help` presentation metadata.
-The composer requires Neovim 0.10's inline virtual text support. Multiline
-fields, collection selection, type selection, and live preview remain later
-layers on the same structured draft model.
+Schemas may provide `title`, `placeholder`, `help`, and `multiline`
+presentation metadata. The composer requires Neovim 0.10's inline virtual text
+support. The focused editor lets long values use ordinary buffer editing while
+the parent form keeps one row per field. A parse, serialize, add, edit, or
+restore round trip preserves the value's line breaks and indentation.

@@ -24,6 +24,9 @@ find "$ROOT/tests" -name '*.lua' -print0 | xargs -0 "$LUAC_BIN" -p
 if command -v stylua >/dev/null 2>&1; then
   stylua --check "$ROOT/lua" "$ROOT/tests"
 fi
+if command -v luacheck >/dev/null 2>&1; then
+  luacheck --config "$ROOT/.luacheckrc" "$ROOT/lua" "$ROOT/tests" "$ROOT/scripts"
+fi
 XDG_STATE_HOME="$TEST_STATE_DIR" NVIM_LOG_FILE="${NVIM_LOG_FILE:-/dev/null}" "$NVIM_BIN" --headless -u NONE -i NONE -n \
   --cmd "set rtp^=$ROOT" \
   -c "luafile $ROOT/tests/run.lua" \

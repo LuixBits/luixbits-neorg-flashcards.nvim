@@ -194,7 +194,7 @@ return function(T)
     assert_true(swapped, "on_lines fixture replaces the source path synchronously: " .. tostring(swap_error))
     assert_true(not swap_ok, "clean loaded-buffer writes reject a source path replaced during the update")
     assert_equal(swap_persisted, false, "a rejected loaded-buffer path replacement is not persisted")
-    assert_contains(swap_message, "flashcards_dir", "loaded-buffer path rejection names the collection boundary")
+    assert_contains(swap_message, "path", "loaded-buffer path rejection names the collection boundary")
     assert_equal(
       table.concat(vim.fn.readfile(outside_path), "\n"),
       table.concat(outside_lines, "\n"),
@@ -278,7 +278,7 @@ return function(T)
     assert_true(swapped, "dirty on_lines fixture replaces the source path synchronously: " .. tostring(swap_error))
     assert_true(not swap_ok, "dirty loaded-buffer writes reject a source path replaced during the update")
     assert_equal(swap_persisted, false, "a rejected dirty-buffer path replacement is not persisted")
-    assert_contains(swap_message, "flashcards_dir", "dirty-buffer path rejection names the collection boundary")
+    assert_contains(swap_message, "path", "dirty-buffer path rejection names the collection boundary")
     assert_equal(
       table.concat(vim.fn.readfile(outside_path), "\n"),
       table.concat(outside_lines, "\n"),
@@ -357,7 +357,7 @@ return function(T)
   end
 
   do
-    local pending_path = config.flashcards_dir .. "/persistence-pending.norg"
+    local pending_path = config.path .. "/persistence-pending.norg"
     vim.fn.writefile({
       "@flashcard japanese",
       "id: fc_pending_first",
@@ -393,7 +393,11 @@ return function(T)
 
     vim.cmd("write")
     local flushed_entries, flushed_errors = history.read(config)
-    assert_equal(#flushed_errors, 0, "history remains readable after pending ratings flush")
+    assert_equal(
+      #flushed_errors,
+      0,
+      "history remains readable after pending ratings flush: " .. table.concat(flushed_errors, "; ")
+    )
     assert_equal(#flushed_entries, #before_entries + 2, "BufWritePost flushes every pending rating exactly once")
     assert_equal(flushed_entries[#flushed_entries - 1].rating, 3, "pending ratings preserve their original order")
     assert_equal(flushed_entries[#flushed_entries].rating, 2, "later pending ratings remain later in history")
@@ -404,7 +408,7 @@ return function(T)
   end
 
   do
-    local undo_path = config.flashcards_dir .. "/persistence-undo.norg"
+    local undo_path = config.path .. "/persistence-undo.norg"
     vim.fn.writefile({
       "@flashcard japanese",
       "id: fc_pending_undo",
@@ -435,7 +439,7 @@ return function(T)
   end
 
   do
-    local undo_path = config.flashcards_dir .. "/persistence-durable-then-dirty-undo.norg"
+    local undo_path = config.path .. "/persistence-durable-then-dirty-undo.norg"
     local original_lines = {
       "@flashcard japanese",
       "id: fc_durable_then_dirty_undo",
@@ -506,7 +510,7 @@ return function(T)
   end
 
   do
-    local discarded_path = config.flashcards_dir .. "/persistence-discarded.norg"
+    local discarded_path = config.path .. "/persistence-discarded.norg"
     vim.fn.writefile({
       "@flashcard japanese",
       "id: fc_pending_discarded",
@@ -540,8 +544,8 @@ return function(T)
   end
 
   do
-    local original_path = config.flashcards_dir .. "/persistence-saveas-original.norg"
-    local renamed_path = config.flashcards_dir .. "/persistence-saveas-renamed.norg"
+    local original_path = config.path .. "/persistence-saveas-original.norg"
+    local renamed_path = config.path .. "/persistence-saveas-renamed.norg"
     vim.fn.writefile({
       "@flashcard japanese",
       "id: fc_pending_saveas",
@@ -578,7 +582,7 @@ return function(T)
   end
 
   do
-    local reentry_path = config.flashcards_dir .. "/persistence-setup-reentry.norg"
+    local reentry_path = config.path .. "/persistence-setup-reentry.norg"
     vim.fn.writefile({
       "@flashcard japanese",
       "id: fc_pending_setup_reentry",
@@ -597,10 +601,10 @@ return function(T)
 
     local alternate_dir = vim.fn.tempname()
     local alternate_config = vim.tbl_deep_extend("force", {}, config, {
-      flashcards_dir = alternate_dir,
+      path = alternate_dir,
       default_file = alternate_dir .. "/cards.norg",
     })
-    flashcards.setup(alternate_config)
+    T.setup(alternate_config)
     vim.cmd("write")
 
     local after_entries, after_errors = history.read(config)
@@ -608,7 +612,7 @@ return function(T)
     assert_equal(#after_entries, #before_entries + 1, "setup reentry preserves and flushes pending ratings")
     local alternate_entries = history.read(alternate_config)
     assert_equal(#alternate_entries, 0, "pending history keeps its original destination across setup reentry")
-    flashcards.setup(config)
+    T.setup(config)
     vim.cmd("silent! bwipeout!")
     assert_equal(vim.fn.delete(reentry_path), 0, "setup-reentry fixture is removed from the collection")
   end

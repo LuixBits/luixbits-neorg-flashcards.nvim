@@ -1,4 +1,6 @@
+local answer_diff = require("neorg_flashcards.answer_diff")
 local popup = require("neorg_flashcards.popup")
+local highlights = require("neorg_flashcards.highlights")
 local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local store = require("neorg_flashcards.store")
@@ -10,7 +12,7 @@ local M = {}
 local config = {}
 
 local function collection_root()
-  return config._collection_root or config.flashcards_dir
+  return config._root or config.path
 end
 
 local function monotonic_time()
@@ -61,9 +63,9 @@ local state = {
 local key_help = { buf = nil, win = nil }
 local rating_ns = vim.api.nvim_create_namespace("neorg_flashcards_review_ratings")
 local RATING_HIGHLIGHTS = {
-  Again = { group = "NeorgFlashcardsAgain", fallback = "DiagnosticError" },
-  Hard = { group = "NeorgFlashcardsHard", fallback = "DiagnosticWarn" },
-  Good = { group = "NeorgFlashcardsGood", fallback = "DiagnosticOk" },
+  Again = highlights.groups.rating.again,
+  Hard = highlights.groups.rating.hard,
+  Good = highlights.groups.rating.good,
 }
 
 local function review_context()
@@ -77,9 +79,12 @@ local function review_context()
 end
 
 local function review_capabilities()
+  local attempt = state.queue[state.index]
+  local typed_fields = attempt and schema.typed_answer_fields(config, attempt.card) or {}
   return {
     bury = type(config.on_bury) == "function",
     suspend = type(config.on_suspend) == "function",
+    type_answer = #typed_fields > 0,
   }
 end
 
@@ -87,38 +92,26 @@ local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
 end
 
-local function rating_config(label)
-  local name = label:lower()
-  local configured = type(config.ui) == "table"
-      and type(config.ui.rating_highlights) == "table"
-      and config.ui.rating_highlights[name]
-    or nil
-  return type(configured) == "table" and vim.deepcopy(configured) or { link = RATING_HIGHLIGHTS[label].fallback }
-end
-
-local function set_review_lines(lines)
+local function set_review_lines(lines, rating_spans)
   popup.set_lines(state, lines)
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
     return
   end
   vim.api.nvim_buf_clear_namespace(state.buf, rating_ns, 0, -1)
-  for label, highlight in pairs(RATING_HIGHLIGHTS) do
-    local value = rating_config(label)
-    local ok = not vim.tbl_isempty(value) and pcall(vim.api.nvim_set_hl, 0, highlight.group, value)
-    if not ok then
-      vim.api.nvim_set_hl(0, highlight.group, { link = highlight.fallback, default = true })
-    end
-    for line_index, line in ipairs(lines) do
-      local start = 1
-      while true do
-        local first, last = line:find(label, start, true)
-        if not first then
-          break
-        end
-        pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, highlight.group, line_index - 1, first - 1, last)
-        start = last + 1
-      end
-    end
+  for _, span in ipairs(rating_spans or {}) do
+    pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, span.hl, span.line - 1, span.start_col, span.end_col)
+  end
+end
+
+local function add_rating_span(spans, lines, line_index, label)
+  local first, last = lines[line_index]:find(label, 1, true)
+  if first then
+    table.insert(spans, {
+      line = line_index,
+      start_col = first - 1,
+      end_col = last,
+      hl = RATING_HIGHLIGHTS[label],
+    })
   end
 end
 
@@ -145,6 +138,56 @@ local function unmask_clozes(text)
   return (plain:gsub("{{c%d+::(.-)}}", "%1"))
 end
 
+-- The built-in vim.ui.input implementation records answers in the input
+-- history, which ShaDa may persist. Remove only matching entries created by
+-- this prompt; pre-existing entries, including duplicates, remain untouched.
+local function input_history_snapshot()
+  local snapshot = { last = -1, values = {} }
+  local ok, last = pcall(vim.fn.histnr, "input")
+  if not ok then
+    return snapshot
+  end
+  snapshot.last = tonumber(last) or -1
+  for history_number = 1, snapshot.last do
+    local read_ok, entry = pcall(vim.fn.histget, "input", history_number)
+    if read_ok and entry ~= "" then
+      snapshot.values[entry] = true
+    end
+  end
+  return snapshot
+end
+
+local function forget_typed_input(value, snapshot)
+  local ok, newest = pcall(vim.fn.histnr, "input")
+  if not ok then
+    return
+  end
+  newest = tonumber(newest) or -1
+  for history_number = newest, snapshot.last + 1, -1 do
+    local read_ok, entry = pcall(vim.fn.histget, "input", history_number)
+    if read_ok and entry == value then
+      pcall(vim.fn.histdel, "input", history_number)
+    end
+  end
+
+  -- Vim deduplicates history when a matching value is added, so opening the
+  -- prompt may have moved an older identical entry instead of adding a second
+  -- one. Put that known pre-existing value back if necessary.
+  if snapshot.values[value] then
+    local matching_entry = false
+    local current_last = tonumber(vim.fn.histnr("input")) or -1
+    for history_number = 1, current_last do
+      if vim.fn.histget("input", history_number) == value then
+        matching_entry = true
+        break
+      end
+    end
+    if not matching_entry then
+      pcall(vim.fn.histadd, "input", value)
+    end
+  end
+end
+
 local function append_field(lines, title, value, masked)
   table.insert(lines, "")
   table.insert(lines, "** " .. title)
@@ -156,6 +199,52 @@ local function append_field(lines, title, value, masked)
     end
     table.insert(lines, line)
   end
+end
+
+local function append_typed_comparison(lines, spans, comparison)
+  if not comparison then
+    return
+  end
+  local labels = {
+    exact = { text = "✓ Correct", highlight = RATING_HIGHLIGHTS.Good },
+    close = { text = "≈ Close", highlight = RATING_HIGHLIGHTS.Hard },
+    miss = { text = "✗ Check this", highlight = RATING_HIGHLIGHTS.Again },
+  }
+  local label = labels[comparison.status] or labels.miss
+  table.insert(lines, "")
+  table.insert(lines, "** Typed answer  " .. label.text)
+  local heading_line = #lines
+  local label_start = lines[heading_line]:find(label.text, 1, true)
+  if label_start then
+    table.insert(spans, {
+      line = heading_line,
+      start_col = label_start - 1,
+      end_col = label_start - 1 + #label.text,
+      hl = label.highlight,
+    })
+  end
+
+  if comparison.status == "exact" then
+    table.insert(lines, "  " .. comparison.actual.text)
+    return
+  end
+
+  local actual_prefix = "  Yours   "
+  table.insert(lines, actual_prefix .. comparison.actual.text)
+  table.insert(spans, {
+    line = #lines,
+    start_col = #actual_prefix + comparison.actual.start_col,
+    end_col = #actual_prefix + comparison.actual.end_col,
+    hl = RATING_HIGHLIGHTS.Again,
+  })
+  local expected_prefix = "  Answer  "
+  table.insert(lines, expected_prefix .. comparison.expected.text)
+  table.insert(spans, {
+    line = #lines,
+    start_col = #expected_prefix + comparison.expected.start_col,
+    end_col = #expected_prefix + comparison.expected.end_col,
+    hl = RATING_HIGHLIGHTS.Good,
+  })
 end
 
 local function current_attempt()
@@ -255,6 +344,8 @@ local function next_event_id()
 end
 
 local function emit_event(event)
+  event.collection_id = event.collection_id or config.id
+  event.card_type = event.card_type or (event.card_ref and event.card_ref.kind)
   event.session = session_snapshot()
   event.session_id = state.session_id
   event.label = state.label
@@ -301,7 +392,12 @@ local function rate_from_popup(score)
 end
 
 local function dispatch(action_name)
-  if not actions.is_available("review", action_name, review_context(), review_capabilities()) then
+  local capabilities = review_capabilities()
+  if action_name == "type_answer" and not capabilities.type_answer then
+    M.type_answer()
+    return false
+  end
+  if not actions.is_available("review", action_name, review_context(), capabilities) then
     return false
   end
   if action_name == "close" then
@@ -342,7 +438,9 @@ local function ensure_window()
   end
 
   local maps = {}
-  for _, binding in ipairs(actions.available_bindings("review", review_capabilities())) do
+  local mapping_capabilities = review_capabilities()
+  mapping_capabilities.type_answer = true
+  for _, binding in ipairs(actions.available_bindings("review", mapping_capabilities)) do
     local action_name = binding.action
     table.insert(maps, {
       binding.key,
@@ -428,7 +526,11 @@ local function render_completion()
     "",
     "Nice work. Press u to undo the last rating, or q to return.",
   }
-  set_review_lines(lines)
+  local rating_spans = {}
+  add_rating_span(rating_spans, lines, 8, "Again")
+  add_rating_span(rating_spans, lines, 9, "Hard")
+  add_rating_span(rating_spans, lines, 10, "Good")
+  set_review_lines(lines, rating_spans)
 end
 
 local function render()
@@ -470,8 +572,9 @@ local function render()
       #state.queue,
       state.session.requeued
     ),
-    "Source: " .. util.path_label(card.path, config.flashcards_dir),
+    "Source: " .. util.path_label(card.path, config.path),
   }
+  local rating_spans = {}
 
   append_field(lines, front_title, front_value, not state.showing_answer)
 
@@ -480,10 +583,16 @@ local function render()
       append_field(lines, field.title, field.value, false)
     end
 
+    append_typed_comparison(lines, rating_spans, attempt.typed_answer)
+
     local previews = interval_previews(card, os.time())
     table.insert(lines, "")
     table.insert(lines, "** Choose a rating")
     table.insert(lines, string.format("1 Again  %s    2 Hard  %s    3 Good  %s", previews[1], previews[2], previews[3]))
+    local control_line = #lines
+    add_rating_span(rating_spans, lines, control_line, "Again")
+    add_rating_span(rating_spans, lines, control_line, "Hard")
+    add_rating_span(rating_spans, lines, control_line, "Good")
   else
     if attempt.hint_level > 0 then
       append_field(lines, "Hint " .. attempt.hint_level, progressive_hint(hint_source(card), attempt.hint_level), false)
@@ -492,7 +601,7 @@ local function render()
     table.insert(lines, "Reveal the answer with ⏎ or Space before rating. Press h for a hint.")
   end
 
-  set_review_lines(lines)
+  set_review_lines(lines, rating_spans)
 end
 
 local function commit_last_action()
@@ -536,7 +645,7 @@ function M.context_help()
   local context = review_context()
   popup.open(key_help, {
     title = " " .. actions.title(context) .. " ",
-    footer = " q/Esc/? close ",
+    footer = actions.help_footer(),
     min_width = 52,
     max_width = 76,
     min_height = 12,
@@ -569,7 +678,7 @@ function M.start(cards, errors, label, empty_message, opts)
   if #cards == 0 then
     M.close()
     util.notify(empty_message or "No valid flashcards found", vim.log.levels.WARN)
-    return
+    return false
   end
 
   -- A new start replaces an existing session. Finalize the current undo
@@ -602,12 +711,18 @@ function M.start(cards, errors, label, empty_message, opts)
   state.last_action = nil
   state.requeued_cards = {}
   state.event_sequence = 0
-  state.session_id =
-    string.format("%s-%x", os.date("!%Y%m%dT%H%M%SZ"), math.floor(monotonic_time() * 1000000) % 0xffffff)
+  state.session_id = string.format(
+    "%s-%s-%x",
+    config.id or "collection",
+    os.date("!%Y%m%dT%H%M%SZ"),
+    math.floor(monotonic_time() * 1000000) % 0xffffff
+  )
   render()
+  return true
 end
 
 function M.close()
+  local was_active = M.is_open() or M.is_active()
   commit_last_action()
   popup.close(key_help)
   popup.close(state)
@@ -635,83 +750,89 @@ function M.close()
   if on_close then
     on_close()
   end
+  return was_active
 end
 
 function M.flip_or_next()
   if state.completed then
-    M.close()
-    return
+    return M.close()
   end
   if #state.queue == 0 then
-    return
+    return false
   end
 
   if state.showing_answer then
     util.notify("Choose 1 Again, 2 Hard, or 3 Good before continuing")
-    return
+    return false
   end
 
   state.showing_answer = true
   render()
+  return true
 end
 
 function M.next()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   state.index = state.index % #state.queue + 1
   state.showing_answer = false
   render()
+  return true
 end
 
 function M.previous()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   state.index = ((state.index - 2) % #state.queue) + 1
   state.showing_answer = false
   render()
+  return true
 end
 
 function M.hint()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
   if state.showing_answer then
     util.notify("The full answer is already visible")
-    return
+    return false
   end
 
   local attempt = current_attempt()
   local source = hint_source(attempt.card)
   if source == "" then
     util.notify("This card has no answer field to hint", vim.log.levels.WARN)
-    return
+    return false
   end
 
   attempt.hint_level = math.min(4, (attempt.hint_level or 0) + 1)
   attempt.hints_used = (attempt.hints_used or 0) + 1
   state.session.hints = state.session.hints + 1
   render()
+  return true
 end
 
 function M.rate_current(score, opts)
   if state.completed or #state.queue == 0 then
-    return false
+    return false, "No active review", false
   end
   if score ~= 1 and score ~= 2 and score ~= 3 then
-    util.notify("Rating must be 1, 2, or 3", vim.log.levels.ERROR)
-    return false
+    local message = "Rating must be 1, 2, or 3"
+    util.notify(message, vim.log.levels.ERROR)
+    return false, message, false
   end
 
   opts = opts or {}
   if opts.require_reveal and not state.showing_answer then
     state.showing_answer = true
     render()
-    util.notify("Answer revealed — review it, then press 1, 2, or 3 again")
-    return false
+    local message = "Answer revealed — review it, then press 1, 2, or 3 again"
+    util.notify(message)
+    return false, message, false
   end
 
   -- Once another answer is accepted, the prior rating is no longer the
@@ -738,7 +859,7 @@ function M.rate_current(score, opts)
   })
   if not ok then
     util.notify(message, vim.log.levels.ERROR)
-    return false
+    return false, message, false
   end
   if message then
     util.notify(message, vim.log.levels.WARN)
@@ -819,7 +940,7 @@ function M.rate_current(score, opts)
 
   util.notify("Next review " .. schedule.humanize(due - now))
   render()
-  return true
+  return true, message, persisted == true
 end
 
 function M.undo_last()
@@ -895,8 +1016,11 @@ function M.undo_last()
 end
 
 local function apply_card_action(name, callback)
-  if state.completed or #state.queue == 0 or type(callback) ~= "function" then
-    return false
+  if state.completed or #state.queue == 0 then
+    return false, "No active review", false
+  end
+  if type(callback) ~= "function" then
+    return false, "Card action is not configured", false
   end
 
   local card = current_attempt().card
@@ -908,12 +1032,14 @@ local function apply_card_action(name, callback)
     _review_emits_state_event = true,
   })
   if not ok then
-    util.notify(string.format("Could not %s card: %s", name, tostring(accepted)), vim.log.levels.ERROR)
-    return false
+    local error_message = tostring(accepted)
+    util.notify(string.format("Could not %s card: %s", name, error_message), vim.log.levels.ERROR)
+    return false, error_message, false
   end
   if accepted == false then
-    util.notify(message or ("Could not " .. name .. " card"), vim.log.levels.ERROR)
-    return false
+    message = message or ("Could not " .. name .. " card")
+    util.notify(message, vim.log.levels.ERROR)
+    return false, message, false
   end
 
   commit_last_action()
@@ -946,7 +1072,7 @@ local function apply_card_action(name, callback)
     util.notify(message)
   end
   render()
-  return true
+  return true, message, persisted == true
 end
 
 function M.bury_current()
@@ -959,7 +1085,7 @@ end
 
 function M.edit_current()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   -- Editing leaves the review flow entirely: no session summary, no on_close.
@@ -970,66 +1096,64 @@ function M.edit_current()
   popup.close(state)
   clear_state()
   if type(config.on_edit) == "function" then
-    local ok, err = pcall(config.on_edit, card, edit_context)
+    local ok, opened = pcall(config.on_edit, card, edit_context)
     if ok then
-      return
+      return opened == true
     end
-    util.notify("Could not open flashcard source: " .. tostring(err), vim.log.levels.ERROR)
+    util.notify("Could not open flashcard source: " .. tostring(opened), vim.log.levels.ERROR)
   end
   vim.cmd.edit(util.fname(card.path))
   vim.api.nvim_win_set_cursor(0, { card.start_line, 0 })
-end
-
-local function normalize_answer(text)
-  return util.trim(text):lower():gsub("%s+", " ")
+  return true
 end
 
 function M.type_answer()
   if state.completed or #state.queue == 0 then
-    return
+    return false
   end
 
   local attempt = current_attempt()
   local card = attempt.card
-  local fields = schema.reveal_fields(config, card)
+  local fields = schema.typed_answer_fields(config, card)
   if #fields == 0 then
-    util.notify("This card kind has no answer fields to type against", vim.log.levels.WARN)
-    return
+    util.notify("Typed answers are not enabled for this card type", vim.log.levels.WARN)
+    return false
   end
 
+  local input_history_before = input_history_snapshot()
   vim.ui.input({ prompt = "Answer: " }, function(input)
+    if input ~= nil then
+      forget_typed_input(input, input_history_before)
+    end
     if input == nil or current_attempt() ~= attempt then
       return
     end
 
-    local answer = normalize_answer(input)
-    local best_distance = math.huge
-    local best_expected = ""
+    local candidates = {}
     for _, field in ipairs(fields) do
-      for _, line in ipairs(util.value_lines(field.value)) do
-        local expected = normalize_answer(unmask_clozes(line))
-        if expected ~= "" then
-          local distance = util.levenshtein(answer, expected)
-          if distance < best_distance then
-            best_distance = distance
-            best_expected = expected
-          end
-        end
-      end
+      table.insert(candidates, unmask_clozes(field.value))
+    end
+    local comparison = answer_diff.best(input, candidates)
+    if not comparison then
+      util.notify("This card has no answer text to check", vim.log.levels.WARN)
+      return
     end
 
+    attempt.typed_answer = comparison
     state.showing_answer = true
     render()
 
-    local close_enough = math.max(1, math.floor(#util.utf8_chars(best_expected) * 0.2))
-    if best_distance == 0 then
+    if comparison.truncated and comparison.status ~= "exact" then
+      util.notify("Answer is too long for fuzzy checking; compare it after reveal")
+    elseif comparison.status == "exact" then
       util.notify("✓ Correct")
-    elseif best_distance <= close_enough then
-      util.notify("≈ Close — answer: " .. best_expected)
+    elseif comparison.status == "close" then
+      util.notify("≈ Close — compare the highlighted text")
     else
-      util.notify("✗ Answer: " .. best_expected)
+      util.notify("✗ Compare your answer before rating")
     end
   end)
+  return true
 end
 
 -- Read-only state for UI integration and tests. Card contents stay private;

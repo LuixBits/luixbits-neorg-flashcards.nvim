@@ -9,23 +9,21 @@ local state = {
 
 local config = {}
 
-local function configured_kinds()
+local function card_type_summary()
   local kinds = vim.tbl_keys(config.schemas or {})
   table.sort(kinds)
 
   if #kinds == 0 then
-    return "none"
+    return "Card types: none"
   end
 
-  return table.concat(kinds, ", ")
-end
-
-local function default_kind()
-  if config.default_kind and config.default_kind ~= "" then
-    return config.default_kind
+  local default = config.schemas and config.schemas[config.default_card_type] or nil
+  local default_label = default and default.label or config.default_card_type or kinds[1]
+  if #kinds == 1 then
+    return "Card type: " .. default_label
   end
 
-  return "not set"
+  return string.format("Card types: %d configured · default %s", #kinds, default_label)
 end
 
 function M.setup(opts)
@@ -37,9 +35,9 @@ function M.close()
 end
 
 function M.open()
-  popup.open(state, {
-    title = " Flashcards Help ",
-    footer = " q close ",
+  local opened = popup.open(state, {
+    title = " Flashcards Quick Guide ",
+    footer = " / find · n/N matches · q/Esc close ",
     min_width = 62,
     max_width = 78,
     min_height = 20,
@@ -51,23 +49,27 @@ function M.open()
     },
   })
 
-  popup.set_lines(state, {
+  if not opened then
+    return false
+  end
+
+  local rendered = popup.set_lines(state, {
     "* Flashcards",
     "",
-    "Folder: " .. (config.flashcards_dir or ""),
+    "Collection: " .. (config.label or config.id or ""),
+    "Folder: " .. (config.path or ""),
     "Files: .norg (Neorg itself is optional)",
-    "Default kind: " .. default_kind(),
-    "Kinds: " .. configured_kinds(),
+    card_type_summary(),
     "",
-    "Open the hub: :Flashcards",
-    "  1 Overview · 2 Cards · 3 Stats · Tab next page · ? keys",
-    "  Ctrl-W W switch pane · Enter/r review · d due · A all",
-    "  a add · e edit",
-    "  j/k line · Ctrl-D/U half page · gg/G top/bottom",
+    "Hub: 1 Overview · 2 Cards · 3 Stats · Tab pages · ? keys",
+    "  <C-w>w pane · j/k line · Ctrl-D/U half-page · gg/G ends",
+    "Overview: Enter/r review · d/A queues · a add · e edit",
+    "Cards: Enter/r review · a add · / search · f filter · o sort",
+    "  x suspend · b bury · D delete · p preview · e edit",
+    "Stats: d due · A all · R refresh",
     "",
-    "Cards: / search · f filter · o sort · x suspend · b bury · D delete",
-    "Collection: c open problems · R refresh",
-    "Card form: Enter next · Ctrl-S save · Ctrl-N save+new while adding",
+    "Collections: add in setup · C switch · c check · R refresh",
+    "Card form: Enter next/save · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",
     "",
     "Review: Enter/Space reveal · h hint · t type answer",
@@ -75,8 +77,12 @@ function M.open()
     "  b bury · x suspend · e edit · ? keys · q close",
     "",
     "Command routes: :Flashcards overview|cards|stats|review|add",
-    "                open|check|help",
+    "                open|check|help|collection",
+    "",
+    "Inside this guide: / find · n/N next/previous match",
+    "Full manual: :help neorg-flashcards",
   })
+  return rendered == true
 end
 
 return M

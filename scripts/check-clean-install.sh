@@ -14,10 +14,15 @@ vim.opt.runtimepath:prepend("$ROOT")
 local presets = require("neorg_flashcards.presets")
 
 require("neorg_flashcards").setup({
-  flashcards_dir = "$TMP/notes/flashcards",
-  default_file = "$TMP/notes/flashcards/cards.norg",
-  default_kind = "japanese",
-  schemas = presets.only("japanese"),
+  default_collection = "japanese",
+  collections = {
+    japanese = {
+      path = "$TMP/notes/flashcards",
+      default_file = "$TMP/notes/flashcards/cards.norg",
+      default_card_type = "japanese",
+      schemas = presets.only("japanese"),
+    },
+  },
 })
 
 assert(vim.fn.exists(":Flashcards") == 2, "unified command was not registered")

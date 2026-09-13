@@ -1,6 +1,8 @@
+local collections = require("neorg_flashcards.collections")
 local form = require("neorg_flashcards.form")
 local help = require("neorg_flashcards.help")
 local health = require("neorg_flashcards.health")
+local highlights = require("neorg_flashcards.highlights")
 local history = require("neorg_flashcards.history")
 local overview = require("neorg_flashcards.overview")
 local parser = require("neorg_flashcards.parser")
@@ -15,24 +17,8 @@ local util = require("neorg_flashcards.util")
 local M = {}
 M.presets = presets
 
-local defaults = {
-  flashcards_dir = vim.fn.expand("~/notes/flashcards"),
-  default_file = vim.fn.expand("~/notes/flashcards/cards.norg"),
-  default_kind = nil,
-  schemas = vim.deepcopy(schema.defaults),
-  scheduling = vim.deepcopy(schedule.DEFAULTS),
-  leech_threshold = 8,
-  ui = {
-    show_shortcuts = true,
-    rating_highlights = {
-      again = { link = "DiagnosticError" },
-      hard = { link = "DiagnosticWarn" },
-      good = { link = "DiagnosticOk" },
-    },
-  },
-}
-
-local config = vim.deepcopy(defaults)
+local workspace = nil
+local config = nil
 local pending_history = {}
 local add_anchor_ns = vim.api.nvim_create_namespace("neorg_flashcards_add_anchor")
 local active_add_anchor = nil
@@ -44,6 +30,7 @@ local reported_outbox_errors = {}
 local failed_history_memory = {}
 local generated_history_event_sequence = 0
 local record_card_state = function() end
+local activate_collection_runtime = function() end
 
 local command_routes = {
   "overview",
@@ -54,15 +41,45 @@ local command_routes = {
   "open",
   "check",
   "help",
+  "collection",
 }
 
 local function collection_root(card_config)
   card_config = card_config or config
-  return card_config._collection_root or card_config.flashcards_dir
+  return card_config._root or card_config.path
 end
 
 local function preflight_target(path, card_config)
   return store.resolve_path(path, { allowed_root = collection_root(card_config) })
+end
+
+local function other_collection_for_path(path)
+  local resolved = util.canonical_path(path)
+  if resolved == "" or not workspace then
+    return nil
+  end
+  for _, id in ipairs(collections.ids(workspace)) do
+    local context = collections.get(workspace, id)
+    if context ~= config then
+      local root = util.resolve_pinned_directory(collection_root(context))
+      if root and util.resolved_path_is_within(resolved, root) then
+        return context
+      end
+    end
+  end
+  return nil
+end
+
+local function wrong_collection_message(path)
+  local owner = other_collection_for_path(path)
+  if not owner then
+    return nil
+  end
+  return string.format(
+    "This file belongs to %s, but %s is active. Press C in the hub to switch collections.",
+    owner.label,
+    config.label
+  )
 end
 
 local function clear_add_anchor(expected)
@@ -100,7 +117,7 @@ local function capture_add_target(path, opts)
   active_add_anchor = anchor
   return {
     path = path,
-    label = util.path_label(path, config.flashcards_dir),
+    label = util.path_label(path, config.path),
     create_with_heading = opts.create_with_heading == true,
     anchor = anchor,
   }
@@ -194,6 +211,75 @@ local function review_blocks(action)
   return true
 end
 
+function M.active_collection()
+  return collections.public(config)
+end
+
+function M.select_collection(id)
+  id = util.trim(id)
+  if id == "" then
+    util.notify("Choose a collection to switch to", vim.log.levels.WARN)
+    return false
+  end
+  if form_blocks("switching collections") or review_blocks("switching collections") then
+    return false
+  end
+
+  local previous = config
+  local selected, select_error = collections.select(workspace, id)
+  if not selected then
+    util.notify(select_error, vim.log.levels.ERROR)
+    return false
+  end
+  if selected == previous then
+    return true
+  end
+
+  config = selected
+  activate_collection_runtime(config)
+  if overview.is_open() then
+    overview.open(function()
+      return parser.collect_flashcards(config)
+    end, { view = overview.current_view(), reset_browser = true })
+  end
+  util.notify("Switched to " .. config.label)
+  return true
+end
+
+function M.choose_collection()
+  if form_blocks("switching collections") or review_blocks("switching collections") then
+    return false
+  end
+  local expected_workspace = workspace
+  local ids = collections.ids(expected_workspace)
+  if #ids == 1 then
+    local only_collection = collections.get(expected_workspace, ids[1])
+    util.notify(
+      only_collection.label
+        .. " is the only configured collection. See :help neorg-flashcards-configuration to add another."
+    )
+    return true
+  end
+  vim.ui.select(ids, {
+    prompt = "Flashcard collection",
+    format_item = function(id)
+      local context = collections.get(expected_workspace, id)
+      local marker = id == expected_workspace.active_id and "● " or "  "
+      return marker .. context.label
+    end,
+  }, function(id)
+    if not id then
+      return
+    end
+    if workspace ~= expected_workspace then
+      util.notify("That collection picker has expired; open it again", vim.log.levels.WARN)
+      return
+    end
+    M.select_collection(id)
+  end)
+  return true
+end
+
 local function ensure_editable_flashcard_buffer()
   if current_buffer_is_norg() then
     return false, true
@@ -282,26 +368,26 @@ end
 local function add_card(kind)
   if not schema.for_kind(config, kind) then
     util.notify("Unsupported flashcard kind: " .. kind, vim.log.levels.ERROR)
-    return
+    return false
   end
 
   if form_blocks("adding another card") or review_blocks("adding a card") then
-    return
+    return false
   end
 
   local append, ready = ensure_editable_flashcard_buffer()
   if not ready then
-    return
+    return false
   end
   local target_buf = vim.api.nvim_get_current_buf()
   local target_path = vim.api.nvim_buf_get_name(target_buf)
   local _, target_err = preflight_target(target_path)
   if target_err then
     util.notify(
-      "Flashcards can only be added inside the configured collection: " .. tostring(target_err),
+      wrong_collection_message(target_path) or ("Could not add flashcard: " .. tostring(target_err)),
       vim.log.levels.ERROR
     )
-    return
+    return false
   end
   local row = vim.api.nvim_win_get_cursor(0)[1] - 1
   local target = capture_add_target(target_path, {
@@ -325,6 +411,7 @@ local function add_card(kind)
   if not opened then
     clear_add_anchor()
   end
+  return opened == true
 end
 
 function M.open_flashcards()
@@ -377,44 +464,84 @@ function M.open_flashcards()
   return true
 end
 
+local function configured_card_types()
+  local ids = vim.tbl_keys(config.schemas or {})
+  table.sort(ids)
+  local default_type = util.trim(config.default_card_type)
+  for index, id in ipairs(ids) do
+    if id == default_type then
+      table.remove(ids, index)
+      table.insert(ids, 1, id)
+      break
+    end
+  end
+  return ids
+end
+
+local function choose_card_type(callback)
+  local expected_workspace = workspace
+  local expected_config = config
+  local ids = configured_card_types()
+  if #ids == 0 then
+    util.notify("No card types are configured for " .. config.label, vim.log.levels.ERROR)
+    return false
+  elseif #ids == 1 then
+    return callback(ids[1])
+  end
+  vim.ui.select(ids, {
+    prompt = "What do you want to practice?",
+    format_item = function(id)
+      local card_schema = schema.for_kind(expected_config, id)
+      local marker = id == expected_config.default_card_type and "● " or "  "
+      return marker .. (card_schema.label or id)
+    end,
+  }, function(id)
+    if not id then
+      return
+    end
+    if workspace ~= expected_workspace or config ~= expected_config then
+      util.notify("That card-type picker has expired; open it again", vim.log.levels.WARN)
+      return
+    end
+    callback(id)
+  end)
+  return true
+end
+
 function M.add_kind(kind)
   kind = util.trim(kind)
   if kind == "" then
-    kind = util.trim(config.default_kind)
-  end
-
-  if kind == "" then
-    util.notify("No flashcard kind given and default_kind is not configured", vim.log.levels.ERROR)
-    return
+    if form_blocks("adding another card") or review_blocks("adding a card") then
+      return false
+    end
+    return choose_card_type(M.add_kind)
   end
 
   if overview.is_focused() then
     return M.add_to_default(kind)
   end
-  add_card(kind)
+  return add_card(kind)
 end
 
 ---Add a card straight to the default file, no matter which buffer is current.
----Used by the overview's `a` key. Falls back to default_kind.
+---Used by the overview's `a` key. Falls back to default_card_type.
 ---@param kind string|nil
 function M.add_to_default(kind)
   kind = util.trim(kind or "")
   if kind == "" then
-    kind = util.trim(config.default_kind or "")
-  end
-
-  if kind == "" then
-    util.notify("No flashcard kind given and default_kind is not configured", vim.log.levels.ERROR)
-    return
+    if form_blocks("adding another card") or review_blocks("adding a card") then
+      return false
+    end
+    return choose_card_type(M.add_to_default)
   end
 
   if not schema.for_kind(config, kind) then
     util.notify("Unsupported flashcard kind: " .. kind, vim.log.levels.ERROR)
-    return
+    return false
   end
 
   if form_blocks("adding another card") or review_blocks("adding a card") then
-    return
+    return false
   end
 
   local _, target_err = preflight_target(config.default_file)
@@ -441,40 +568,44 @@ function M.add_to_default(kind)
   if not opened then
     clear_add_anchor()
   end
+  return opened == true
 end
 
 function M.validate_file()
   local cards = parser.parse_buffer(0)
   if #cards == 0 then
-    util.notify("No @flashcard blocks found", vim.log.levels.WARN)
-    return
+    local errors = { "No @flashcard blocks found" }
+    util.notify(errors[1], vim.log.levels.WARN)
+    return false, cards, errors
   end
 
-  local _, errors = parser.valid_cards(config, cards)
+  local valid, errors = parser.valid_cards(config, cards)
   if #errors == 0 then
     util.notify(string.format("%d flashcard block(s) valid", #cards))
   else
     util.notify(table.concat(errors, "\n"), vim.log.levels.ERROR)
   end
+  return #errors == 0, valid, errors
 end
 
 function M.validate_collection()
   if form_blocks("checking the collection") or review_blocks("checking the collection") then
-    return false
+    return false, {}, {}, {}
   end
   local cards, errors = parser.collect_flashcards(config)
   local issues = health.inspect(config, cards)
   local counts = health.counts(issues)
-  local messages = vim.deepcopy(errors)
+  local diagnostics = vim.deepcopy(errors)
   local _, history_errors = history.read(config)
-  vim.list_extend(messages, history_errors)
+  vim.list_extend(diagnostics, history_errors)
+  local messages = vim.deepcopy(diagnostics)
   for _, item in ipairs(issues) do
     table.insert(messages, health.format(config, item))
   end
 
   if #messages == 0 then
     util.notify(string.format("Collection healthy: %d valid flashcard(s)", #cards))
-    return true, cards, issues
+    return true, cards, issues, diagnostics
   end
 
   local level = (#errors > 0 or counts.error > 0) and vim.log.levels.ERROR or vim.log.levels.WARN
@@ -496,7 +627,7 @@ function M.validate_collection()
   vim.fn.setqflist({}, " ", { title = "Flashcards collection health", items = items })
   vim.cmd("copen")
   util.notify(string.format("Flashcard health: %d issue(s) opened in the quickfix list", #items), level)
-  return level ~= vim.log.levels.ERROR, cards, issues, errors
+  return level ~= vim.log.levels.ERROR, cards, issues, diagnostics
 end
 
 function M.review_all()
@@ -511,7 +642,7 @@ function M.review_all()
       table.insert(active, card)
     end
   end
-  review.start(active, errors, "all", "No active flashcards")
+  return review.start(active, errors, "all", "No active flashcards")
 end
 
 function M.review_due()
@@ -533,24 +664,24 @@ function M.review_due()
     empty_message = empty_message .. " — next at " .. schedule.format_due(next_due)
   end
 
-  review.start(due, errors, "due", empty_message, { sort = "due" })
+  return review.start(due, errors, "due", empty_message, { sort = "due" })
 end
 
 function M.overview(opts)
   if form_blocks("opening the hub") or review_blocks("opening the hub") then
     return false
   end
-  overview.open(function()
+  return overview.open(function()
     return parser.collect_flashcards(config)
   end, opts)
 end
 
 function M.stats()
-  M.overview({ view = "stats" })
+  return M.overview({ view = "stats" })
 end
 
 function M.cards()
-  M.overview({ view = "cards" })
+  return M.overview({ view = "cards" })
 end
 
 -- Validate the current file against every card identity in the collection.
@@ -564,7 +695,9 @@ local function current_file_review_cards()
     return {}, { tostring(root_err) }
   end
   if current_path == "" or not util.resolved_path_is_within(current_path, root) then
-    return {}, { "Current review file must be saved inside flashcards_dir" }
+    return {}, {
+      wrong_collection_message(current_path) or "Current review file must be saved inside the active collection",
+    }
   end
   local current_cards = parser.parse_buffer(0)
   local current_set = {}
@@ -627,7 +760,7 @@ function M.review_file()
       table.insert(active, card)
     end
   end
-  review.start(active, errors, "file", "No active flashcards in this file")
+  return review.start(active, errors, "file", "No active flashcards in this file")
 end
 
 function M.review_tag(tag)
@@ -637,14 +770,19 @@ function M.review_tag(tag)
   tag = util.trim(tag)
 
   if tag == "" then
+    local expected_config = config
     vim.ui.input({ prompt = "Tag: " }, function(input)
       if input == nil then
         util.notify("Tag review cancelled", vim.log.levels.WARN)
         return
       end
+      if config ~= expected_config then
+        util.notify("That tag prompt has expired; open it again", vim.log.levels.WARN)
+        return
+      end
       M.review_tag(input)
     end)
-    return
+    return true
   end
 
   local cards, errors = parser.collect_flashcards(config)
@@ -656,7 +794,7 @@ function M.review_tag(tag)
     end
   end
 
-  review.start(filtered, errors, "tag:" .. tag, "No flashcards found with tag: " .. tag)
+  return review.start(filtered, errors, "tag:" .. tag, "No flashcards found with tag: " .. tag)
 end
 
 function M.review_score(score)
@@ -666,20 +804,25 @@ function M.review_score(score)
   score = util.trim(score)
 
   if score == "" then
+    local expected_config = config
     vim.ui.input({ prompt = "Rating (again/hard/good/new): " }, function(input)
       if input == nil then
         util.notify("Rating review cancelled", vim.log.levels.WARN)
         return
       end
+      if config ~= expected_config then
+        util.notify("That rating prompt has expired; open it again", vim.log.levels.WARN)
+        return
+      end
       M.review_score(input)
     end)
-    return
+    return true
   end
 
   local filter = schema.score_filter(score)
   if not filter then
     util.notify("Unknown rating: " .. score .. " (use again, hard, good, new, or 1/2/3)", vim.log.levels.ERROR)
-    return
+    return false
   end
 
   local cards, errors = parser.collect_flashcards(config)
@@ -691,39 +834,39 @@ function M.review_score(score)
     end
   end
 
-  review.start(filtered, errors, "score:" .. filter.label, "No flashcards found with score: " .. filter.label)
+  return review.start(filtered, errors, "score:" .. filter.label, "No flashcards found with score: " .. filter.label)
 end
 
 function M.close_review()
-  review.close()
+  return review.close()
 end
 
 function M.flip_or_next()
-  review.flip_or_next()
+  return review.flip_or_next()
 end
 
 function M.next_card()
-  review.next()
+  return review.next()
 end
 
 function M.previous_card()
-  review.previous()
+  return review.previous()
 end
 
 function M.rate_current(score)
-  review.rate_current(score)
+  return review.rate_current(score)
 end
 
 function M.edit_current_card()
-  review.edit_current()
+  return review.edit_current()
 end
 
 function M.type_answer()
-  review.type_answer()
+  return review.type_answer()
 end
 
 function M.hint_current()
-  review.hint()
+  return review.hint()
 end
 
 function M.undo_last_rating()
@@ -743,12 +886,12 @@ function M.get_review_state()
 end
 
 function M.help()
-  help.open()
+  return help.open()
 end
 
 local function update_card(card, updates, success_message, cards)
   if not card then
-    return false, "No flashcard selected"
+    return false, "No flashcard selected", false
   end
   local ok, message, persisted = store.set_card_fields(card, updates, {
     allowed_root = collection_root(),
@@ -756,7 +899,7 @@ local function update_card(card, updates, success_message, cards)
   })
   if not ok then
     util.notify(message, vim.log.levels.ERROR)
-    return false, message
+    return false, message, false
   end
   if message then
     util.notify(message, persisted and vim.log.levels.INFO or vim.log.levels.WARN)
@@ -784,6 +927,8 @@ local function emit_card_state(card, event, persisted)
   record_card_state({
     event = event,
     type = "card_state",
+    collection_id = config.id,
+    card_type = card.kind,
     persisted = persisted == true,
     card_ref = {
       id = schema.card_id(card),
@@ -800,6 +945,9 @@ local function emit_card_state(card, event, persisted)
 end
 
 function M.toggle_suspend(card, context)
+  if not card then
+    return false, "No flashcard selected", false
+  end
   local status = schedule.card_state(card, os.time(), config.scheduling)
   local suspended = status.availability ~= "suspended"
   local ok, message, persisted = update_card(
@@ -826,6 +974,9 @@ function M.bury_card(card, context)
 end
 
 function M.toggle_bury(card, context)
+  if not card then
+    return false, "No flashcard selected", false
+  end
   local status = schedule.card_state(card, os.time(), config.scheduling)
   if status.availability == "buried" then
     local ok, message, persisted = update_card(card, {
@@ -865,8 +1016,7 @@ function M.edit_card(card, context)
   end
   if context and context.invalid then
     util.notify("This block needs source-level repair before structured editing", vim.log.levels.WARN)
-    M.open_card(card)
-    return true
+    return M.open_card(card)
   end
   if form_blocks("editing another card") or review_blocks("editing a card") then
     return false
@@ -878,27 +1028,32 @@ function M.edit_card(card, context)
   end
 
   local fields = schema.composer_fields(config, card.kind)
-  local field_names = {}
-  for _, field in ipairs(fields) do
-    table.insert(field_names, field.key)
-  end
   local card_config = config
   local opened = form.open(card_config, card.kind, {
     edit = true,
     allow_save_new = false,
     title = " Edit " .. ((schema.for_kind(card_config, card.kind) or {}).label or card.kind) .. " card ",
-    target_label = util.path_label(card.path, card_config.flashcards_dir),
+    target_label = util.path_label(card.path, card_config.path),
     target_path = card.path,
     initial_values = card.values,
     on_save = function(values)
       local replacements = {}
-      for _, field in ipairs(field_names) do
-        local value = util.trim(values[field])
-        if value ~= "" then
-          replacements[field] = value
+      local replacement_fields = {}
+      for _, field in ipairs(fields) do
+        local value = tostring(values[field.key] or "")
+        if not field.multiline then
+          value = util.trim(value)
         end
+        if value ~= "" then
+          replacements[field.key] = value
+        end
+        local preserve_edge_space = field.multiline and (value:match("^%s") or value:match("%s$")) ~= nil
+        table.insert(replacement_fields, {
+          field = field.key,
+          force_multiline = card.multiline_fields[field.key] == true or preserve_edge_space,
+        })
       end
-      local ok, message, persisted = store.restore_card_fields(card, replacements, field_names, {
+      local ok, message, persisted = store.restore_card_fields(card, replacements, replacement_fields, {
         allowed_root = collection_root(card_config),
         cards = context and context.cards or { card },
       })
@@ -950,36 +1105,44 @@ function M.command(args)
   local route = table.remove(words, 1) or "overview"
 
   if route == "overview" then
-    M.overview()
+    return M.overview()
   elseif route == "cards" then
-    M.cards()
+    return M.cards()
   elseif route == "stats" then
-    M.stats()
+    return M.stats()
   elseif route == "review" then
     local scope = table.remove(words, 1) or "due"
     if scope == "due" then
-      M.review_due()
+      return M.review_due()
     elseif scope == "all" then
-      M.review_all()
+      return M.review_all()
     elseif scope == "file" then
-      M.review_file()
+      return M.review_file()
     elseif scope == "tag" then
-      M.review_tag(table.concat(words, " "))
+      return M.review_tag(table.concat(words, " "))
     elseif scope == "score" then
-      M.review_score(table.concat(words, " "))
+      return M.review_score(table.concat(words, " "))
     else
       util.notify("Unknown review scope: " .. scope .. " (use due, all, file, tag, or score)", vim.log.levels.ERROR)
+      return false
     end
   elseif route == "add" then
-    M.add_kind(table.concat(words, " "))
+    return M.add_kind(table.concat(words, " "))
   elseif route == "open" then
-    M.open_flashcards()
+    return M.open_flashcards()
   elseif route == "check" then
-    M.validate_collection()
+    return M.validate_collection()
   elseif route == "help" then
-    M.help()
+    return M.help()
+  elseif route == "collection" then
+    local id = table.remove(words, 1)
+    if id then
+      return M.select_collection(id)
+    end
+    return M.choose_collection()
   else
     util.notify("Unknown Flashcards action: " .. route .. " (try :Flashcards help)", vim.log.levels.ERROR)
+    return false
   end
 end
 
@@ -992,6 +1155,8 @@ local function complete_command(arg_lead, cmd_line)
   elseif words[2] == "add" and #words >= 2 then
     choices = vim.tbl_keys(config.schemas or {})
     table.sort(choices)
+  elseif words[2] == "collection" and #words >= 2 then
+    choices = collections.ids(workspace)
   end
 
   return vim.tbl_filter(function(value)
@@ -1000,45 +1165,17 @@ local function complete_command(arg_lead, cmd_line)
 end
 
 function M.setup(opts)
-  if opts ~= nil and type(opts) ~= "table" then
-    error("neorg_flashcards.setup: options must be a table", 2)
+  if form.is_open() or review.is_open() or review.is_active() then
+    error("neorg_flashcards.setup: close the open flashcard form or review before reconfiguring", 2)
   end
-  local next_config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
-  local rating_overrides = type(opts) == "table" and type(opts.ui) == "table" and opts.ui.rating_highlights or nil
-  if type(rating_overrides) == "table" then
-    for _, rating in ipairs({ "again", "hard", "good" }) do
-      if rating_overrides[rating] ~= nil then
-        next_config.ui.rating_highlights[rating] = vim.deepcopy(rating_overrides[rating])
-      end
-    end
-  end
-  for _, path_option in ipairs({ "flashcards_dir", "default_file" }) do
-    if type(next_config[path_option]) ~= "string" then
-      error("neorg_flashcards.setup: " .. path_option .. " must be a string", 2)
-    end
-  end
-  if next_config.history_file ~= nil and type(next_config.history_file) ~= "string" then
-    error("neorg_flashcards.setup: history_file must be a string", 2)
-  end
-  next_config.flashcards_dir = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(next_config.flashcards_dir), ":p"))
-  next_config.default_file = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(next_config.default_file), ":p"))
-  if not util.isempty(next_config.history_file) then
-    next_config.history_file = vim.fs.normalize(vim.fn.fnamemodify(vim.fn.expand(next_config.history_file), ":p"))
-  end
-  local config_errors = schema.validate_config(next_config)
-  if #config_errors > 0 then
+  local hub_was_open = overview.is_open()
+  local hub_view = hub_was_open and overview.current_view() or nil
+  local next_workspace, config_errors = collections.prepare(opts)
+  if not next_workspace then
     error("neorg_flashcards.setup: invalid configuration:\n- " .. table.concat(config_errors, "\n- "), 2)
   end
-  local ok_mkdir, mkdir_result = pcall(vim.fn.mkdir, next_config.flashcards_dir, "p")
-  if not ok_mkdir or (mkdir_result == 0 and vim.fn.isdirectory(next_config.flashcards_dir) ~= 1) then
-    error("neorg_flashcards.setup: could not create flashcards_dir: " .. tostring(mkdir_result), 2)
-  end
-  local root_identity, root_error = util.pin_directory(next_config.flashcards_dir)
-  if not root_identity then
-    error("neorg_flashcards.setup: " .. tostring(root_error), 2)
-  end
-  next_config._collection_root = root_identity
-  config = next_config
+  workspace = next_workspace
+  config = collections.active(workspace)
 
   local user_on_review = config.on_review
 
@@ -1264,6 +1401,8 @@ function M.setup(opts)
       end
     end
     if event.type == "card_state" or event.event == "rated" or event.event == "undo" then
+      event.collection_id = event.collection_id or config.id
+      event.card_type = event.card_type or (event.card_ref and event.card_ref.kind)
       event._source_bufnr = util.loaded_buffer(event.path)
       event._history_path = history.capture(config)
       event._user_on_review = user_on_review or false
@@ -1280,16 +1419,9 @@ function M.setup(opts)
     end
   end
 
-  local review_config = vim.tbl_deep_extend("force", {}, config, {
-    on_review = append_review_history,
-    on_review_pending = queue_pending_history,
-    on_bury = M.bury_card,
-    on_suspend = M.toggle_suspend,
-    on_edit = M.edit_card,
-  })
-
-  history.setup(config)
-  load_failed_history(config)
+  for _, collection_id in ipairs(collections.ids(workspace)) do
+    load_failed_history(collections.get(workspace, collection_id))
+  end
   drain_failed_history()
   local history_group = vim.api.nvim_create_augroup("neorg_flashcards_history", { clear = true })
   vim.api.nvim_create_autocmd("BufWritePost", {
@@ -1352,23 +1484,41 @@ function M.setup(opts)
       end
     end,
   })
-  health.setup(config)
-  stats.setup(config)
-  help.setup(config)
-  overview.setup(config, {
-    on_add = function()
-      M.add_to_default("")
-    end,
-    on_review_due = M.review_due,
-    on_review_all = M.review_all,
-    on_check = M.validate_collection,
-    on_edit = M.edit_card,
-    on_help = M.help,
-    on_toggle_suspend = M.toggle_suspend,
-    on_bury = M.toggle_bury,
-    on_delete_card = M.delete_card,
-  })
-  review.setup(review_config)
+  activate_collection_runtime = function(context)
+    local review_config = vim.tbl_deep_extend("force", {}, context, {
+      on_review = append_review_history,
+      on_review_pending = queue_pending_history,
+      on_bury = M.bury_card,
+      on_suspend = M.toggle_suspend,
+      on_edit = M.edit_card,
+    })
+    history.setup(context)
+    highlights.setup(context)
+    health.setup(context)
+    stats.setup(context)
+    help.setup(context)
+    overview.setup(context, {
+      on_add = function()
+        M.add_to_default("")
+      end,
+      on_review_due = M.review_due,
+      on_review_all = M.review_all,
+      on_check = M.validate_collection,
+      on_collection = M.choose_collection,
+      on_edit = M.edit_card,
+      on_help = M.help,
+      on_toggle_suspend = M.toggle_suspend,
+      on_bury = M.toggle_bury,
+      on_delete_card = M.delete_card,
+    })
+    review.setup(review_config)
+  end
+  activate_collection_runtime(config)
+  if hub_was_open then
+    overview.open(function()
+      return parser.collect_flashcards(config)
+    end, { view = hub_view, reset_browser = true })
+  end
 
   vim.api.nvim_create_user_command("Flashcards", function(opts_)
     M.command(opts_.args)
@@ -1377,6 +1527,7 @@ function M.setup(opts)
     complete = complete_command,
     desc = "Open the flashcard hub or run a flashcard action",
   })
+  return true
 end
 
 return M

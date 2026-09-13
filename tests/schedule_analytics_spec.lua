@@ -102,6 +102,8 @@ return function(T)
     }, fixed_now, schedule.DEFAULTS)
     assert_equal(overdue_state.lifecycle, "review", "mature cards use the review lifecycle")
     assert_equal(overdue_state.timing, "overdue", "a card due before today is overdue")
+    local scheduled_state = schedule.card_state({ values = { due = "2026-08-20 18:00" } }, fixed_now, schedule.DEFAULTS)
+    assert_equal(scheduled_state.timing, "scheduled", "a future card later today is scheduled")
 
     local suspended_card = {
       values = { availability = "suspended", due = "2020-01-01 00:00" },
@@ -157,7 +159,7 @@ return function(T)
 
   do
     local history_dir = test_root .. "/history-isolated"
-    local history_config = { flashcards_dir = history_dir }
+    local history_config = { path = history_dir }
     local history_card = { values = { id = "fc_history_card" } }
     local rated_event = assert(history.new_event(history_card, 3, fixed_now - 60, {
       event_id = "review-1",
@@ -212,7 +214,7 @@ return function(T)
     end
     assert_equal(external_count, 1, "an externally appended event ID is not duplicated by a stale cache")
 
-    local recreated_config = { flashcards_dir = test_root .. "/history-recreated" }
+    local recreated_config = { path = test_root .. "/history-recreated" }
     local recreated_event = assert(history.new_event(history_card, 3, fixed_now + 3, {
       event_id = "review-recreated",
     }))
@@ -227,7 +229,7 @@ return function(T)
     assert_equal(#recreated_entries, 1, "a stale event-ID cache cannot suppress recreation")
     assert_equal(recreated_entries[1].event_id, "review-recreated", "recreated history keeps the requested event")
 
-    local recovered_lock_config = { flashcards_dir = test_root .. "/history-dead-lock" }
+    local recovered_lock_config = { path = test_root .. "/history-dead-lock" }
     local recovered_lock_path = history.path(recovered_lock_config)
     vim.fn.mkdir(vim.fn.fnamemodify(recovered_lock_path, ":h"), "p")
     vim.fn.writefile({ "99999999:dead-history-owner" }, recovered_lock_path .. ".lock")
@@ -241,10 +243,51 @@ return function(T)
     assert_equal(vim.fn.filereadable(recovered_lock_path .. ".lock"), 0, "recovered history lock is released")
     local recovered_lock_entries = history.read(recovered_lock_config)
     assert_equal(#recovered_lock_entries, 1, "dead-lock recovery preserves the waiting event")
+
+    local rollback_config = { path = test_root .. "/history-clock-rollback" }
+    local rollback_rating = assert(history.new_event(history_card, 2, fixed_now, {
+      event_id = "review-before-clock-rollback",
+    }))
+    assert_true(history.append(rollback_rating, rollback_config), "clock-rollback rating appends")
+    local rollback_undo = assert(history.new_event(history_card, 2, fixed_now - 60, {
+      event = "undo",
+      event_id = "undo-after-clock-rollback",
+      undo_of = "review-before-clock-rollback",
+    }))
+    assert_true(history.append(rollback_undo, rollback_config), "clock-rollback undo appends")
+    local rollback_entries, rollback_errors = history.read(rollback_config)
+    assert_equal(#rollback_errors, 0, "clock-rollback history remains readable")
+    assert_equal(rollback_entries[1].event, "undo", "clock rollback can sort undo before its rating")
+    assert_equal(
+      #history.effective_entries(rollback_entries),
+      0,
+      "an explicit undo cancels its rating regardless of sorted order"
+    )
+    assert_equal(#stats.effective_entries(rollback_entries), 0, "stats uses the shared undo reducer")
+
+    local legacy_entries = history.effective_entries({
+      {
+        type = "review",
+        event = "rated",
+        event_id = "legacy-earlier",
+        card_id = "fc_history_card",
+        rating = 1,
+      },
+      { type = "review", event = "undo", card_id = "fc_history_card", rating = 1 },
+      {
+        type = "review",
+        event = "rated",
+        event_id = "legacy-later",
+        card_id = "fc_history_card",
+        rating = 1,
+      },
+    })
+    assert_equal(#legacy_entries, 1, "legacy undo removes one preceding matching rating")
+    assert_equal(legacy_entries[1].event_id, "legacy-later", "legacy undo does not cancel a future rating")
   end
 
   do
-    local invalid_epoch_config = { flashcards_dir = test_root .. "/history-invalid-epoch" }
+    local invalid_epoch_config = { path = test_root .. "/history-invalid-epoch" }
     local invalid_epoch_path = history.path(invalid_epoch_config)
     vim.fn.mkdir(vim.fn.fnamemodify(invalid_epoch_path, ":h"), "p")
     vim.fn.writefile({
@@ -307,7 +350,7 @@ return function(T)
   end
 
   do
-    local strict_history_config = { flashcards_dir = test_root .. "/history-strict-shape" }
+    local strict_history_config = { path = test_root .. "/history-strict-shape" }
     local strict_history_path = history.path(strict_history_config)
     vim.fn.mkdir(vim.fn.fnamemodify(strict_history_path, ":h"), "p")
     vim.fn.writefile({
@@ -417,9 +460,77 @@ return function(T)
     assert_equal(metrics.overdue, 1, "analytics separates overdue from due-today cards")
     assert_equal(metrics.suspended, 1, "analytics counts suspended cards")
     assert_equal(metrics.buried, 1, "analytics counts buried cards")
+
+    local rating_lines, rating_spans = stats.ratings_section(analytic_entries, fixed_now, 42)
+    assert_true(rating_lines[3]:match("%s1$") ~= nil, "30-day Hard totals count each review once")
+    assert_true(rating_lines[4]:match("%s1$") ~= nil, "30-day Good totals count each review once")
+    assert_contains(rating_lines[5], "1 hint-assisted", "30-day hint totals count each review once")
+    local rating_groups = {}
+    for _, span in ipairs(rating_spans) do
+      rating_groups[span.line] = span.hl
+    end
+    assert_equal(rating_groups[2], "NeorgFlashcardsAgain", "Again summary rows use the semantic group")
+    assert_equal(rating_groups[3], "NeorgFlashcardsHard", "Hard summary rows use the semantic group")
+    assert_equal(rating_groups[4], "NeorgFlashcardsGood", "Good summary rows use the semantic group")
+
+    local heat_entries = {}
+    for day_offset, count in ipairs({ 1, 3, 6, 10 }) do
+      for event = 1, count do
+        table.insert(heat_entries, {
+          type = "review",
+          event = "rated",
+          event_id = string.format("heat-%d-%d", day_offset, event),
+          epoch = fixed_now - (day_offset - 1) * 86400,
+          rating = 3,
+        })
+      end
+    end
+    local heat_lines, heat_spans = stats.heatmap_section(heat_entries, fixed_now, 4)
+    assert_equal(heat_lines[2], "  Less · ░ ▒ ▓ █ More", "heatmap includes a compact intensity legend")
+    local expected_heat = {
+      NeorgFlashcardsHeat0 = "·",
+      NeorgFlashcardsHeat1 = "░",
+      NeorgFlashcardsHeat2 = "▒",
+      NeorgFlashcardsHeat3 = "▓",
+      NeorgFlashcardsHeat4 = "█",
+    }
+    local rendered_heat = {}
+    for _, span in ipairs(heat_spans) do
+      if span.line > 3 and expected_heat[span.hl] then
+        rendered_heat[span.hl] = heat_lines[span.line]:sub(span.start_col + 1, span.end_col)
+      end
+    end
+    for group, glyph in pairs(expected_heat) do
+      assert_equal(rendered_heat[group], glyph, group .. " remains distinguishable without color")
+    end
+
     local forecast = stats.forecast_counts(analytic_cards, fixed_now, 7)
     assert_equal(forecast[1], 2, "forecast puts new and overdue active cards in today's bucket")
     assert_equal(vim.tbl_count(forecast), 7, "forecast returns the requested horizon")
+  end
+
+  do
+    local scoped_root = test_root .. "/history-collection-scope"
+    local scoped_config = { id = "japanese", path = scoped_root }
+    vim.fn.mkdir(scoped_root, "p")
+    local legacy = assert(history.new_event({ values = { id = "fc_history_legacy" } }, 3, fixed_now, {
+      event_id = "legacy-without-collection",
+    }))
+    local foreign = assert(history.new_event({ values = { id = "fc_history_foreign" } }, 1, fixed_now + 1, {
+      event_id = "foreign-collection",
+      collection_id = "computer_science",
+    }))
+    vim.fn.writefile({ vim.json.encode(legacy), vim.json.encode(foreign) }, history.path(scoped_config))
+
+    local scoped_entries, scoped_errors = history.read(scoped_config)
+    assert_equal(#scoped_entries, 1, "a collection ignores explicitly foreign ledger events")
+    assert_equal(scoped_entries[1].collection_id, "japanese", "an unmixed legacy event inherits its ledger scope")
+    assert_equal(#scoped_errors, 1, "a foreign event is reported instead of silently entering analytics")
+    assert_contains(
+      scoped_errors[1],
+      "belongs to collection computer_science, not japanese",
+      "scope errors name both collections"
+    )
   end
 
   do

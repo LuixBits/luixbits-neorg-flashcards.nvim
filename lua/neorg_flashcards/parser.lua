@@ -8,19 +8,37 @@ local function source_label(card)
   return string.format("%s:%d", path, card.start_line)
 end
 
+local function field_key(key)
+  return key:lower():gsub("-", "_")
+end
+
+local function set_field(card, key, value, multiline)
+  key = field_key(key)
+  if card.values[key] ~= nil then
+    card.duplicate_fields[key] = true
+  end
+  card.values[key] = value
+  if multiline then
+    card.multiline_fields[key] = true
+  end
+  return key
+end
+
 function M.parse_lines(lines, path)
   local cards = {}
   local index = 1
   local source_version = util.lines_fingerprint(lines)
 
   while index <= #lines do
-    local kind = lines[index]:match("^%s*@flashcard%s+([%w_-]+)%s*$")
+    local indent, kind = lines[index]:match("^([ \t]*)@flashcard%s+([%w_-]+)%s*$")
     if kind then
       local card = {
         kind = kind,
+        indent = indent,
         values = {},
         duplicate_fields = {},
         multiline_fields = {},
+        syntax_errors = {},
         path = path or "",
         start_line = index,
         end_line = index,
@@ -32,25 +50,41 @@ function M.parse_lines(lines, path)
 
       while index <= #lines do
         local line = lines[index]
-        if line:match("^%s*@end%s*$") then
+        local relative = line:sub(1, #indent) == indent and line:sub(#indent + 1) or nil
+        if relative and relative:match("^@end%s*$") then
           card.end_line = index
           card.closed = true
           break
         end
 
-        local key, value = line:match("^%s*([%w_-]+)%s*:%s*(.-)%s*$")
-        if key then
-          last_key = key:lower():gsub("-", "_")
-          if card.values[last_key] ~= nil then
-            card.duplicate_fields[last_key] = true
-          end
-          card.values[last_key] = util.trim(value)
-        elseif last_key and not util.isempty(line) then
-          card.multiline_fields[last_key] = true
-          card.values[last_key] = card.values[last_key] .. "\n" .. util.trim(line)
+        local key, value
+        if relative then
+          key, value = relative:match("^([%w_-]+)%s*:%s*(.-)%s*$")
         end
-
-        index = index + 1
+        if key then
+          if value == "|" then
+            local value_lines = {}
+            local content_indent = indent .. "  "
+            index = index + 1
+            while index <= #lines and lines[index]:sub(1, #content_indent) == content_indent do
+              table.insert(value_lines, lines[index]:sub(#content_indent + 1))
+              index = index + 1
+            end
+            last_key = set_field(card, key, table.concat(value_lines, "\n"), true)
+          else
+            last_key = set_field(card, key, util.trim(value), false)
+            index = index + 1
+          end
+        elseif not util.isempty(line) then
+          local context = last_key and (" after " .. last_key) or ""
+          table.insert(
+            card.syntax_errors,
+            "unexpected line" .. context .. "; use an explicit `field: |` block with two-space content indentation"
+          )
+          index = index + 1
+        else
+          index = index + 1
+        end
       end
 
       if not card.closed then
@@ -142,9 +176,9 @@ function M.valid_cards(config, cards)
 end
 
 function M.flashcard_files(config)
-  local root_spec = config._collection_root or config.flashcards_dir
+  local root_spec = config._root or config.path
   if type(root_spec) == "string" then
-    vim.fn.mkdir(config.flashcards_dir, "p")
+    vim.fn.mkdir(config.path, "p")
   end
   local root, root_err = util.resolve_pinned_directory(root_spec)
   if not root then
