@@ -95,16 +95,22 @@ local function merge_ui(opts)
   end
   local heatmap_overrides = type(opts) == "table" and opts.heatmap_highlights or nil
   if type(heatmap_overrides) == "table" then
+    -- Neovim 0.10 tbl_deep_extend replaces numeric-keyed tables instead of
+    -- merging them, so rebuild the heatmap levels explicitly.
+    local heatmap = vim.deepcopy(heatmap_overrides)
     for level = 0, 4 do
-      local override = heatmap_overrides[level]
+      local override = heatmap[level]
       if override == nil then
-        override = heatmap_overrides[tostring(level)]
+        override = heatmap[tostring(level)]
       end
+      heatmap[tostring(level)] = nil
       if override ~= nil then
-        ui.heatmap_highlights[level] = vim.deepcopy(override)
+        heatmap[level] = vim.deepcopy(override)
+      else
+        heatmap[level] = vim.deepcopy(UI_DEFAULTS.heatmap_highlights[level])
       end
-      ui.heatmap_highlights[tostring(level)] = nil
     end
+    ui.heatmap_highlights = heatmap
   end
   return ui
 end
