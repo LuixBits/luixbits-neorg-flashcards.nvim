@@ -30,7 +30,8 @@ Image review on 2026-10-16 caught and corrected repeated shortcut strips,
 paper shadows crossing card content, hidden page headings after tab changes,
 and rating labels losing color when wrapped. A 60 × 20 fallback was also
 reviewed; its rating choices use separate lines. Longer cards and detail panes
-scroll. On small desks, j/k and PageDown bring further category rows into view.
+scroll. Calendar explanations wrap in the sidebar; this was checked again in
+a real 108 × 27 terminal recording. On small desks, j/k and PageDown bring further category rows into view.
 
 Interaction tests exercise live animation cancellation, Again, undo, completion,
 calendar drilldown, deck creation/reload, stale prompts, and repeated resizes.

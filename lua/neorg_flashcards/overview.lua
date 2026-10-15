@@ -1036,6 +1036,11 @@ local function apply_chrome()
         vim.wo[pane.win].winbar = nav
       end
       vim.wo[pane.win].statusline = "%#Normal# "
+      -- Calendar details include explanations and source labels. Keep them
+      -- readable in the narrow sidebar without changing the canvas layout.
+      vim.wo[pane.win].wrap = pane == state.side and state.page == "stats"
+      vim.wo[pane.win].linebreak = true
+      vim.wo[pane.win].breakindent = true
     end
   end
 end
@@ -1050,9 +1055,16 @@ local function day_detail()
     table.insert(lines, "  Provisional: " .. state.pending_events .. " events awaiting history delivery")
   end
   if key <= today then
+    local unique, answers = day and day.unique or 0, day and day.answers or 0
     table.insert(
       lines,
-      string.format("  %d unique cards / %d answers", day and day.unique or 0, day and day.answers or 0)
+      string.format(
+        "  %d unique card%s / %d answer%s",
+        unique,
+        unique == 1 and "" or "s",
+        answers,
+        answers == 1 and "" or "s"
+      )
     )
     if day then
       table.insert(lines, string.format("  Again %d / Hard %d / Good %d", unpack(day.ratings)))
@@ -1067,7 +1079,7 @@ local function day_detail()
             )
           or "  Answer time unavailable"
       )
-      table.insert(lines, string.format("  %d answers used hints", day.hints))
+      table.insert(lines, string.format("  Hints used on %d answer%s", day.hints, day.hints == 1 and "" or "s"))
       local goal = state.metadata.goals[key]
       if goal and goal > 0 then
         table.insert(
@@ -1097,14 +1109,9 @@ local function day_detail()
     end
   end
   if key >= today then
+    local scheduled = #calendar.scheduled(state.all_cards, state.date, os.time(), config)
     table.insert(lines, "")
-    table.insert(
-      lines,
-      string.format(
-        "  %d cards currently scheduled",
-        #calendar.scheduled(state.all_cards, state.date, os.time(), config)
-      )
-    )
+    table.insert(lines, string.format("  %d card%s currently scheduled", scheduled, scheduled == 1 and "" or "s"))
     table.insert(lines, "  Schedule snapshot; future ratings can change it.")
   end
   table.insert(lines, "")
