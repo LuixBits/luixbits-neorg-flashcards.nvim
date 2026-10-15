@@ -6,6 +6,7 @@ local util = require("neorg_flashcards.util")
 local M = {}
 
 local TOP_LEVEL_OPTIONS = {
+  deck_registry = true,
   collections = true,
   default_collection = true,
   on_review = true,
@@ -24,6 +25,8 @@ local COLLECTION_OPTIONS = {
 }
 
 local UI_DEFAULTS = {
+  motion = true,
+  ascii = false,
   show_shortcuts = true,
   rating_highlights = vim.deepcopy(highlights.defaults.rating_highlights),
   heatmap_highlights = vim.deepcopy(highlights.defaults.heatmap_highlights),

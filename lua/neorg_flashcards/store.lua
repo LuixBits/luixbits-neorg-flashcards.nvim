@@ -223,7 +223,11 @@ local function source_lines(path, opts)
 
   local ok, lines = pcall(vim.fn.readfile, destination)
   if not ok then
-    return nil, nil, string.format("%s: could not read file", path)
+    if opts and opts.create and not (vim.uv or vim.loop).fs_lstat(destination) then
+      lines = {}
+    else
+      return nil, nil, string.format("%s: could not read file", path)
+    end
   end
 
   local guarded, guard_err = guard_source_lines(lines, destination, opts)

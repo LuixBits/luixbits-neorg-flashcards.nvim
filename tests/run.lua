@@ -19,6 +19,7 @@ local suites = {
   "dashboard_spec.lua",
   "review_session_spec.lua",
   "resilience_spec.lua",
+  "desk_workspace_spec.lua",
 }
 
 for _, filename in ipairs(suites) do

@@ -77,7 +77,14 @@ local FIELD_OPTIONS = {
   prompt = true,
   input = true,
 }
-local UI_OPTIONS = { show_shortcuts = true, rating_highlights = true, heatmap_highlights = true }
+local UI_OPTIONS = {
+  show_shortcuts = true,
+  rating_highlights = true,
+  heatmap_highlights = true,
+  desk_highlights = true,
+  ascii = true,
+  motion = true,
+}
 local RATING_OPTIONS = { again = true, hard = true, good = true }
 local HEATMAP_OPTIONS = {}
 for level = 0, 4 do
@@ -290,6 +297,33 @@ function M.validate_collection(config)
     table.insert(errors, "ui must be a table")
   else
     reject_unknown_keys(errors, config.ui, UI_OPTIONS, "ui")
+    for _, key in ipairs({ "ascii", "motion" }) do
+      if config.ui[key] ~= nil and type(config.ui[key]) ~= "boolean" then
+        table.insert(errors, "ui." .. key .. " must be a boolean")
+      end
+    end
+    if config.ui.desk_highlights ~= nil then
+      if type(config.ui.desk_highlights) ~= "table" then
+        table.insert(errors, "ui.desk_highlights must be a table")
+      else
+        local allowed = {
+          ink = true,
+          edge = true,
+          shadow = true,
+          note = true,
+          title = true,
+          selected = true,
+          accent = true,
+          muted = true,
+        }
+        reject_unknown_keys(errors, config.ui.desk_highlights, allowed, "ui.desk_highlights")
+        for key, value in pairs(config.ui.desk_highlights) do
+          if type(value) ~= "table" then
+            table.insert(errors, "ui.desk_highlights." .. tostring(key) .. " must be a highlight table")
+          end
+        end
+      end
+    end
     if type(config.ui.show_shortcuts) ~= "boolean" then
       table.insert(errors, "ui.show_shortcuts must be a boolean")
     end
