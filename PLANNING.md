@@ -8,6 +8,12 @@ the feature understandable.
 The architectural choices behind this plan live in
 [`docs/adr/`](docs/adr/README.md).
 
+The [ASCII study desk redesign](docs/desk-redesign.md) records the 2026-10-15
+brainstorm for Desk, Overview, and Stats, including the agreed cozy visual
+style, light gamification, interaction sketches, and implementation slices.
+It is a design draft; its scope and release placement are not yet folded into
+the milestones below.
+
 ## 0.2: Finish the unified workspace
 
 Status: released as v0.2.0 (2026-08-22)
