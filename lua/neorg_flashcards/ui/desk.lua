@@ -94,17 +94,14 @@ function M.render(model)
     c:put(y + 2, x + 2, string.format("%d ready", group.due), group.due > 0 and h.accent or h.muted)
     c:put(y + 3, x + 2, string.format("%d cards", #group.cards), h.muted)
     c:put(y + 4, x + tile_width - 3, "/", edge)
-    table.insert(
-      entries,
-      {
-        line = y + 1,
-        col = x,
-        row = 2 + math.floor((index - 1) / columns),
-        kind = "category",
-        group = group,
-        id = group.name or "@all",
-      }
-    )
+    table.insert(entries, {
+      line = y + 1,
+      col = x,
+      row = 2 + math.floor((index - 1) / columns),
+      kind = "category",
+      group = group,
+      id = group.name or "@all",
+    })
   end
   local bottom = row + 2 + math.ceil(#groups / columns) * 7
   local active = entries[selected]

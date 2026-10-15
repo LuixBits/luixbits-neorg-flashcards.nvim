@@ -1,8 +1,19 @@
 # ASCII study desk redesign
 
-Status: design draft, 2026-10-15. The visual direction and organization below
-were agreed during brainstorming. Detailed interactions and implementation
-choices remain proposals. Runtime implementation has not started.
+Status: implemented release candidate, 2026-10-16. This document preserves the
+agreed design and its original sketches. The [README](../README.md),
+[ADR 0014](adr/0014-study-desk-and-workspace-metadata.md), and
+[release checklist](release-checklist.md) describe the shipped behavior and
+verification. Some optional extensions below remain future work.
+
+The implementation uses a canvas for Desk and two responsive panes for
+Overview/Stats. Category navigation is a `g` picker and management is an `m`
+menu; a permanent third navigation pane was unnecessary. Source tag edits are
+available through each card's composer and confirmed whole-category actions;
+there is no bulk card-selection mode. The calendar keeps the existing seven-day
+forecast; thirty-day forecasts and historical category breakdowns remain later
+extensions. Weekly comparisons use explicitly labeled card-days. These are
+presentation choices, not new scheduler limits.
 
 The update gives flashcards three pages: Desk for choosing and studying cards,
 Overview for managing them, and Stats for understanding progress. Studying

@@ -48,7 +48,7 @@ Minimal setup:
 <
 
 After setup, run |:Flashcards|. Press `a` to add a card, `Ctrl-S` to save it,
-and `Enter` in Overview to review cards due now. Press `?` in the workspace,
+and `d` on Desk to review cards due now. Press `?` in the workspace,
 composer, or review window for current shortcuts. In contextual help, `?`
 closes the popup.
 
@@ -89,6 +89,10 @@ Top-level options:
   default_collection      Collection ID selected at startup; required.
   collections             Non-empty map of collection IDs; required.
   ui.show_shortcuts       Show compact shortcut ribbons; default true.
+  ui.motion               Short card animations; default true. False disables.
+  ui.ascii                Plain ASCII desk/card borders; default false.
+  ui.desk_highlights      Desk material and selection highlight definitions.
+  deck_registry           UI-created deck registry path; false disables it.
   ui.rating_highlights    Again, Hard, and Good highlight definitions.
   ui.heatmap_highlights   Activity definitions for levels 0 through 4.
   on_review               Optional observer called after a source persists.
@@ -131,10 +135,11 @@ PRIMARY COMMAND                                 *neorg-flashcards-commands*
 
                                                         *:Flashcards*
 :Flashcards [route]
-        Open Overview with no route. This is the plugin's only Ex command.
+        Open Desk with no route. This is the plugin's only Ex command.
         Completion lists routes, review scopes, collection IDs, and card
         types where appropriate.
 
+  :Flashcards desk
   :Flashcards overview
   :Flashcards cards
   :Flashcards stats
@@ -199,12 +204,13 @@ the next and previous matches. The short plugin guide opened with `H` or
 ==============================================================================
 WORKSPACE AND CARD CLINIC                            *neorg-flashcards-hub*
 
-The workspace has Overview, Cards, and Stats pages in one tab. A wide Neovim
-window uses two columns; a narrow one stacks the panes.
+The workspace has Desk, Overview, and Stats pages in one tab. Desk uses a
+canvas; Overview and Stats use two columns or stacked panes in narrow windows.
+The cards command remains an alias for Overview.
 
 Common keys:
 
-  1 / 2 / 3       Overview / Cards / Stats
+  1 / 2 / 3       Desk / Overview / Stats
   Tab / S-Tab     Next / previous page
   C               Switch collection
   ?               Current page keys
@@ -219,11 +225,14 @@ Common keys:
   R               Reload
   q               Close
 
-Overview groups cards by tags and makes the due queue its primary action.
-`r` reviews the selected tag group, while `a`, `p`, and `e` add, preview, or
-edit a card.
+Desk shows one collection per box and one tag per category note. Enter opens
+the selected box, then studies the selected note's due cards. All due contains
+each card once, including cards with overlapping tags. A caught-up category
+does not start a cram session. Use A explicitly for all active cards.
+Move with h/l (items) and j/k (rows); / searches notes and C chooses any deck.
+Press a on a category to add a card with that tag prefilled.
 
-Cards is the working list:
+Overview is the working list:
 
   /               Search card text, tags, type, source, date, and state
   f               Choose a state, Card Clinic, or card type
@@ -235,6 +244,24 @@ Cards is the working list:
   x               Suspend or resume
   b               Bury until tomorrow or unbury
   D               Delete the exact source block after confirmation
+  g               Choose a category
+  m               Manage decks, categories, and daily goals
+
+Management can create empty category notes, edit labels, theme accents and
+shelf order, rename/merge tag tokens, or remove tags without deleting cards.
+Tag changes confirm the affected count and preserve source snapshots at
+<source>.flashcards-tags-backup. Modified buffers remain unsaved. Failures
+report any partial progress; restore snapshots only after inspecting changes.
+
+New deck asks for an ID, name, directory, and bundled card type. UI-created
+decks can enable more bundled types, choose their default, or be detached
+without deleting source/history. Configured schemas/defaults remain owned by
+Lua or Nix. The registry defaults to stdpath("data")/neorg-flashcards/decks.json;
+deck_registry can override that path or disable UI-created decks with false.
+Setup checks source roots and history isolation for both kinds of deck.
+
+Each collection's .flashcards-workspace.json stores presentation, category
+metadata and goal snapshots. Malformed files are preserved and reported.
 
 Invalid cards remain visible as [INVALID] and may be edited. A closed invalid
 block may also be deleted; an unclosed block needs its missing @end first.
@@ -243,7 +270,8 @@ source first saves the previous complete file as
 <source>.flashcards-backup. Deleting from an open modified buffer leaves the
 change unsaved for inspection or normal undo.
 
-Card Clinic is a Cards view selected with `f`. It includes an active card when
+Needs attention (Card Clinic) is an Overview filter selected with `f`.
+It includes an active card when
 its lapse count reaches leech_threshold, two of its last three reviews were
 Again, its latest rating was Again, or two of its last three reviews used
 hints. Undo events are respected; suspended and buried cards are excluded.
@@ -340,10 +368,16 @@ Review-window keys:
   ?               Show keys for the current review state
   q / Esc         Close review
 
-A rating pressed before reveal reveals first. Press it again after checking
-the answer. The revealed view previews every next interval. Again requeues a
+A rating pressed before reveal is ignored. Use Enter or Space explicitly;
+repeated rating keys cannot reveal and rate an unseen card. The revealed view
+previews every next interval. Again requeues a
 card once later in the current session, so Again cannot create an endless
 retry loop.
+
+The central paper card shows pending attempts and reviewed cards separately.
+Completion shows a receipt with unique cards, answers, retries, ratings, hints
+and elapsed time. Enter returns to Desk, s opens Stats, and u undoes the last
+rating. ui.motion=false keeps every transition static; no idle timers run.
 
 Typed answers are for short values and exist only for card types with
 typed_answer fields. Comparison ignores case, outer spaces, and repeated
@@ -461,6 +495,22 @@ Stats includes totals, streak, 7/30/90-day retention, 30-day ratings, card
 states, leeches, median answer time, estimated workload, an activity heatmap,
 a seven-day forecast, tag sizes, and the Card Clinic attention list.
 
+Its month calendar uses Monday-first local dates. h/l moves by day, j/k by
+week, [ and ] by month, and . returns to today. Enter opens the selected day's
+cards in Overview. Ctrl-W w focuses details for scrolling. Past days show
+unique cards, answer counts, ratings, hints, recorded time and saved goals.
+Deleted cards retain history with an unavailable source label. Future days
+show currently scheduled cards; later ratings can change that snapshot.
+
+The default daily goal is 20 unique cards; m in Overview can change it or
+disable it with 0. Retries count once per card/day, and Again counts as study.
+Undo reverses progress. A day's goal is captured when study begins; later goal
+edits do not rewrite old stamps. Historical days with no goal snapshot show
+activity only. Goals never impose a queue limit or change scheduling.
+Durable outbox events contribute provisionally and are deduplicated on replay.
+Unsaved source reviews contribute after saving. Weekly card-days sum daily
+unique counts; a card reviewed on two days contributes twice to that measure.
+
 ==============================================================================
 THEME COLORS                                      *neorg-flashcards-colors*
 
@@ -471,6 +521,18 @@ DiagnosticInfo, and DiagnosticOk. These links follow the active colorscheme.
 Override links or provide exact attributes when a theme makes them unclear:
 >
   ui = {
+    motion = false,
+    ascii = true,
+    desk_highlights = {
+      ink = { link = "Normal" },
+      edge = { link = "Comment" },
+      shadow = { link = "NonText" },
+      note = { link = "String" },
+      title = { link = "Title" },
+      selected = { link = "IncSearch" },
+      accent = { link = "Special" },
+      muted = { link = "Comment" },
+    },
     rating_highlights = {
       again = { fg = "#ff5f5f", bold = true },
       hard = { fg = "#e5c07b" },
@@ -536,8 +598,9 @@ Commands call public functions on require("neorg_flashcards"):
   command(args?)
         Dispatch the same routes as |:Flashcards|.
 
-  overview(opts?) / cards() / stats()
-        Open the workspace. opts.view accepts overview, cards, or stats.
+  desk() / overview(opts?) / cards() / stats()
+        Open the workspace. opts.view accepts desk, overview, cards (alias),
+        or stats. overview() and cards() both open the manager.
 
   open_flashcards()
         Create or open the active collection's default_file.
@@ -567,7 +630,7 @@ Commands call public functions on require("neorg_flashcards"):
   toggle_suspend(card) / bury_card(card) / toggle_bury(card)
   delete_card(card)
         Mutate a parsed card and return ok, message, persisted. delete_card is
-        a low-level call and does not show the Cards-page confirmation.
+        a low-level call and does not show the Overview confirmation.
 
   edit_current_card() / edit_card(card, context?) / open_card(card)
         Open a card in the composer or at its source.

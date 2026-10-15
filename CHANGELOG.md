@@ -4,6 +4,25 @@ All notable changes to this project will be documented here.
 
 ## 0.3.0 - Unreleased
 
+- Reworked the workspace into Desk, Overview, and Stats. Desk shows collection
+  boxes and category notes, opens due-only stacks, and keeps review on the same
+  canvas with pending/reviewed piles and a completion receipt. `cards` remains
+  an alias for the manager in Overview.
+- Added theme-linked desk highlights, plain ASCII borders, responsive layouts,
+  and short cancellable animations with `ui.motion = false` for reduced motion.
+  Rating keys now require explicit Enter/Space reveal, preventing a held rating
+  key from revealing and rating the next question.
+- Added category labels, accents, ordering, empty notes, and confirmed tag
+  rename/merge/removal with recoverable source snapshots. New cards inherit the
+  selected category. Overview's `m` menu can create isolated decks, enable
+  bundled types, choose defaults, and detach UI-created decks without deleting
+  their files. Lua/Nix settings remain owned by the user's configuration.
+- Added a navigable month calendar, day details and card drilldown, current
+  schedule snapshots, weekly card-day comparisons, daily unique-card goals,
+  saved goal stamps, and desk streak feedback. Retries count once per day;
+  undo reverses progress. Durable pending history is shown provisionally and
+  deduplicated on delivery.
+
 - Replaced the flat single-root setup with required named collections. Each
   collection owns its path, default file, schemas, default card type, scheduler
   settings, leech threshold, and `reviews.jsonl`; overlapping roots and shared
@@ -12,7 +31,8 @@ All notable changes to this project will be documented here.
 - Added a buffer-local collection picker on `C`, the
   `:Flashcards collection [id]` route, active-collection labels, command
   completion, and collection-scoped Cards, Stats, health, review, and history.
-  The picker switches collections defined in setup; it does not create them.
+  The picker switches configured and UI-created collections; creation lives in
+  Overview's management menu.
   An active form or review cannot be retargeted by switching collections or
   re-running setup. An open idle hub reloads against the new configuration.
 - Changed the NVF `schemaPresets` option from a list to an attribute set keyed by

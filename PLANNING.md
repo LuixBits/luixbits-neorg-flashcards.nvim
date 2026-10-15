@@ -104,6 +104,16 @@ Automatic forward/reverse siblings and cloze siblings still need a separate
 note identity design. They must not silently duplicate scheduling state inside
 one card block.
 
+## Study desk release candidate
+
+The v0.3 candidate now includes Desk / Overview / Stats, category management,
+UI-created deck definitions, an interactive calendar, unique-card goals,
+theme-aware card stacks, reduced motion, and ASCII borders. See the
+[release checklist](docs/release-checklist.md) for current validation and the
+[study desk ADR](docs/adr/0014-study-desk-and-workspace-metadata.md) for ownership
+and persistence decisions. The goal meter is a presentation target; it does
+not implement the queue quotas below.
+
 ## 0.4: Daily study plans and scheduler adapters
 
 Goal: control workload without confusing queue selection with interval math.

@@ -19,3 +19,4 @@ record is a design target and may change before implementation.
 | [0011](0011-public-lua-result-contract.md) | Accepted | Give public Lua functions stable, useful result contracts |
 | [0012](0012-capability-gated-ephemeral-typed-answers.md) | Accepted | Gate typed answers by schema and keep attempts in memory |
 | [0013](0013-card-clinic-is-an-evidence-filter.md) | Accepted | Keep Card Clinic inside Cards and derive it from review evidence |
+| [0014](0014-study-desk-and-workspace-metadata.md) | Accepted | Integrate study on Desk; keep presentation and UI-created deck metadata separate from cards |
