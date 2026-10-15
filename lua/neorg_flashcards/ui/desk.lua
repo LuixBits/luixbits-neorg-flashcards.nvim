@@ -162,6 +162,8 @@ function M.render(model)
     )
   end
   local lines, spans = c:finish()
+  -- The floating shortcut strip occupies the final visible row.
+  table.insert(lines, "")
   return lines, spans, entries, columns, selected
 end
 

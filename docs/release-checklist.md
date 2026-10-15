@@ -22,19 +22,19 @@ video preparation. Check items only after completing them.
 - [x] Review the final source and failure paths; resolve findings.
 - [x] Update README, help, changelog, upgrading guide, ADRs, and roadmap.
 - [x] Refresh the local Graphify index.
-- [ ] Finish the scoped commits and verify a clean final plugin tree.
+- [x] Finish the scoped commits and verify a clean final plugin tree.
 - [x] Record exact validation and release preparation status below.
 
 ## Flashcards video
 
-- [ ] Read production instructions and the current preproduction plan/scripts.
-- [ ] Update preproduction and capture cues from the implemented behavior.
-- [ ] Revise the canonical chapter scripts using the repository writing skill.
-- [ ] Check the factual claims, voice, and cross-chapter continuity.
-- [ ] Run required Remotion checks and commit only the scoped script changes.
-- [ ] Prepare the existing recording rig if capacity permits.
-- [ ] Record and inspect a real capture probe, then useful clips if feasible.
-- [ ] Record capture provenance and remaining narration/review work privately.
+- [x] Read production instructions and the current preproduction plan/scripts.
+- [x] Update preproduction and capture cues from the implemented behavior.
+- [x] Revise the canonical chapter scripts using the repository writing skill.
+- [x] Check the factual claims, voice, and cross-chapter continuity.
+- [x] Run required Remotion checks and commit only the scoped script changes.
+- [x] Prepare the existing recording rig if capacity permits.
+- [x] Record and inspect a real capture probe, then useful clips if feasible.
+- [x] Record capture provenance and remaining narration/review work privately.
 
 ## Validation and handoff
 
@@ -50,13 +50,26 @@ Validated on 2026-10-16:
   formatting/lint, documentation lint, and workflow lint.
 - Pinned formatter used: StyLua 2.5.2 from the flake. Lua lint: zero warnings.
 - Actual UI image review: dark/light themes, plain ASCII, Japanese glyphs,
-  widths 60/80/100/140, and repeated layout changes. See [images](demo/README.md).
+  widths 60/80/100/108/140, and repeated layout changes. See [images](demo/README.md).
 - Review retries, undo, rapid rating input, receipts, category persistence,
   deck creation/reload, stale prompts, goal snapshots, pending-event replay,
   tag backups, symlink protection, and malformed metadata covered by tests.
 - Fixed a Neovim 0.11 native crash found during the background-tab close test;
   the footer float now closes before its parent split.
-- Local Graphify index refreshed: 815 nodes, 1,840 edges.
+- Local Graphify index refreshed after the final source changes.
 
 macOS, Windows, and ARM execution were not available in this validation run.
 The implementation uses Neovim APIs and the existing portable storage layer.
+
+Video preparation is complete for this pass: eight spoken chapter scripts,
+the private preproduction plan, and a capture inventory. The visible recording
+rig uses a separate preserved overlay. Thirteen silent source takes, including
+probes and retakes, were recorded at 2880 × 1800 and 30 fps. Technical checks
+cover hashes, every frame timestamp and full decoding. Actual frames were
+reviewed; complete normal-speed playback review remains a production step.
+
+The Remotion privacy, narration, long-form, recording and lint checks passed.
+Only flashcards script changes were committed there. Raw clips, state snapshots,
+provenance and review notes remain private. Luix's narration, the public install
+take after publication, the populated opening/RoomPlanner insert and final
+chapter assembly remain in the production plan.

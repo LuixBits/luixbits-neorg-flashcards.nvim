@@ -138,8 +138,8 @@ return function(T)
   local top = vim.fn.winsaveview().topline
   truth(top > 1, "paging continues past the last category")
   truth(
-    goal_line and goal_line >= top and goal_line < top + vim.api.nvim_win_get_height(0) - 1,
-    "the daily progress note can be brought into the visible viewport"
+    goal_line and goal_line >= top and goal_line + 7 < top + vim.api.nvim_win_get_height(0) - 1,
+    "the entire daily progress note can be brought above the shortcut strip"
   )
 
   for _, size in ipairs({ { 60, 20 }, { 80, 24 }, { 140, 45 } }) do

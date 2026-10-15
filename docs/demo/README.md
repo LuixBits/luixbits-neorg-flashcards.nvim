@@ -1,8 +1,8 @@
 # Study desk visual checks
 
-These images show the actual Neovim UI with synthetic Japanese cards. They
-were captured from Neovim's external line-grid redraw events and rasterized
-with a monospace font. They contain no personal collection data or invented
+These images show the actual Neovim UI with synthetic Japanese cards. The
+first six were captured from Neovim's external line-grid redraw events and
+rasterized with a monospace font. They contain no personal collection data or invented
 terminal output.
 
 Run the same disposable fixture from the repository root:
@@ -25,6 +25,8 @@ the light-theme variant. It does not change your normal setup or collections.
 | Revealed card | 80 × 24 | habamax | [Study](study.png) |
 | Calendar | 80 × 24 | habamax | [Calendar](calendar.png) |
 | Overview | 100 × 32 | peachpuff | [Manager](overview.png) |
+| Live compact goal | 108 × 27 | habamax | [Completed goal](live-desk.png) |
+| Live calendar details | 108 × 27 | habamax | [Calendar details](live-calendar.png) |
 
 Image review on 2026-10-16 caught and corrected repeated shortcut strips,
 paper shadows crossing card content, hidden page headings after tab changes,
@@ -38,3 +40,13 @@ calendar drilldown, deck creation/reload, stale prompts, and repeated resizes.
 The existing background-tab close regression exposed a Neovim 0.11 crash with
 the new floating strip; closing the float before its host fixes it on the
 tested 0.10.4, 0.11.5, and 0.12.4 builds.
+
+The two live images come from a 2880 × 1800 terminal recording. Its six
+demonstration cards were created through the forms. Four Japanese cards
+produced five effective answers, one retry, and a daily goal of four. The
+receipt, calendar and saved history agree. These are demonstration reviews,
+not a fabricated long-term study record.
+
+The compact layout keeps its reached-goal stamp in the header. PageDown
+continues past the final category into the progress panel; its final row stays
+above the shortcut strip. A 60 × 20 interaction regression checks this.
