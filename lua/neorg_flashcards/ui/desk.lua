@@ -13,9 +13,10 @@ function M.render(model)
   local tile_width = math.max(20, math.min(27, content_width - 6))
   local columns = math.max(1, math.floor((content_width - 4) / (tile_width + 3)))
   local left = math.max(2, math.floor((content_width - columns * (tile_width + 3) + 3) / 2))
-  c:put(2, left, "YOUR STUDY DESK", h.title)
-  c:put(2, math.max(left + 20, width - 21), os.date("%a %d %b"), h.muted)
   local progress = calendar.progress(model.history, model.metadata)
+  local compact_goal = width < 110 and progress.goal > 0 and progress.unique >= progress.goal
+  c:put(2, left, compact_goal and "[ GOAL REACHED ]" or "YOUR STUDY DESK", compact_goal and h.good or h.title)
+  c:put(2, math.max(left + 20, width - 21), os.date("%a %d %b"), h.muted)
   if width < 110 then
     local goal = progress.goal > 0 and (progress.unique .. "/" .. progress.goal) or tostring(progress.unique)
     c:put(

@@ -1434,8 +1434,12 @@ function M.scroll_page(direction)
   end
   direction = direction < 0 and -1 or 1
   if state.page ~= "stats" and win == state.main.win then
+    local selected = state.sel
     move_selection_page(direction, win)
-    return
+    if state.page ~= "desk" or state.sel ~= selected then
+      return
+    end
+    -- Once the shelf ends, continue into the goal and status notes below it.
   end
   local distance = math.max(1, math.floor(vim.api.nvim_win_get_height(win) / 2))
   scroll_window(win, direction * distance)

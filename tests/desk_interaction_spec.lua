@@ -119,6 +119,29 @@ return function(T)
   )
   truth(history.remove_outbox(config, { event }))
 
+  -- A short terminal must be able to reach the progress note after the last
+  -- category. Paging used to stop at that category with the goal offscreen.
+  vim.o.columns, vim.o.lines = 60, 20
+  vim.api.nvim_exec_autocmds("VimResized", {})
+  overview.show("desk")
+  key("G")
+  key("<PageDown>")
+  key("<PageDown>")
+  vim.cmd("redraw")
+  local goal_line
+  for index, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+    if line:find("TODAY", 1, true) then
+      goal_line = index
+      break
+    end
+  end
+  local top = vim.fn.winsaveview().topline
+  truth(top > 1, "paging continues past the last category")
+  truth(
+    goal_line and goal_line >= top and goal_line < top + vim.api.nvim_win_get_height(0) - 1,
+    "the daily progress note can be brought into the visible viewport"
+  )
+
   for _, size in ipairs({ { 60, 20 }, { 80, 24 }, { 140, 45 } }) do
     vim.o.columns, vim.o.lines = size[1], size[2]
     vim.api.nvim_exec_autocmds("VimResized", {})
