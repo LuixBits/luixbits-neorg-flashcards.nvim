@@ -1339,8 +1339,13 @@ local function scroll_window(win, delta)
     return
   end
   vim.api.nvim_win_call(win, function()
+    if vim.wo[win].wrap then
+      vim.cmd.normal({ args = { tostring(math.abs(delta)) .. string.char(delta > 0 and 5 or 25) }, bang = true })
+      return
+    end
     local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    -- winheight() excludes the winbar; the API height includes that row.
+    local height = math.max(1, vim.fn.winheight(0))
     local max_topline = math.max(1, line_count - height + 1)
     local view = vim.fn.winsaveview()
     view.lnum = math.max(1, math.min(line_count, view.lnum + delta))
@@ -1354,8 +1359,12 @@ local function scroll_window_edge(win, edge)
     return
   end
   vim.api.nvim_win_call(win, function()
+    if vim.wo[win].wrap then
+      vim.cmd.normal({ args = { edge == "top" and "ggzt" or "Gzb" }, bang = true })
+      return
+    end
     local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    local height = math.max(1, vim.fn.winheight(0))
     local view = vim.fn.winsaveview()
     if edge == "top" then
       view.lnum, view.topline = 1, 1
@@ -1392,7 +1401,11 @@ local function move_selection_page(direction, win)
       end
     end
   end
-  select_index(list, field, target_index)
+  -- At the end of a shelf, leave the viewport intact so repeated paging can
+  -- reach the progress note below the last selectable item.
+  if target_index ~= index then
+    select_index(list, field, target_index)
+  end
 end
 
 function M.move(delta)

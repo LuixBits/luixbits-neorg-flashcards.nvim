@@ -125,9 +125,10 @@ return function(T)
   vim.api.nvim_exec_autocmds("VimResized", {})
   overview.show("desk")
   key("G")
-  key("<PageDown>")
-  key("<PageDown>")
-  vim.cmd("redraw")
+  for _ = 1, 3 do
+    key("<PageDown>")
+    vim.cmd("redraw")
+  end
   local goal_line
   for index, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
     if line:find("TODAY", 1, true) then
@@ -138,8 +139,13 @@ return function(T)
   local top = vim.fn.winsaveview().topline
   truth(top > 1, "paging continues past the last category")
   truth(
-    goal_line and goal_line >= top and goal_line + 7 < top + vim.api.nvim_win_get_height(0) - 1,
-    "the entire daily progress note can be brought above the shortcut strip"
+    goal_line and goal_line >= top and goal_line + 7 < top + vim.fn.winheight(0) - 1,
+    string.format(
+      "the entire daily progress note fits above the strip (goal %s, top %d, height %d)",
+      tostring(goal_line),
+      top,
+      vim.fn.winheight(0)
+    )
   )
 
   for _, size in ipairs({ { 60, 20 }, { 80, 24 }, { 140, 45 } }) do
