@@ -146,6 +146,11 @@ function M.check()
     return
   end
   report.ok("Collection directory: " .. config.path)
+  local metadata = require("neorg_flashcards.metadata")
+  local _, metadata_error = metadata.load(config)
+  if metadata_error then
+    report.error(metadata.path(config) .. ": " .. metadata_error)
+  end
 
   local schema_count = vim.tbl_count(config.schemas or {})
   if schema_count == 0 then
@@ -178,7 +183,7 @@ function M.check()
 
   local issues = M.inspect(config, cards)
   local counts = M.counts(issues)
-  if #parser_errors == 0 and counts.error == 0 and counts.warn == 0 then
+  if #parser_errors == 0 and counts.error == 0 and counts.warn == 0 and not metadata_error then
     report.ok(string.format("Collection healthy: %d card(s)", #cards))
     return
   end

@@ -140,8 +140,10 @@ return function(T)
   assert_true(recovered, "review rendering recovers after its popup buffer is manually replaced")
   assert_true(review_engine.is_open(), "review recreates its popup after manual replacement")
   assert_true(not gated, "a popup rating cannot bypass answer reveal")
+  assert_true(not flashcards.get_review_state().showing_answer, "rating does not reveal an unseen next card")
+  review_engine.flip_or_next()
   local _, revealed_text = current_popup()
-  assert_contains(revealed_text, "Choose a rating", "first rating key reveals the answer and interval choices")
+  assert_contains(revealed_text, "Choose a rating", "explicit reveal shows the answer and interval choices")
   assert_contains(revealed_text, "1 Again", "revealed card previews the Again interval")
   do
     local marks = semantic_rating_marks(vim.api.nvim_get_current_buf())
@@ -188,7 +190,7 @@ return function(T)
     assert_equal(#marks, 3, "completion colors only the three generated rating summary labels")
     for _, mark in ipairs(marks) do
       assert_equal(mark.label, rating_labels[mark.group], "completion highlights cover exact rating labels")
-      assert_true(mark.line:match("^%d%s%s") ~= nil, "completion semantic spans stay on generated summary rows")
+      assert_true(mark.line:match("%d%s%s[AGH]") ~= nil, "completion semantic spans stay on generated summary rows")
     end
   end
   local completed_state = flashcards.get_review_state()

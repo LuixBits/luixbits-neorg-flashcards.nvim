@@ -42,6 +42,30 @@ function M.read_history()
   return M.effective_entries(entries), errors
 end
 
+-- Goals/calendar can show durable outbox events while delivery is retried.
+-- Merge raw events before undo reduction and deduplicate replayed event IDs.
+function M.read_progress()
+  local entries, errors = history.read(config)
+  local pending, pending_errors = history.read_outbox(config)
+  local seen, count = {}, 0
+  for _, event in ipairs(entries) do
+    if event.event_id then
+      seen[event.event_id] = true
+    end
+  end
+  for _, event in ipairs(pending) do
+    if (not event.collection_id or event.collection_id == config.id) and not seen[event.event_id] then
+      table.insert(entries, event)
+      if event.event_id then
+        seen[event.event_id] = true
+      end
+      count = count + 1
+    end
+  end
+  vim.list_extend(errors, pending_errors)
+  return M.effective_entries(entries), errors, count
+end
+
 local function count_by_day(entries)
   local counts = {}
   for _, entry in ipairs(M.effective_entries(entries)) do

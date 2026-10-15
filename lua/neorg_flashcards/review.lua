@@ -7,6 +7,10 @@ local store = require("neorg_flashcards.store")
 local actions = require("neorg_flashcards.ui.actions")
 local util = require("neorg_flashcards.util")
 
+local study = require("neorg_flashcards.ui.study")
+local motion = require("neorg_flashcards.ui.motion")
+local metadata = require("neorg_flashcards.metadata")
+
 local M = {}
 
 local config = {}
@@ -58,6 +62,9 @@ local state = {
   session_id = nil,
   requeued_cards = {},
   event_sequence = 0,
+  unique = {},
+  display_generation = 0,
+  transition = nil,
 }
 
 local key_help = { buf = nil, win = nil }
@@ -85,6 +92,7 @@ local function review_capabilities()
     bury = type(config.on_bury) == "function",
     suspend = type(config.on_suspend) == "function",
     type_answer = #typed_fields > 0,
+    stats = type(config.on_stats) == "function",
   }
 end
 
@@ -93,14 +101,53 @@ local function show_shortcuts()
 end
 
 local function set_review_lines(lines, rating_spans)
-  popup.set_lines(state, lines)
-  if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
+  if not popup.is_open(state) then
     return
   end
-  vim.api.nvim_buf_clear_namespace(state.buf, rating_ns, 0, -1)
-  for _, span in ipairs(rating_spans or {}) do
-    pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, span.hl, span.line - 1, span.start_col, span.end_col)
+  local pending, finished = {}, 0
+  for _, attempt in ipairs(state.queue) do
+    pending[attempt.card.values.id] = true
   end
+  for id in pairs(state.unique) do
+    if not pending[id] then
+      finished = finished + 1
+    end
+  end
+  local generation = state.display_generation + 1
+  state.display_generation = generation
+  local transition = state.transition
+  local presentation = metadata.load(config)
+  local function paint(phase)
+    if state.display_generation ~= generation or not popup.is_open(state) then
+      return
+    end
+    local rendered, spans = study.render({
+      width = vim.api.nvim_win_get_width(state.win),
+      height = vim.api.nvim_win_get_height(state.win),
+      ascii = config.ui and config.ui.ascii,
+      deck = presentation.label or config.label or config.id or "Deck",
+      scope = state.label,
+      lines = lines,
+      spans = rating_spans or {},
+      pending = #state.queue,
+      unique = vim.tbl_count(state.unique),
+      finished = finished,
+      answers = state.session.total,
+      completed = state.completed,
+      revealed = state.showing_answer,
+      phase = phase,
+      transition = transition,
+    })
+    popup.set_lines(state, rendered)
+    vim.api.nvim_buf_clear_namespace(state.buf, rating_ns, 0, -1)
+    for _, span in ipairs(spans) do
+      pcall(vim.api.nvim_buf_add_highlight, state.buf, rating_ns, span.hl, span.line - 1, span.start_col, span.end_col)
+    end
+  end
+  local animated = state.transition ~= nil and (not config.ui or config.ui.motion ~= false)
+  state.transition = nil
+  paint(1)
+  motion.play("review", animated, paint)
 end
 
 local function add_rating_span(spans, lines, line_index, label)
@@ -292,6 +339,7 @@ local function session_snapshot()
     index = state.index,
     elapsed_seconds = elapsed_seconds(),
     session_id = state.session_id,
+    unique = vim.tbl_count(state.unique),
   }
 end
 
@@ -402,6 +450,9 @@ local function dispatch(action_name)
   end
   if action_name == "close" then
     M.close()
+  elseif action_name == "stats" then
+    M.close()
+    config.on_stats()
   elseif action_name == "context_help" then
     M.context_help()
   elseif action_name == "flip_or_next" then
@@ -455,8 +506,25 @@ local function ensure_window()
     title = " Flashcards ",
     footer = shortcut_footer(),
     min_height = 17,
+    width = math.max(30, vim.o.columns - 4),
+    height = math.max(14, vim.o.lines - 6),
     maps = maps,
   })
+  if type(config.review_host) == "function" then
+    local host = config.review_host()
+    if host and vim.api.nvim_win_is_valid(host) then
+      vim.api.nvim_win_set_config(state.win, {
+        relative = "win",
+        win = host,
+        row = 0,
+        col = 0,
+        width = math.max(1, vim.api.nvim_win_get_width(host) - 2),
+        height = math.max(1, vim.api.nvim_win_get_height(host) - 2),
+      })
+      vim.api.nvim_set_current_win(state.win)
+    end
+  end
+  vim.wo[state.win].winhighlight = "NormalFloat:Normal,FloatBorder:NeorgFlashcardsEdge"
 end
 
 local function interval_previews(card, now)
@@ -588,11 +656,20 @@ local function render()
     local previews = interval_previews(card, os.time())
     table.insert(lines, "")
     table.insert(lines, "** Choose a rating")
-    table.insert(lines, string.format("1 Again  %s    2 Hard  %s    3 Good  %s", previews[1], previews[2], previews[3]))
-    local control_line = #lines
-    add_rating_span(rating_spans, lines, control_line, "Again")
-    add_rating_span(rating_spans, lines, control_line, "Hard")
-    add_rating_span(rating_spans, lines, control_line, "Good")
+    if vim.api.nvim_win_get_width(state.win) < 72 then
+      for score, label_ in ipairs({ "Again", "Hard", "Good" }) do
+        table.insert(lines, string.format("%d %s  %s", score, label_, previews[score]))
+        add_rating_span(rating_spans, lines, #lines, label_)
+      end
+    else
+      table.insert(
+        lines,
+        string.format("1 Again  %s    2 Hard  %s    3 Good  %s", previews[1], previews[2], previews[3])
+      )
+      for _, label_ in ipairs({ "Again", "Hard", "Good" }) do
+        add_rating_span(rating_spans, lines, #lines, label_)
+      end
+    end
   else
     if attempt.hint_level > 0 then
       append_field(lines, "Hint " .. attempt.hint_level, progressive_hint(hint_source(card), attempt.hint_level), false)
@@ -627,10 +704,35 @@ local function clear_state()
   state.session_id = nil
   state.requeued_cards = {}
   state.event_sequence = 0
+  state.unique = {}
+  state.transition = nil
+  state.display_generation = state.display_generation + 1
 end
 
 function M.setup(opts)
   config = opts or {}
+  local group = vim.api.nvim_create_augroup("neorg_flashcards_study", { clear = true })
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = group,
+    callback = function()
+      if popup.is_open(state) then
+        motion.cancel("review")
+        local host = type(config.review_host) == "function" and config.review_host() or nil
+        local width = host and vim.api.nvim_win_get_width(host) - 2 or vim.o.columns - 4
+        local height = host and vim.api.nvim_win_get_height(host) - 2 or vim.o.lines - 6
+        vim.api.nvim_win_set_config(state.win, { width = math.max(1, width), height = math.max(1, height) })
+        render()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = group,
+    callback = function(args)
+      if tonumber(args.match) == state.win then
+        motion.cancel("review")
+      end
+    end,
+  })
 end
 
 function M.is_open()
@@ -705,12 +807,18 @@ function M.start(cards, errors, label, empty_message, opts)
   state.completed = false
   state.label = label or ""
   state.session = fresh_session(#ordered)
-  state.on_close = opts.on_close
+  state.on_close = opts.on_close or config.on_close
   state.on_review = opts.on_review
   state.on_event = opts.on_event
   state.last_action = nil
   state.requeued_cards = {}
   state.event_sequence = 0
+  state.unique = {}
+  state.transition = "start"
+  local goal_ok, goal_error = metadata.begin_day(config)
+  if not goal_ok then
+    util.notify("Daily goal could not be saved: " .. tostring(goal_error), vim.log.levels.WARN)
+  end
   state.session_id = string.format(
     "%s-%s-%x",
     config.id or "collection",
@@ -722,6 +830,8 @@ function M.start(cards, errors, label, empty_message, opts)
 end
 
 function M.close()
+  motion.cancel("review")
+  state.display_generation = state.display_generation + 1
   local was_active = M.is_open() or M.is_active()
   commit_last_action()
   popup.close(key_help)
@@ -767,6 +877,7 @@ function M.flip_or_next()
   end
 
   state.showing_answer = true
+  state.transition = "reveal"
   render()
   return true
 end
@@ -828,9 +939,8 @@ function M.rate_current(score, opts)
 
   opts = opts or {}
   if opts.require_reveal and not state.showing_answer then
-    state.showing_answer = true
     render()
-    local message = "Answer revealed — review it, then press 1, 2, or 3 again"
+    local message = "Reveal with Enter or Space before rating"
     util.notify(message)
     return false, message, false
   end
@@ -841,6 +951,7 @@ function M.rate_current(score, opts)
 
   local attempt = current_attempt()
   local card = attempt.card
+  local was_reviewed = state.unique[card.values.id]
   local now = os.time()
   local updates, due = schedule.review_updates(card, score, now, config.scheduling)
   local before = scheduling_snapshot(card.values, updates)
@@ -863,6 +974,12 @@ function M.rate_current(score, opts)
   end
   if message then
     util.notify(message, vim.log.levels.WARN)
+  end
+
+  -- Sessions can cross midnight. Capture the goal for the rating's local day.
+  local goal_ok, goal_error = metadata.begin_day(config, now)
+  if not goal_ok then
+    util.notify("Daily goal could not be saved: " .. tostring(goal_error), vim.log.levels.WARN)
   end
 
   local queue_index = state.index
@@ -901,6 +1018,7 @@ function M.rate_current(score, opts)
     requeued_attempt = requeued_attempt,
     marked_requeue = marked_requeue,
     score = score,
+    was_reviewed = was_reviewed,
     due = due,
     previous = previous,
     updates = reversible_updates,
@@ -916,6 +1034,8 @@ function M.rate_current(score, opts)
 
   state.showing_answer = false
   state.completed = #state.queue == 0
+  state.unique[card.values.id] = true
+  state.transition = score == 1 and "again" or "rate"
 
   emit_event({
     event = "rated",
@@ -984,6 +1104,10 @@ function M.undo_last()
   state.showing_answer = true
   state.last_action = nil
 
+  if not action.was_reviewed then
+    state.unique[action.card.values.id] = nil
+  end
+  state.transition = "undo"
   local undo_now = os.time()
   emit_event({
     event = "undo",
@@ -1084,6 +1208,7 @@ function M.suspend_current()
 end
 
 function M.edit_current()
+  motion.cancel("review")
   if state.completed or #state.queue == 0 then
     return false
   end

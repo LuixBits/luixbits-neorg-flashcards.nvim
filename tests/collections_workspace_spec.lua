@@ -355,13 +355,13 @@ return function(T)
     assert_equal(flashcards.active_collection().flashcards_dir, nil, "removed setup names are not public aliases")
 
     assert_true(flashcards.cards(), "the active collection opens in Cards")
-    assert_contains(T.current_tab_text(), "Cards · Japanese", "the hub names the active collection")
+    assert_contains(T.current_tab_text(), "Overview · Japanese", "the hub names the active collection")
     assert_contains(T.current_tab_text(), "猫", "the active collection card is shown")
     local hub = vim.api.nvim_get_current_buf()
     T.assert_buffer_maps(hub, { "C" })
-    assert_contains(actions.footer("cards", 120, { collection = true }), "C collection", "the switch is visible")
+    assert_contains(actions.footer("overview", 120, { collection = true }), "C collection", "the switch is visible")
     assert_contains(
-      table.concat(actions.help_lines("cards", { collection = true }), "\n"),
+      table.concat(actions.help_lines("overview", { collection = true }), "\n"),
       "Switch collection",
       "context help explains the collection switch"
     )
@@ -372,7 +372,7 @@ return function(T)
       "computer_science",
       "direct selection changes the active collection"
     )
-    assert_contains(T.current_tab_text(), "Cards · Computer Science", "the open hub switches in place")
+    assert_contains(T.current_tab_text(), "Overview · Computer Science", "the open hub switches in place")
 
     local chosen = nil
     local original_select = vim.ui.select
@@ -385,7 +385,7 @@ return function(T)
     assert_equal(chosen[1], "computer_science", "the picker uses stable sorted collection IDs")
     assert_equal(chosen[2], "japanese", "the picker includes the default collection")
     assert_equal(flashcards.active_collection().id, "japanese", "the picker switches without another command")
-    overview.show("overview")
+    overview.show("desk")
     overview.close()
   end
 

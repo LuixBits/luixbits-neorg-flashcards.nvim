@@ -3,7 +3,7 @@
 
 local M = {}
 
-local HUB = { "overview", "cards", "stats" }
+local HUB = { "desk", "overview", "stats" }
 local REVIEW_ACTIVE = { "review_question", "review_answer" }
 local REVIEW_ALL = { "review_question", "review_answer", "review_complete" }
 
@@ -18,68 +18,81 @@ end
 
 local catalog = {
   hub = {
+    action({ "h", "<Left>" }, "left", "Select left / previous day", { "desk", "stats" }),
+    action({ "l", "<Right>" }, "right", "Select right / next day", { "desk", "stats" }),
+    action({ "[" }, "month_previous", "Previous month", { "stats" }),
+    action({ "]" }, "month_next", "Next month", { "stats" }),
+    action({ "." }, "today", "Select today", { "stats" }),
+    action(
+      { "m" },
+      "manage",
+      "Manage decks and categories",
+      { "overview" },
+      { hints = { overview = "manage" }, capability = "manage" }
+    ),
+    action({ "g" }, "category", "Choose a category", { "overview" }),
     action({ "q" }, "close", "Close the flashcard hub", HUB, {
-      hints = { overview = "close", cards = "close", stats = "close" },
+      hints = { desk = "close", overview = "close", stats = "close" },
       essential = true,
     }),
     action({ "<Esc>" }, "escape", "Clear a card filter, or close the hub", HUB),
     action({ "?" }, "context_help", "Show keys for the current page", HUB, {
-      hints = { overview = "keys", cards = "keys", stats = "keys" },
+      hints = { desk = "keys", overview = "keys", stats = "keys" },
       essential = true,
     }),
     -- Keep destructive discovery near `?` so the Cards ribbon retains it in
     -- the normal 54-column detail pane. It still drops before core navigation
     -- in the narrowest stacked layout.
-    action({ "D" }, "delete_card", "Delete the selected card after confirmation", { "cards" }, {
-      hints = { cards = "delete" },
+    action({ "D" }, "delete_card", "Delete the selected card after confirmation", { "overview" }, {
+      hints = { overview = "delete" },
       capability = "delete",
     }),
     action({ "H" }, "plugin_help", "Open the quick plugin guide", HUB, { capability = "help" }),
     action({ "C" }, "collection", "Switch collection", HUB, {
-      hints = { overview = "collection", cards = "collection", stats = "collection" },
+      hints = { desk = "collection", overview = "collection", stats = "collection" },
       capability = "collection",
     }),
-    action({ "1" }, "overview", "Open Overview", HUB),
-    action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),
-    action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
+    action({ "1" }, "desk", "Open Desk", HUB),
+    action({ "2" }, "overview", "Open Overview", HUB, { hints = { desk = "overview", stats = "overview" } }),
+    action({ "3" }, "stats", "Open Stats", HUB, { hints = { desk = "stats" } }),
     action({ "<Tab>" }, "next_page", "Open the next page", HUB),
     action({ "<S-Tab>" }, "previous_page", "Open the previous page", HUB),
     action({ "j", "<Down>" }, "next", "Select the next item or scroll the focused pane", HUB, {
       hint_key = "j/k",
-      hints = { overview = "navigate", cards = "navigate", stats = "scroll" },
+      hints = { desk = "navigate", overview = "navigate", stats = "calendar" },
       essential = true,
       descriptions = {
-        overview = "Select the next card; scroll when the side pane is focused",
-        cards = "Select the next card; scroll when the detail pane is focused",
-        stats = "Scroll the focused pane down",
+        desk = "Select the next row of boxes or notes",
+        overview = "Select the next card; scroll when the detail pane is focused",
+        stats = "Select the next week; scroll when the detail pane is focused",
       },
     }),
     action({ "k", "<Up>" }, "previous", "Select the previous item or scroll the focused pane", HUB, {
       descriptions = {
-        overview = "Select the previous card; scroll when the side pane is focused",
-        cards = "Select the previous card; scroll when the detail pane is focused",
-        stats = "Scroll the focused pane up",
+        desk = "Select the previous row of boxes or notes",
+        overview = "Select the previous card; scroll when the detail pane is focused",
+        stats = "Select the previous week; scroll when the detail pane is focused",
       },
     }),
-    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", HUB, {
+    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", { "overview", "stats" }, {
       hint_key = "<C-w>w",
-      hints = { overview = "pane", cards = "pane", stats = "pane" },
+      hints = { desk = "pane", overview = "pane", stats = "pane" },
     }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
       hint_key = "Ctrl-D/U",
       hint_id = "page_scroll",
-      hints = { overview = "page", cards = "page", stats = "page" },
+      hints = { desk = "page", overview = "page", stats = "page" },
     }),
     action({ "<C-u>", "<PageUp>" }, "scroll_up", "Scroll the focused pane up half a page", HUB),
     action({ "gg" }, "scroll_top", "Go to the first item or top of the focused pane", HUB),
     action({ "G" }, "scroll_bottom", "Go to the last item or bottom of the focused pane", HUB),
     action({ "<CR>" }, "activate", "Run the primary action", HUB, {
       descriptions = {
-        overview = "Review everything due now",
-        cards = "Review the selected card",
-        stats = "Open Cards",
+        desk = "Open the selected deck or study category",
+        overview = "Review the selected card",
+        stats = "Inspect cards reviewed or scheduled on the selected day",
       },
-      hints = { overview = "review due", cards = "review" },
+      hints = { desk = "open/study", overview = "review" },
       capability = "review_selected",
     }),
     action({ "r" }, "review", "Review the selected queue or card", HUB, { capability = "review_selected" }),
@@ -87,18 +100,18 @@ local catalog = {
       hints = { stats = "review due" },
     }),
     action({ "A" }, "review_all", "Review the full collection", HUB, { hints = { stats = "review all" } }),
-    action({ "a" }, "add", "Add a flashcard", { "overview", "cards" }, {
-      hints = { overview = "add" },
+    action({ "a" }, "add", "Add a flashcard", { "desk", "overview" }, {
+      hints = { desk = "add" },
       capability = "add",
     }),
-    action({ "/" }, "search", "Search cards", { "cards" }, {
-      hints = { cards = "search" },
+    action({ "/" }, "search", "Search cards or category notes", { "desk", "overview" }, {
+      hints = { overview = "search" },
     }),
-    action({ "f" }, "filter", "Choose a card view or type", { "cards" }, { hints = { cards = "view" } }),
-    action({ "o" }, "sort", "Cycle card sorting", { "cards" }, { hints = { cards = "sort" } }),
-    action({ "X" }, "clear", "Clear search and filter", { "cards" }),
-    action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "cards" }, {
-      hints = { cards = "suspend" },
+    action({ "f" }, "filter", "Choose a card view or type", { "overview" }, { hints = { overview = "view" } }),
+    action({ "o" }, "sort", "Cycle card sorting", { "overview" }, { hints = { overview = "sort" } }),
+    action({ "X" }, "clear", "Clear search and filter", { "overview" }),
+    action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "overview" }, {
+      hints = { overview = "suspend" },
       capability = "suspend",
       presentation = function(_, action_state)
         if action_state and action_state.selected_availability == "suspended" then
@@ -108,8 +121,8 @@ local catalog = {
         end
       end,
     }),
-    action({ "b" }, "bury", "Bury the selected card until tomorrow", { "cards" }, {
-      hints = { cards = "bury" },
+    action({ "b" }, "bury", "Bury the selected card until tomorrow", { "overview" }, {
+      hints = { overview = "bury" },
       capability = "bury",
       presentation = function(_, action_state)
         if action_state and action_state.selected_availability == "buried" then
@@ -117,8 +130,8 @@ local catalog = {
         end
       end,
     }),
-    action({ "p" }, "peek", "Open the selected card preview", { "overview", "cards" }),
-    action({ "e" }, "edit_card", "Edit the selected card", { "overview", "cards" }),
+    action({ "p" }, "peek", "Open the selected card preview", { "desk", "overview" }),
+    action({ "e" }, "edit_card", "Edit the selected card", { "desk", "overview" }),
     action({ "c" }, "check", "Check the flashcard collection", HUB, { capability = "check" }),
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },
@@ -176,6 +189,10 @@ local catalog = {
     action({ "u" }, "undo", "Undo the last rating", REVIEW_ALL, {
       hints = { review_answer = "undo", review_complete = "undo" },
       essential = { review_complete = true },
+    }),
+    action({ "s" }, "stats", "Open Stats", { "review_complete" }, {
+      hints = { review_complete = "stats" },
+      capability = "stats",
     }),
     action({ "e" }, "edit", "Edit the current card", REVIEW_ACTIVE),
     action({ "b" }, "bury", "Bury the card until tomorrow", REVIEW_ACTIVE, {
@@ -242,8 +259,8 @@ local catalog = {
 }
 
 local context_titles = {
+  desk = "Desk keys",
   overview = "Overview keys",
-  cards = "Cards keys",
   stats = "Stats keys",
   review_question = "Review keys · question",
   review_answer = "Review keys · answer",

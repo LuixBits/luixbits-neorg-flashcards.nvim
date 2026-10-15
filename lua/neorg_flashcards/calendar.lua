@@ -68,6 +68,14 @@ function M.progress(entries, metadata, now)
   local weekday = (os.date("*t", now).wday + 5) % 7
   local active, week_unique, week_answers = 0, 0, 0
   local previous_unique, previous_answers = 0, 0
+  local streak = 0
+  local first = days[key] and 0 or 1
+  for offset = first, first + vim.tbl_count(days) do
+    if not days[M.day(M.shift(now, -offset))] then
+      break
+    end
+    streak = streak + 1
+  end
   for offset = 0, 6 do
     local day = days[M.day(M.shift(now, offset - weekday))]
     if day then
@@ -90,6 +98,7 @@ function M.progress(entries, metadata, now)
     week_answers = week_answers,
     previous_unique = previous_unique,
     previous_answers = previous_answers,
+    streak = streak,
     days = days,
   }
 end
@@ -136,14 +145,20 @@ function M.render(entries, metadata, selected, width, ascii, now, height)
       local marker = day and (target and target > 0 and day.unique >= target and "#" or "*") or " "
       local label = string.format("%2d%s", tonumber(os.date("%d", epoch)), marker)
       if key == selected_key then
-        c:put(y, x - 1, "[" .. label:sub(1, 2) .. "]", h.selected)
+        local suffix = cell >= 6 and (marker .. (key == M.day(now) and "T" or "")) or ""
+        c:put(y, x - 1, "[" .. label:sub(1, 2) .. "]" .. suffix, h.selected)
       else
-        c:put(y, x, label, key == M.day(now) and h.accent or (day and h.note or h.muted))
+        c:put(
+          y,
+          x,
+          label .. (key == M.day(now) and cell >= 4 and "T" or ""),
+          key == M.day(now) and h.accent or (day and h.note or h.muted)
+        )
       end
     end
   end
   local legend = compact and 14 or 21
-  c:put(legend, left, "* studied   # goal reached", h.muted)
+  c:put(legend, left, "* studied  # goal reached  T today", h.muted)
   c:put(legend + 2, left, string.format("THIS WEEK   %d / 7 active days", data.active_days), h.title)
   c:put(legend + 4, left, string.format("%d card-days  /  %d answers", data.week_unique, data.week_answers), h.ink)
   c:put(

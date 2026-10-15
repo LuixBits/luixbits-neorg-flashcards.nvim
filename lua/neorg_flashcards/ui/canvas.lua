@@ -47,8 +47,8 @@ function M.wrap(value, width)
   return lines
 end
 
-function M.new(width, ascii)
-  local c = { width = math.max(1, width), rows = {}, height = 0, ascii = ascii }
+function M.new(viewport_width, ascii)
+  local c = { width = math.max(1, viewport_width), rows = {}, height = 0, ascii = ascii }
 
   function c:put(row, col, text, hl)
     if row < 1 then

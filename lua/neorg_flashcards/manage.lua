@@ -4,6 +4,10 @@ local util = require("neorg_flashcards.util")
 local M = {}
 
 function M.change_tag(config, cards, old, replacement)
+  local _, metadata_error = metadata.load(config)
+  if metadata_error then
+    return false, metadata_error
+  end
   if old == "" or old:find("[%s,]") or (replacement and (replacement == "" or replacement:find("[%s,]"))) then
     return false, "categories must use one tag token"
   end
@@ -146,6 +150,7 @@ function M.open(context)
     "Rename or merge category",
     "Remove category tag",
     "New deck",
+    "Enable another card type",
     "Deck default card type",
     "Detach UI-created deck",
   }
@@ -255,6 +260,8 @@ function M.open(context)
           end)
         end)
       end)
+    elseif choice == "Enable another card type" then
+      context.deck_type()
     elseif choice == "Deck default card type" then
       context.deck_default()
     elseif choice == "Detach UI-created deck" then
