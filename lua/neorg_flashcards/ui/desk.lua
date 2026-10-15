@@ -21,7 +21,15 @@ function M.render(model)
     c:put(
       3,
       left,
-      canvas.fit("Today: " .. goal .. " cards  /  " .. progress.active_days .. " study days this week", width - left),
+      canvas.fit(
+        string.format(
+          "Today: %s cards  /  %d study day%s this week",
+          goal,
+          progress.active_days,
+          progress.active_days == 1 and "" or "s"
+        ),
+        width - left
+      ),
       h.accent
     )
   end
@@ -92,7 +100,7 @@ function M.render(model)
     c:box(y, x, tile_width, 5, edge)
     c:put(y + 1, x + 2, canvas.fit((active and "> " or "") .. group.label, tile_width - 4), active and h.title or h.ink)
     c:put(y + 2, x + 2, string.format("%d ready", group.due), group.due > 0 and h.accent or h.muted)
-    c:put(y + 3, x + 2, string.format("%d cards", #group.cards), h.muted)
+    c:put(y + 3, x + 2, string.format("%d card%s", #group.cards, #group.cards == 1 and "" or "s"), h.muted)
     c:put(y + 4, x + tile_width - 3, "/", edge)
     table.insert(entries, {
       line = y + 1,
@@ -123,7 +131,7 @@ function M.render(model)
     py + 2,
     px + 2,
     progress.goal > 0 and string.format("%d / %d cards", progress.unique, progress.goal)
-      or string.format("%d cards reviewed", progress.unique),
+      or string.format("%d card%s reviewed", progress.unique, progress.unique == 1 and "" or "s"),
     h.title
   )
   local slots = math.min(16, pw - 4)
