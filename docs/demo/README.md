@@ -21,8 +21,11 @@ are demonstration data, not an actual person's study record.
 | Framed Desk | 180 × 42 | Kanagawa | [Desk](desk.png) |
 | Light Desk | 100 × 32 | peachpuff | [Light desk](desk-light.png) |
 | ASCII Desk | 80 × 24 | peachpuff | [ASCII desk](desk-ascii.png) |
+| Question with navigation and hint keys | 150 × 42 | Kanagawa | [Question](study-question.png) |
 | Revealed card and session stacks | 150 × 42 | Kanagawa | [Study](study.png) |
 | Compact card with source outside its border | 70 × 24 | peachpuff | [Compact study](study-compact.png) |
+| Review keyboard help | 122 × 30 | Kanagawa | [Review keys](review-keys.png) |
+| Wrapped help with inherited nowrap | 70 × 24 | peachpuff | [Compact keys](review-keys-compact.png) |
 | Calendar and main analytics | 180 × 42 | Kanagawa | [Stats](calendar.png) |
 | Analytics after Ctrl-D | 122 × 30 | Kanagawa | [Scrolled Stats](stats-scrolled.png) |
 | Compact ASCII calendar | 80 × 24 | peachpuff | [Compact Stats](calendar-compact.png) |
@@ -47,6 +50,13 @@ outside the question/answer card, and the visible `Ctrl-D/U scroll` hint.
 Keyboard tests exercise Ctrl-D, Ctrl-U, G and gg in the main Stats pane and
 verify that scrolling leaves the selected calendar day unchanged. The native
 Kitty images above predate these two small placement/hint changes.
+
+The review captures now show `h` back, `l`/Enter reveal, `j/k` browse and `H`
+hint. The `?` images include arrow aliases. Narrow help wraps descriptions
+locally when the user's source windows use nowrap. Keyboard tests cover both
+Ctrl-h/j/k/l and native Ctrl-W motions in columns and stacked layouts, pane
+edges, date preservation, review navigation and Insert-mode Ctrl-H backspace.
+Earlier workspace and native captures predate these shortcut changes.
 
 Small desks scroll to later notes and the progress panel. The header retains
 today's progress. A 60 × 20 interaction regression checks paging past the last

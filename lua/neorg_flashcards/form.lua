@@ -713,6 +713,7 @@ function M.context_help()
   popup.open(key_help, {
     title = " " .. actions.title("form", form_capabilities()) .. " ",
     footer = actions.help_footer(),
+    wrap = true,
     min_width = 56,
     max_width = 76,
     min_height = 12,

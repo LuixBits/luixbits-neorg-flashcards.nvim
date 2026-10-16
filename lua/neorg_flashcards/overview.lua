@@ -1574,6 +1574,7 @@ function M.context_help()
   popup.open(key_help, {
     title = " " .. state.page:sub(1, 1):upper() .. state.page:sub(2) .. " keys ",
     footer = actions.help_footer(),
+    wrap = true,
     min_width = 48,
     max_width = 72,
     min_height = 12,

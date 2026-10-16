@@ -18,8 +18,20 @@ end
 
 local catalog = {
   hub = {
-    action({ "h", "<Left>" }, "left", "Select left / back one level / previous day", HUB),
-    action({ "l", "<Right>" }, "right", "Select right / open selection / next day", HUB),
+    action({ "h", "<Left>" }, "left", "Select left / go back", HUB, {
+      descriptions = {
+        desk = "Select the previous box or note",
+        overview = "Go back to chapters or collections",
+        stats = "Select the previous day",
+      },
+    }),
+    action({ "l", "<Right>" }, "right", "Select right / open selection", HUB, {
+      descriptions = {
+        desk = "Select the next box or note",
+        overview = "Open the collection, chapter or card",
+        stats = "Select the next day",
+      },
+    }),
     action({ "[" }, "month_previous", "Previous month", { "stats" }),
     action({ "]" }, "month_next", "Next month", { "stats" }),
     action({ "." }, "today", "Select today", { "stats" }),
@@ -148,7 +160,7 @@ local catalog = {
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },
   review = {
-    action({ "h", "<Left>", "q", "<Esc>" }, "close", "Close review and return to the workspace", REVIEW_ALL, {
+    action({ "h", "<Left>", "q", "<Esc>" }, "close", "Return to the workspace", REVIEW_ALL, {
       hints = { review_question = "back", review_answer = "back", review_complete = "back" },
       essential = true,
     }),

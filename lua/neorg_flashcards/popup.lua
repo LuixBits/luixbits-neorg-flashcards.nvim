@@ -54,6 +54,12 @@ function M.open(state, opts)
   })
 
   window.configure(state.win)
+  if opts.wrap == true then
+    vim.wo[state.win].wrap = true
+    vim.wo[state.win].linebreak = true
+    vim.wo[state.win].breakindent = true
+    vim.wo[state.win].breakindentopt = "shift:2"
+  end
 
   for _, map in ipairs(opts.maps or {}) do
     vim.keymap.set("n", map[1], map[2], {

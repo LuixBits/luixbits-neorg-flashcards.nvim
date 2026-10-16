@@ -38,6 +38,7 @@ function M.open()
   local opened = popup.open(state, {
     title = " Flashcards Quick Guide ",
     footer = " / find · n/N matches · q/Esc close ",
+    wrap = true,
     min_width = 62,
     max_width = 78,
     min_height = 20,

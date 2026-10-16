@@ -199,7 +199,8 @@ that editor.
 
 Every `?` window is searchable with Neovim's normal `/`. Use `n` and `N` for
 the next and previous matches. The short plugin guide opened with `H` or
-`:Flashcards help` is searchable in the same way.
+`:Flashcards help` is searchable in the same way. Help wraps at the window
+edge even with nowrap in source windows; normal scrolling keys still work.
 
 ==============================================================================
 WORKSPACE AND CARD CLINIC                            *neorg-flashcards-hub*

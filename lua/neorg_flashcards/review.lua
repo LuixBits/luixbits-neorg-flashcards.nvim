@@ -759,6 +759,7 @@ function M.context_help()
   popup.open(key_help, {
     title = " " .. actions.title(context) .. " ",
     footer = actions.help_footer(),
+    wrap = true,
     min_width = 52,
     max_width = 76,
     min_height = 12,
