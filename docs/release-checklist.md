@@ -61,12 +61,22 @@ Validated on 2026-10-16:
 macOS, Windows, and ARM execution were not available in this validation run.
 The implementation uses Neovim APIs and the existing portable storage layer.
 
-Video preparation is complete for this pass: eight spoken chapter scripts,
-the private preproduction plan, and a capture inventory. The visible recording
-rig uses a separate preserved overlay. Thirteen silent source takes, including
-probes and retakes, were recorded at 2880 × 1800 and 30 fps. Technical checks
-cover hashes, every frame timestamp and full decoding. Actual frames were
-reviewed; complete normal-speed playback review remains a production step.
+The local-testing refinement adds independent chapters and contextual CRUD,
+isolates scratch display options, frames the desk, expands session totals, and
+rebalances Stats. Runtime revision `5c2d8f5` passed the three-version regression
+suite and full flake checks. A separate full personal NVF package also opens
+Desk, Overview and Stats with Kanagawa. Native Kitty review at 122 × 30 caught
+and corrected Unicode cursor offsets, singular labels and calendar height.
+The updated [visual gallery](demo/README.md) includes these checks.
+
+Eight spoken chapter scripts, the private preproduction plan and the capture
+inventory now describe the refined interface. Thirteen earlier silent takes
+remain preserved and need a retake/continuity audit. Two fresh technical probes
+add 82.600 seconds at 2880 × 1800 and 30 fps; the second shows the final fixes.
+Both use an eight-card synthetic fixture with explicitly seeded history.
+They are separate from the six-card narrative demonstration. Hashes, every
+frame timestamp and full decoding pass. Native stills and extracted frames
+were reviewed; complete normal-speed playback remains a production step.
 
 The Remotion privacy, narration, long-form, recording and lint checks passed.
 Only flashcards script changes were committed there. Raw clips, state snapshots,

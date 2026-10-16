@@ -5,6 +5,8 @@ were captured on 2026-10-16 through the full NVF configuration, with the local
 plugin loaded before its installed version. The editor had visible whitespace
 and concealment enabled. App windows suppress those settings locally; source
 windows keep them. Images are rasterized from the external line grid.
+The native Kitty captures below also check the actual font, box joins and
+cursor placement. They use the same synthetic fixture in the recording VM.
 
 Run `nvim -u NONE -c 'luafile scripts/study-desk-demo.lua'` from the checkout
 for an isolated fixture. It creates temporary collections, disables the deck
@@ -24,12 +26,19 @@ are demonstration data, not an actual person's study record.
 | Compact ASCII calendar | 80 × 24 | peachpuff | [Compact Stats](calendar-compact.png) |
 | Chapter management | 150 × 38 | Kanagawa | [Chapters](chapters.png) |
 | Cards within a chapter | 150 × 38 | Kanagawa | [Cards](overview.png) |
+| Native Desk | 122 × 30 | habamax | [Native desk](native-desk.png) |
+| Native session after Again and Good | 122 × 30 | habamax | [Native stacks](native-study.png) |
+| Native compact dashboard | 122 × 30 | habamax | [Native Stats](native-stats.png) |
 
 Review caught and corrected inherited whitespace dots, concealed border
 characters, an oversized calendar, a clipped calendar in short windows, and
 review focus returning to Desk during a resize. The session test checks unseen,
 retry, finished, and rating totals across an actual resize. Chapter tests use
 the real composer and keyboard actions to create, rename, move, and remove.
+The native probe caught a Unicode cursor offset and singular stack labels.
+The final stack shows six unseen cards, one retry, one finished card, and
+Again 1 / Hard 0 / Good 1. The smaller Stats layout retains all three rating
+totals above the fold and adds weekly comparisons alongside the calendar.
 
 Small desks scroll to later notes and the progress panel. The header retains
 today's progress. A 60 × 20 interaction regression checks paging past the last

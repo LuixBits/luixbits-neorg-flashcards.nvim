@@ -7,9 +7,9 @@ Follow-up to the 2026-10-16 review in the user's actual NVF setup.
 - [x] Show useful pending/reviewed stacks with session counts and rating totals.
 - [x] Make Overview a collection → chapter → card manager with contextual actions.
 - [x] Rebalance Stats around useful summaries, a compact calendar and day details.
-- [ ] Verify the full user configuration, themes, resizes, keyboard navigation and persistence.
-- [ ] Review images, run release checks and make scoped commits throughout.
-- [ ] Update documentation, video facts and the temporary Neovim build.
+- [x] Verify the full user configuration, themes, resizes, keyboard navigation and persistence.
+- [x] Review images, run release checks and make scoped commits throughout.
+- [x] Update documentation, video facts and the temporary Neovim build.
 
 The screenshots exposed inherited `listchars` markers and Neorg concealment in
 app scratch buffers. UI buffers need their own filetype and local display
@@ -23,3 +23,20 @@ Unassigned cards remain in Unfiled. Preserve IDs, history and config ownership.
 The short-window calendar now fits above the day details. A resize regression
 also caught review focus returning to the desk; the active review keeps focus
 while its stack counters and dimensions update.
+
+Native terminal review also caught a cursor using display columns where Neovim
+expects byte offsets. The cursor now follows the selected box with Unicode
+borders. At 122 × 30, Stats uses the shorter calendar, keeps all rating totals
+visible, and puts weekly comparisons in the space beside the calendar.
+
+The isolated editor package was rebuilt from runtime revision `5c2d8f5` and
+opened all three pages through the full personal NVF configuration. Regression
+checks cover Neovim 0.10.4, 0.11.5 and 0.12.4; the x86_64 Linux flake checks
+include Neorg integration and packaging. Existing installations still need to
+load this candidate explicitly until the release is published.
+
+The Remotion narration and private plan now describe independent chapters.
+Two fresh silent probes preserve the revised interface and its subsequent
+visual corrections. The final probe passes hash, frame-timing and full-decode
+checks. Earlier footage needs a continuity/retake audit; narration and chapter
+assembly remain production work. No publication or system activation occurred.
