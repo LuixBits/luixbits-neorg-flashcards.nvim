@@ -72,7 +72,7 @@ private Remotion capture inventory.
 
 Captured on 2026-10-16 from runtime `cb0eba6` using the configured NVF editor
 and temporary synthetic collections. These images come from Neovim's external
-line grid. This refinement follows v0.3.0 and is recorded under Unreleased.
+line grid. These changes are included in v0.3.1.
 
 | View | Terminal | Theme | Image |
 | --- | --- | --- | --- |

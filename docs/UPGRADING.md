@@ -1,5 +1,21 @@
 # Upgrade guide
 
+## Card entry update in v0.3.1
+
+No configuration or card migration is needed from v0.3.0. Notes and other
+multiline fields are now editable directly in the main form. Tab and Shift-Tab
+move between fields without leaving Insert mode; Enter advances and saves on
+the last field. Ctrl-S saves the whole card without a separate apply step.
+
+In Normal mode, j/k and arrows move through individual lines. Use Tab to skip
+to the next field, and native o/O or multiline paste to add lines within Notes,
+answers, and other multiline fields. Existing line breaks and indentation are
+preserved. Scalar fields remain single-line.
+
+Update a pinned plugin tag to `v0.3.1`. For a Nix installation, update the
+plugin's flake input and lock entry before rebuilding; a rebuild by itself
+continues to use the locked revision.
+
 ## Study desk update within v0.3
 
 Existing named-collection setups, card files, scheduling fields, and version-1

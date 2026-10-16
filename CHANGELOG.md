@@ -4,6 +4,8 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-16
+
 - Reworked card entry with labels above each input, front/answer roles,
   explicit required/optional markers, and more space between fields. The
   header shows collection, chapter, type, and destination, including the
