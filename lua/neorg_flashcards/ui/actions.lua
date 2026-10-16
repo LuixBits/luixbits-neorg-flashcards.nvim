@@ -274,14 +274,6 @@ local catalog = {
     action({ "<Esc>" }, "leave_insert", "Leave the field and return to Normal mode", { "form" }, {
       modes = { "i" },
     }),
-    action({ "j", "<Down>" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
-      modes = { "n" },
-      hint_key = "j/k",
-      hints = { form = "fields" },
-    }),
-    action({ "k", "<Up>" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
-      modes = { "n" },
-    }),
     action({ "<CR>", "i" }, "edit_field", "Edit the selected field (Normal mode)", { "form" }, {
       modes = { "n" },
     }),
@@ -481,6 +473,12 @@ function M.help_lines(context, capabilities)
   for _, row in ipairs(rows) do
     local padding = string.rep(" ", key_width - vim.fn.strdisplaywidth(row.keys) + 2)
     table.insert(lines, "  " .. row.keys .. padding .. row.description)
+  end
+  if context == "form" then
+    table.insert(lines, "")
+    table.insert(lines, "  j/k or arrows     move through the editable lines (Normal mode)")
+    table.insert(lines, "  o/O               add a line in a multiline field (Normal mode)")
+    table.insert(lines, "  u / Ctrl-R        undo / redo changes (Normal mode)")
   end
   table.insert(lines, "")
   table.insert(lines, "  /                 find text in this help window")
