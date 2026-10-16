@@ -107,7 +107,7 @@ including the package and Neorg integration checks.
 
 Captured on 2026-10-16 from runtime `4105033`, through the configured NVF editor
 with the same synthetic collections. These are rasterized Neovim line-grid
-captures. The dialog changes are not yet released.
+captures. The dialog changes are included in v0.3.2.
 
 | View | Terminal | Theme | Image |
 | --- | --- | --- | --- |

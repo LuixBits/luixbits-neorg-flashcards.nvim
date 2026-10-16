@@ -1,5 +1,25 @@
 # Upgrade guide
 
+## Workspace dialogs in v0.3.2
+
+No configuration or card migration is needed from v0.3.1. Management menus,
+confirmations, and small inputs now use the desk's colors and ASCII setting.
+There are no new setup options.
+
+Press `m` in Overview for actions on the selected collection, chapter, or card.
+Use j/k, Ctrl-j/k, or arrows to select, Enter to choose, h to return to a parent
+menu, and q/Esc to cancel. Inputs start in Insert mode; Enter confirms, Esc
+returns to Normal mode, and q cancels there. Invalid values stay visible for
+correction. Deletion starts on Cancel and explains what is removed or kept.
+
+Collection menus hold Tags and Daily goal. UI-created collections put the goal
+and card-type controls in Study settings. To create a chapter from a tag, use
+`m` on a collection, then Tags → a tag → Create chapter from tag. Note appearance
+holds a tag's label, theme color, and order.
+
+Update a pinned tag to `v0.3.2`. Nix users must refresh the plugin's lock entry
+before rebuilding; rebuilding alone continues to use the locked revision.
+
 ## Card entry update in v0.3.1
 
 No configuration or card migration is needed from v0.3.0. Notes and other
@@ -46,7 +66,7 @@ history remain compatible. No card migration is required for this UI update.
 
 Chapters are separate from filenames and tags. Existing cards appear in
 Unfiled; create chapters with `n` in Overview and move cards with `M`. For
-existing lesson tags, `m` → Create chapter from tag moves their cards after
+existing lesson tags, `m` on a collection → Tags → a tag → Create chapter from tag moves their cards after
 confirmation and keeps those tags. Removing a chapter returns cards to Unfiled.
 Optional `chapters` and `chapter_cards` fields extend the existing workspace
 sidecar; card syntax and history versions stay unchanged. Back up the sidecar

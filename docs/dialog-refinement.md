@@ -31,5 +31,5 @@ Validated on 2026-10-16:
   80 × 24, and 60 × 20, including the ASCII mode and inline validation.
 - Graphify was refreshed after the final source changes.
 
-Implementation and documentation are committed on `improve/workspace-dialogs`.
-No release was published and no system configuration was activated.
+The dialog changes are included in v0.3.2. The
+[release notes](releases/v0.3.2.md) describe the controls and upgrade steps.

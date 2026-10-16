@@ -4,6 +4,8 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.2 - 2026-10-16
+
 - Replaced workspace management, confirmation, and small-input prompts with
   compact dialogs using the desk's theme colors and ASCII border setting.
 - Made `m` contextual: collection actions, chapter actions, or card actions.

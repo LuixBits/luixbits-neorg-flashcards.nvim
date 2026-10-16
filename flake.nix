@@ -35,7 +35,7 @@
         let
           plugin = pkgs.vimUtils.buildVimPlugin {
             pname = "luixbits-neorg-flashcards.nvim";
-            version = "0.3.1";
+            version = "0.3.2";
             src = self;
           };
         in
