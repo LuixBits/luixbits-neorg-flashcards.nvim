@@ -1,6 +1,7 @@
--- A full-tab flashcard hub with Overview, Cards, and Stats pages.
+-- The shared workspace shell and functional card browser.
 
 local actions = require("neorg_flashcards.ui.actions")
+local canvas = require("neorg_flashcards.ui.canvas")
 local card_insights = require("neorg_flashcards.card_insights")
 local highlights = require("neorg_flashcards.highlights")
 local popup = require("neorg_flashcards.popup")
@@ -9,11 +10,18 @@ local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local stats = require("neorg_flashcards.stats")
 local util = require("neorg_flashcards.util")
+local window = require("neorg_flashcards.ui.window")
+
+local desk = require("neorg_flashcards.ui.desk")
+local metadata = require("neorg_flashcards.metadata")
+local chapters = require("neorg_flashcards.chapters")
+local calendar = require("neorg_flashcards.calendar")
 
 local M = {}
+local apply_layout
 
 local GLYPH = "●"
-local PAGES = { "overview", "cards", "stats" }
+local PAGES = { "desk", "overview", "stats" }
 local SORTS = { "due", "front", "state", "source" }
 local filter_label
 
@@ -29,7 +37,7 @@ local state = {
   tab = nil,
   main = { buf = nil, win = nil },
   side = { buf = nil, win = nil },
-  page = "overview",
+  page = "desk",
   layout = nil,
   all_cards = {},
   invalid_cards = {},
@@ -41,12 +49,20 @@ local state = {
   sel = 1,
   card_entries = {},
   card_sel = 1,
+  browser_level = "collections",
+  chapter_id = nil,
+  desk_grouping = "chapters",
   selected_card_key = nil,
   query = "",
   filter = "all",
   sort = "due",
   capabilities = {},
   closing = false,
+  metadata = metadata.defaults(),
+  desk_query = "",
+  columns = 1,
+  date = os.time(),
+  day_filter = nil,
 }
 
 local peek = { buf = nil, win = nil }
@@ -77,7 +93,7 @@ local function show_shortcuts()
 end
 
 local function collection_label()
-  return util.trim(config.label) ~= "" and util.trim(config.label) or (config.id or "Collection")
+  return state.metadata.label or (util.trim(config.label) ~= "" and util.trim(config.label) or (config.id or "Deck"))
 end
 
 local function card_state(card, now)
@@ -154,6 +170,9 @@ local function invalid_source(descriptor)
 end
 
 local function browser_entry_key(entry)
+  if entry.kind then
+    return entry.kind .. ":" .. tostring(entry.id or "all")
+  end
   if entry.invalid then
     return table.concat({ "invalid", invalid_source(entry), card_key(entry.card) }, ":")
   end
@@ -183,46 +202,8 @@ local function pad(text, width)
 end
 
 local function group_cards(cards, now)
-  local by_tag = {}
-  local order = {}
-  for _, card in ipairs(cards or {}) do
-    for _, tag in ipairs(card_tags(card)) do
-      if not by_tag[tag] then
-        by_tag[tag] = {}
-        table.insert(order, tag)
-      end
-      table.insert(by_tag[tag], card)
-    end
-  end
-  table.sort(order, function(left, right)
-    if left == "untagged" then
-      return false
-    end
-    if right == "untagged" then
-      return true
-    end
-    return left < right
-  end)
-
-  local groups = {}
-  for _, tag in ipairs(order) do
-    local cards_for_tag = by_tag[tag]
-    table.sort(cards_for_tag, function(left, right)
-      local left_due, right_due = schedule.due_key(left), schedule.due_key(right)
-      if left_due ~= right_due then
-        return left_due < right_due
-      end
-      return card_front(left) < card_front(right)
-    end)
-    local due = 0
-    for _, card in ipairs(cards_for_tag) do
-      if is_ready(card, now) then
-        due = due + 1
-      end
-    end
-    table.insert(groups, { name = tag, cards = cards_for_tag, due = due })
-  end
-  return groups
+  state.metadata, state.metadata_error = metadata.load(config)
+  return metadata.groups(cards, state.metadata, config, now)
 end
 
 local function add_line(lines, spans, text, hl)
@@ -235,16 +216,6 @@ end
 
 local function add_span(spans, line, start_col, end_col, hl)
   table.insert(spans, { line = line, start_col = start_col, end_col = end_col, hl = hl })
-end
-
-local function append_section(lines, spans, section_lines, section_spans)
-  local offset = #lines
-  for _, line in ipairs(section_lines or {}) do
-    table.insert(lines, line)
-  end
-  for _, span in ipairs(section_spans or {}) do
-    add_span(spans, span.line + offset, span.start_col, span.end_col, span.hl)
-  end
 end
 
 local function count_states(cards, now)
@@ -290,6 +261,7 @@ local function refresh_history_insights()
   local entries, errors = stats.read_history()
   state.history_entries = entries or {}
   state.history_errors = errors or {}
+  state.progress_entries, state.progress_errors, state.pending_events = stats.read_progress()
   state.insights = card_insights.build(config, state.all_cards, state.history_entries)
 end
 
@@ -316,22 +288,6 @@ local function status_badges(status)
   return badges
 end
 
-local function status_text(card, now)
-  local status = card_state(card, now)
-  if status.availability ~= "active" then
-    return status.availability
-  end
-  local due = util.trim(card.values.due)
-  if status.timing == "due" then
-    return due == "" and "due now" or "due · " .. due
-  elseif status.timing == "overdue" then
-    return "overdue · " .. due
-  elseif status.timing == "scheduled" then
-    return "scheduled · " .. due
-  end
-  return status.timing
-end
-
 local function selected_overview_entry()
   return state.entries[state.sel]
 end
@@ -341,16 +297,16 @@ local function selected_card_entry()
 end
 
 local function selected_card_is_invalid()
-  return state.page == "cards" and selected_card_entry() and selected_card_entry().invalid == true
+  return state.page == "overview" and selected_card_entry() and selected_card_entry().invalid == true
 end
 
 local function selected_card_is_unclosed()
-  local entry = state.page == "cards" and selected_card_entry() or nil
+  local entry = state.page == "overview" and selected_card_entry() or nil
   return entry and entry.card and entry.card.closed == false or false
 end
 
 local function selected_card()
-  if state.page == "cards" then
+  if state.page == "overview" then
     local entry = selected_card_entry()
     return entry and entry.card
   elseif state.page == "stats" then
@@ -364,12 +320,17 @@ local function current_action_state()
   local action_state = vim.deepcopy(state.capabilities)
   local card = selected_card()
   local invalid = selected_card_is_invalid()
-  if state.page == "cards" then
+  if state.page == "overview" then
     local availability = card and not invalid and card_state(card, os.time()).availability or nil
     action_state.review_selected = card ~= nil and not invalid and availability == "active"
   end
-  if state.page == "cards" and not card then
-    action_state.suspend, action_state.bury, action_state.delete = false, false, false
+  if state.page == "overview" and not card then
+    action_state.suspend, action_state.bury = false, false
+    local entry = selected_card_entry()
+    action_state.delete = action_state.manage
+      and entry ~= nil
+      and (entry.kind == "deck" or (entry.kind == "chapter" and entry.id ~= nil and entry.id ~= ""))
+    action_state.review_selected = entry and entry.group and #entry.group.cards > 0 or false
   elseif invalid then
     action_state.suspend, action_state.bury = false, false
   end
@@ -379,6 +340,9 @@ local function current_action_state()
   if card and not invalid then
     action_state.selected_availability = card_state(card, os.time()).availability
   end
+  action_state.move_card = card ~= nil and not invalid and action_state.manage
+  action_state.selection_kind = state.page == "overview" and selected_card_entry() and selected_card_entry().kind
+    or "card"
   return action_state
 end
 
@@ -394,161 +358,6 @@ local function side_width()
     return vim.api.nvim_win_get_width(state.side.win)
   end
   return 44
-end
-
-local function build_overview()
-  local now = os.time()
-  local counts = count_states(state.all_cards, now)
-  local minutes = counts.ready == 0 and 0 or math.max(1, math.ceil(counts.ready / 3))
-  local lines, spans, entries = {}, {}, {}
-
-  add_line(lines, spans, " Flashcards · " .. collection_label(), HIGHLIGHTS.heading)
-  add_line(lines, spans, "")
-  add_line(lines, spans, " TODAY", HIGHLIGHTS.title)
-  local action = string.format("  ▸  REVIEW DUE   %d ready", counts.ready)
-  if minutes > 0 then
-    action = action .. string.format(" · about %d min", minutes)
-  end
-  add_line(lines, spans, action, HIGHLIGHTS.action)
-  if counts.ready == 0 then
-    local next_due = schedule.next_due(state.all_cards, now)
-    local message = next_due and ("  You are caught up. Next card " .. schedule.humanize(next_due - now) .. ".")
-      or "  You are caught up. Add a card when curiosity strikes."
-    add_line(lines, spans, message, HIGHLIGHTS.scheduled)
-  else
-    add_line(
-      lines,
-      spans,
-      string.format("  %d overdue · %d due today · %d new", counts.overdue, counts.due, counts.ready_new),
-      HIGHLIGHTS.muted
-    )
-  end
-  if state.capabilities.add then
-    add_line(lines, spans, "     a  Add a card", HIGHLIGHTS.accent)
-  end
-  add_line(lines, spans, "")
-  add_line(lines, spans, " COLLECTION", HIGHLIGHTS.title)
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  %d cards · %d learning · %d review · %d suspended · %d buried",
-      counts.total,
-      counts.learning + counts.relearning,
-      counts.review,
-      counts.suspended,
-      counts.buried
-    ),
-    HIGHLIGHTS.muted
-  )
-  add_line(lines, spans, "  " .. GLYPH .. " overdue   " .. GLYPH .. " due   " .. GLYPH .. " scheduled")
-  local legend_line = #lines
-  local at = 2
-  for _, key in ipairs({ "overdue", "due", "scheduled" }) do
-    add_span(spans, legend_line, at, at + #GLYPH, HIGHLIGHTS[key])
-    at = at + #GLYPH + #" " + #key + 3
-  end
-  add_line(lines, spans, "")
-
-  local total_group_cards = 0
-  for _, group in ipairs(state.groups) do
-    total_group_cards = total_group_cards + #group.cards
-  end
-  state.sel = total_group_cards == 0 and 1 or math.max(1, math.min(total_group_cards, state.sel))
-  if #state.groups == 0 then
-    add_line(lines, spans, "  No cards yet.", HIGHLIGHTS.heading)
-    add_line(
-      lines,
-      spans,
-      state.capabilities.add and "  Press a to make the first one." or "  Add a .norg flashcard to this collection.",
-      HIGHLIGHTS.muted
-    )
-    return lines, spans, entries
-  end
-
-  for _, group in ipairs(state.groups) do
-    local header =
-      string.format(" %s · %d card%s · %d due", group.name, #group.cards, #group.cards == 1 and "" or "s", group.due)
-    add_line(lines, spans, header, HIGHLIGHTS.title)
-    if group.due > 0 then
-      add_span(spans, #lines, #header - #string.format("%d due", group.due), -1, HIGHLIGHTS.due)
-    end
-    for _, card in ipairs(group.cards) do
-      local index = #entries + 1
-      local marker = index == state.sel and "▸ " or "  "
-      local text = card_front(card)
-      local answer = card_answer(card)
-      if answer ~= "" then
-        text = text .. " — " .. answer
-      end
-      text = truncate(text, math.max(18, main_width() - 27))
-      local glyph_col = #"  " + #marker
-      local line = "  " .. marker .. GLYPH .. " " .. text .. "  "
-      local status_col = #line
-      line = line .. status_text(card, now)
-      add_line(lines, spans, line)
-      local _, visual = status_label(card_state(card, now))
-      add_span(spans, #lines, glyph_col, glyph_col + #GLYPH, visual)
-      if index == state.sel then
-        add_span(spans, #lines, 2, 2 + #marker, HIGHLIGHTS.selected)
-      end
-      add_span(spans, #lines, status_col, -1, HIGHLIGHTS.muted)
-      table.insert(entries, { line = #lines, card = card, group = group })
-    end
-    add_line(lines, spans, "")
-  end
-  return lines, spans, entries
-end
-
-local function build_overview_side()
-  local now = os.time()
-  local cards = state.all_cards
-  local log_entries, log_errors = state.history_entries, state.history_errors
-  local width = side_width()
-  local weeks = math.max(4, math.min(14, math.floor((width - 8) / 2)))
-  local lines, spans = {}, {}
-  add_line(lines, spans, " Analytics", HIGHLIGHTS.heading)
-  add_line(lines, spans, "")
-  if log_errors and #log_errors > 0 then
-    add_line(
-      lines,
-      spans,
-      string.format(
-        "  ⚠ %d history line%s skipped · press c to inspect",
-        #log_errors,
-        #log_errors == 1 and "" or "s"
-      ),
-      HIGHLIGHTS.overdue
-    )
-    add_line(lines, spans, "")
-  end
-  append_section(lines, spans, stats.summary_section(cards, log_entries, now))
-  add_line(lines, spans, "")
-  append_section(lines, spans, stats.forecast_section(cards, now, width))
-  local height = state.side.win
-      and vim.api.nvim_win_is_valid(state.side.win)
-      and vim.api.nvim_win_get_height(state.side.win)
-    or 30
-  if height >= 24 then
-    add_line(lines, spans, "")
-    append_section(lines, spans, stats.heatmap_section(log_entries, now, weeks))
-  end
-  add_line(lines, spans, "")
-  add_line(lines, spans, " Next step", HIGHLIGHTS.title)
-  local counts = count_states(cards, now)
-  if counts.ready > 0 then
-    add_line(
-      lines,
-      spans,
-      string.format("  Review %d ready card%s while the queue is small.", counts.ready, counts.ready == 1 and "" or "s"),
-      HIGHLIGHTS.accent
-    )
-  elseif counts.total == 0 then
-    add_line(lines, spans, "  Add a small card you will be glad to remember.", HIGHLIGHTS.muted)
-  else
-    add_line(lines, spans, "  Nothing is due. Browse challenging cards or enjoy the win.", HIGHLIGHTS.scheduled)
-  end
-  return lines, spans
 end
 
 local function searchable_text(card, now)
@@ -591,7 +400,15 @@ local function invalid_searchable_text(descriptor)
 end
 
 local function matches_filter(card, now, filter)
-  if filter == "all" then
+  if state.chapter_id ~= nil and chapters.id(state.metadata, card) ~= state.chapter_id then
+    return false
+  end
+  if filter == "day" then
+    return state.day_filter and state.day_filter[card_key(card)] == true
+  elseif filter:sub(1, 4) == "tag:" then
+    local tag = filter:sub(5)
+    return tag == "" and #metadata.tags(card) == 0 or schema.card_has_tag(card, tag)
+  elseif filter == "all" then
     return true
   elseif filter == "clinic" then
     local insight = state.insights.by_card[card]
@@ -625,7 +442,10 @@ local function filtered_card_entries()
   end
   if state.filter == "all" or state.filter == "invalid" then
     for _, descriptor in ipairs(state.invalid_cards) do
-      if query == "" or invalid_searchable_text(descriptor):find(query, 1, true) then
+      if
+        (state.chapter_id == nil or chapters.id(state.metadata, descriptor.card) == state.chapter_id)
+        and (query == "" or invalid_searchable_text(descriptor):find(query, 1, true))
+      then
         table.insert(result, {
           card = descriptor.card,
           invalid = true,
@@ -686,6 +506,128 @@ local function restore_card_selection(entries)
   state.selected_card_key = browser_entry_key(entries[state.card_sel])
 end
 
+local function chapter_label()
+  if state.chapter_id == nil then
+    return "All cards"
+  end
+  local chapter = state.metadata.chapters[state.chapter_id]
+  return chapter and chapter.label or "Unfiled"
+end
+
+local function build_library_browser()
+  local entries, lines, spans = {}, {}, {}
+  local collections_view = state.browser_level == "collections"
+  local title = collections_view and ("Overview · " .. collection_label() .. " / Collections")
+    or ("Collections / " .. collection_label() .. " / Chapters")
+  add_line(lines, spans, " " .. title, HIGHLIGHTS.heading)
+  add_line(lines, spans, " Enter/l open   h back   a add   e rename   D remove   m manage", HIGHLIGHTS.muted)
+  add_line(lines, spans, "")
+  if collections_view then
+    for _, deck_ in
+      ipairs(
+        type(handlers.on_decks) == "function" and handlers.on_decks()
+          or { { id = config.id, label = collection_label() } }
+      )
+    do
+      table.insert(
+        entries,
+        { kind = "deck", id = deck_.id, label = deck_.label, path = deck_.path, owned = deck_.owned }
+      )
+    end
+  else
+    table.insert(entries, {
+      kind = "chapter",
+      label = "All cards",
+      group = {
+        cards = state.all_cards,
+        due = count_states(state.all_cards, os.time()).ready,
+      },
+    })
+    for _, group in ipairs(chapters.groups(state.all_cards, state.metadata, config, os.time())) do
+      table.insert(entries, { kind = "chapter", id = group.name, label = group.label, group = group })
+    end
+  end
+  if collections_view and not state.selected_card_key then
+    state.selected_card_key = "deck:" .. config.id
+  end
+  restore_card_selection(entries)
+  local width = main_width()
+  add_line(
+    lines,
+    spans,
+    "   " .. pad(collections_view and "COLLECTION" or "CHAPTER", math.max(12, width - 32)) .. "  CARDS   READY",
+    HIGHLIGHTS.table_header
+  )
+  add_line(lines, spans, " " .. string.rep(config.ui.ascii and "-" or "─", math.max(1, width - 2)), HIGHLIGHTS.muted)
+  for index, entry in ipairs(entries) do
+    local count, ready = "", ""
+    if entry.group then
+      count, ready = tostring(#entry.group.cards), tostring(entry.group.due)
+    elseif entry.id == config.id then
+      count, ready = tostring(#state.all_cards), tostring(count_states(state.all_cards, os.time()).ready)
+    end
+    local text = (index == state.card_sel and " > " or "   ")
+      .. pad(entry.label, math.max(12, width - 32))
+      .. "  "
+      .. pad(count, 7)
+      .. " "
+      .. ready
+    entry.line =
+      add_line(lines, spans, text, index == state.card_sel and highlights.groups.desk.selected or HIGHLIGHTS.title)
+  end
+  if state.metadata_error then
+    add_line(lines, spans, " Metadata: " .. state.metadata_error, HIGHLIGHTS.invalid)
+  end
+  return lines, spans, entries
+end
+
+local function build_library_detail(entry)
+  local lines, spans = {}, {}
+  if not entry then
+    return { " No selection" }, spans
+  end
+  add_line(lines, spans, " " .. entry.label, HIGHLIGHTS.heading)
+  add_line(lines, spans, "")
+  if entry.kind == "deck" then
+    add_line(lines, spans, " Collection", HIGHLIGHTS.title)
+    add_line(lines, spans, " " .. (entry.path or config.path), HIGHLIGHTS.muted)
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Enter  Browse chapters")
+    add_line(lines, spans, " a      New collection")
+    add_line(lines, spans, " e      Rename display label")
+    add_line(lines, spans, " m      Collection settings")
+    add_line(lines, spans, " D      Detach collection")
+    if entry.owned then
+      add_line(lines, spans, "")
+      add_line(lines, spans, " Configured collection: edit its path and card types in setup().", HIGHLIGHTS.muted)
+    end
+  else
+    local counts = count_states(entry.group.cards, os.time())
+    add_line(lines, spans, string.format(" %d cards   %d ready", counts.total, counts.ready), HIGHLIGHTS.title)
+    add_line(
+      lines,
+      spans,
+      string.format(" %d scheduled   %d suspended", counts.scheduled, counts.suspended),
+      HIGHLIGHTS.muted
+    )
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Enter  Browse cards")
+    add_line(lines, spans, " r      Study this chapter")
+    add_line(lines, spans, " a      Add card here")
+    add_line(lines, spans, " n      New chapter")
+    if entry.id and entry.id ~= "" then
+      add_line(lines, spans, " e      Rename chapter")
+      add_line(lines, spans, " D      Remove chapter")
+    end
+    add_line(lines, spans, " m      Manage / chapter from tag")
+    if entry.id == "" then
+      add_line(lines, spans, "")
+      add_line(lines, spans, " Cards without a chapter appear here. Use M on a card to move it.", HIGHLIGHTS.muted)
+    end
+  end
+  return lines, spans
+end
+
 local function build_cards_browser()
   local now = os.time()
   local browser_entries = filtered_card_entries()
@@ -693,8 +635,8 @@ local function build_cards_browser()
   local lines, spans, entries = {}, {}, {}
   local width = main_width()
   local total_blocks = #state.all_cards + #state.invalid_cards
-  local page_title = state.filter == "clinic" and " Card clinic" or " Cards"
-  add_line(lines, spans, page_title .. " · " .. collection_label(), HIGHLIGHTS.heading)
+  local page_title = state.filter == "clinic" and " Needs attention / Card clinic" or " Overview"
+  add_line(lines, spans, page_title .. " · " .. collection_label() .. " / " .. chapter_label(), HIGHLIGHTS.heading)
   local scope = string.format(
     " %d shown of %d blocks · %d reviewable · %d invalid · filter: %s · sort: %s",
     #browser_entries,
@@ -795,21 +737,6 @@ local function build_cards_browser()
   return lines, spans, entries
 end
 
-local function detail_hint(status)
-  if status.availability == "suspended" then
-    return "Suspended cards stay out of normal review queues."
-  elseif status.availability == "buried" then
-    return "Buried cards are hidden until tomorrow."
-  elseif status.timing == "overdue" then
-    return "Overdue is a scheduling fact, not a verdict. Review it honestly."
-  elseif status.lifecycle == "new" then
-    return "First review: recall before revealing, then choose an honest rating."
-  elseif status.lifecycle == "learning" or status.lifecycle == "relearning" then
-    return "Short intervals are expected while this card settles in."
-  end
-  return "Try to answer before reading the back; recognition is deceptively easy."
-end
-
 local function short_interval(seconds)
   seconds = tonumber(seconds)
   if not seconds then
@@ -863,10 +790,13 @@ local function append_recall_trail(lines, spans, insight)
 end
 
 local function build_card_detail()
-  local entry = state.page == "cards" and selected_card_entry() or nil
+  local entry = state.page == "overview" and selected_card_entry() or nil
   local lines, spans = {}, {}
   add_line(lines, spans, " Card details", HIGHLIGHTS.heading)
   add_line(lines, spans, "")
+  if entry and entry.kind then
+    return build_library_detail(entry)
+  end
   if not entry then
     local no_match = state.query ~= "" or state.filter ~= "all"
     add_line(
@@ -922,6 +852,7 @@ local function build_card_detail()
     end
     return lines, spans
   end
+  add_line(lines, spans, " e edit  M move  D delete  p preview", HIGHLIGHTS.accent)
   local status = card_state(card, os.time())
   local card_schema = schema.for_kind(config, card.kind) or {}
   local insight = state.insights.by_card[card] or { reviews = {}, reasons = {} }
@@ -947,9 +878,8 @@ local function build_card_detail()
   end
   add_line(lines, spans, "")
   add_line(lines, spans, " Scheduling", HIGHLIGHTS.title)
-  add_line(lines, spans, "  Card type    " .. (card_schema.label or card.kind), HIGHLIGHTS.muted)
-  add_line(lines, spans, "  Lifecycle    " .. status.lifecycle, HIGHLIGHTS.muted)
-  add_line(lines, spans, "  Availability " .. status.availability, HIGHLIGHTS.muted)
+  add_line(lines, spans, "  " .. truncate(card_schema.label or card.kind, side_width() - 4), HIGHLIGHTS.muted)
+  add_line(lines, spans, "  " .. status.lifecycle .. " · " .. status.availability, HIGHLIGHTS.muted)
   add_line(
     lines,
     spans,
@@ -959,20 +889,12 @@ local function build_card_detail()
   add_line(
     lines,
     spans,
-    "  Interval      "
-      .. (util.trim(card.values.interval) ~= "" and util.trim(card.values.interval) .. " days" or "—"),
-    HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    "  Ease          " .. (util.trim(card.values.ease) ~= "" and util.trim(card.values.ease) or "—"),
-    HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    "  Last rating   " .. (util.trim(card.values.score) ~= "" and util.trim(card.values.score) or "—"),
+    string.format(
+      "  Interval %s d · ease %s · rating %s",
+      util.trim(card.values.interval) ~= "" and card.values.interval or "—",
+      util.trim(card.values.ease) ~= "" and card.values.ease or "—",
+      util.trim(card.values.score) ~= "" and card.values.score or "—"
+    ),
     HIGHLIGHTS.muted
   )
   if #insight.reasons > 0 then
@@ -991,13 +913,12 @@ local function build_card_detail()
   add_line(lines, spans, "")
   add_line(lines, spans, " Source", HIGHLIGHTS.title)
   add_line(lines, spans, "  " .. truncate(card_source(card), math.max(20, side_width() - 4)), HIGHLIGHTS.muted)
+  local chapter = state.metadata.chapters[chapters.id(state.metadata, card)]
+  add_line(lines, spans, "  Chapter: " .. (chapter and chapter.label or "Unfiled"), HIGHLIGHTS.muted)
   add_line(lines, spans, "  Tags: " .. table.concat(card_tags(card), ", "), HIGHLIGHTS.muted)
   if util.trim(card.values.id) ~= "" then
     add_line(lines, spans, "  ID: " .. util.trim(card.values.id), HIGHLIGHTS.muted)
   end
-  add_line(lines, spans, "")
-  add_line(lines, spans, " Hint", HIGHLIGHTS.title)
-  add_line(lines, spans, "  " .. truncate(detail_hint(status), math.max(20, side_width() - 4)), HIGHLIGHTS.accent)
   if state.capabilities.suspend or state.capabilities.bury or state.capabilities.delete then
     add_line(lines, spans, "")
     add_line(lines, spans, " Actions", HIGHLIGHTS.title)
@@ -1017,58 +938,35 @@ local function build_card_detail()
   return lines, spans
 end
 
-local function distribution_bar(count, maximum, width)
-  if count <= 0 or maximum <= 0 then
-    return ""
-  end
-  return string.rep("█", math.max(1, math.floor(count / maximum * width + 0.5)))
-end
-
 local function build_stats_insights()
   local now = os.time()
   local counts = count_states(state.all_cards, now)
   local lines, spans = {}, {}
   add_line(lines, spans, " Study health", HIGHLIGHTS.heading)
   add_line(lines, spans, "")
-  add_line(lines, spans, " Queue", HIGHLIGHTS.title)
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Ready now     %4d  %s",
-      counts.ready,
-      distribution_bar(counts.ready, math.max(1, counts.total), 24)
-    ),
-    counts.ready > 0 and HIGHLIGHTS.due or HIGHLIGHTS.scheduled
-  )
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Overdue       %4d  %s",
-      counts.overdue,
-      distribution_bar(counts.overdue, math.max(1, counts.total), 24)
-    ),
-    counts.overdue > 0 and HIGHLIGHTS.overdue or HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Scheduled     %4d  %s",
-      counts.scheduled,
-      distribution_bar(counts.scheduled, math.max(1, counts.total), 24)
-    ),
-    HIGHLIGHTS.scheduled
-  )
+  local attention = state.insights.attention or {}
   add_line(lines, spans, "")
-  add_line(lines, spans, " Learning state", HIGHLIGHTS.title)
-  add_line(lines, spans, string.format("  New           %4d", counts.new), HIGHLIGHTS.new)
-  add_line(lines, spans, string.format("  Learning      %4d", counts.learning), HIGHLIGHTS.learning)
-  add_line(lines, spans, string.format("  Relearning    %4d", counts.relearning), HIGHLIGHTS.learning)
-  add_line(lines, spans, string.format("  Review        %4d", counts.review), HIGHLIGHTS.review)
-  add_line(lines, spans, string.format("  Suspended     %4d", counts.suspended), HIGHLIGHTS.suspended)
-  add_line(lines, spans, string.format("  Buried        %4d", counts.buried), HIGHLIGHTS.buried)
+  add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
+  if #attention == 0 then
+    add_line(
+      lines,
+      spans,
+      counts.total == 0 and "  Statistics appear after you add cards." or "  No cards need attention right now.",
+      HIGHLIGHTS.muted
+    )
+  else
+    for index = 1, math.min(5, #attention) do
+      local insight = attention[index]
+      local reason = insight.reasons[1] and insight.reasons[1].message or "recent reviews"
+      add_line(
+        lines,
+        spans,
+        "  " .. GLYPH .. " " .. truncate(card_front(insight.card) .. " · " .. reason, math.max(20, main_width() - 8)),
+        HIGHLIGHTS.overdue
+      )
+    end
+    add_line(lines, spans, "  Open Overview and choose f → Card clinic to work through them.", HIGHLIGHTS.muted)
+  end
   local tag_counts = {}
   for _, card in ipairs(state.all_cards) do
     for _, tag in ipairs(card_tags(card)) do
@@ -1096,84 +994,25 @@ local function build_stats_insights()
       )
     end
   end
-  local attention = state.insights.attention or {}
-  add_line(lines, spans, "")
-  add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
-  if #attention == 0 then
-    add_line(
-      lines,
-      spans,
-      counts.total == 0 and "  Statistics appear after you add cards." or "  No cards need attention right now.",
-      HIGHLIGHTS.muted
-    )
-  else
-    for index = 1, math.min(5, #attention) do
-      local insight = attention[index]
-      local reason = insight.reasons[1] and insight.reasons[1].message or "recent reviews"
-      add_line(
-        lines,
-        spans,
-        "  " .. GLYPH .. " " .. truncate(card_front(insight.card) .. " · " .. reason, math.max(20, main_width() - 8)),
-        HIGHLIGHTS.overdue
-      )
-    end
-    add_line(lines, spans, "  Open Cards and choose f → Card clinic to work through them.", HIGHLIGHTS.muted)
-  end
   return lines, spans
-end
-
-local function add_optional_stats_section(lines, spans, name, ...)
-  if type(stats[name]) ~= "function" then
-    return false
-  end
-  local ok, section_lines, section_spans = pcall(stats[name], ...)
-  if not ok then
-    return false
-  end
-  add_line(lines, spans, "")
-  append_section(lines, spans, section_lines, section_spans)
-  return true
 end
 
 local function build_full_stats()
-  local now = os.time()
-  local cards = state.all_cards
-  local log_entries, log_errors = state.history_entries, state.history_errors
-  local width = side_width()
-  local weeks = math.max(4, math.min(20, math.floor((width - 8) / 2)))
-  local lines, spans = {}, {}
-  add_line(lines, spans, " Analytics · " .. collection_label(), HIGHLIGHTS.heading)
-  add_line(lines, spans, "")
-  if log_errors and #log_errors > 0 then
-    add_line(
-      lines,
-      spans,
-      string.format(
-        "  ⚠ %d history line%s skipped · press c to inspect",
-        #log_errors,
-        #log_errors == 1 and "" or "s"
-      ),
-      HIGHLIGHTS.overdue
-    )
-    add_line(lines, spans, "")
-  end
-  append_section(lines, spans, stats.summary_section(cards, log_entries, now))
-  add_optional_stats_section(lines, spans, "retention_section", log_entries, now)
-  add_optional_stats_section(lines, spans, "ratings_section", log_entries, now, width)
-  add_optional_stats_section(lines, spans, "state_section", cards, now)
-  add_line(lines, spans, "")
-  append_section(lines, spans, stats.heatmap_section(log_entries, now, weeks))
-  add_line(lines, spans, "")
-  append_section(lines, spans, stats.forecast_section(cards, now, width))
-  add_line(lines, spans, "")
-  add_line(lines, spans, " About these numbers", HIGHLIGHTS.title)
-  if #log_entries == 0 then
-    add_line(lines, spans, "  No review history yet. Complete a review to begin the timeline.", HIGHLIGHTS.muted)
-  else
-    add_line(lines, spans, "  Activity is shown only since review tracking began.", HIGHLIGHTS.muted)
-    add_line(lines, spans, "  Prefer trends over conclusions from one noisy day.", HIGHLIGHTS.muted)
-  end
-  return lines, spans
+  local lines, spans = build_stats_insights()
+  return require("neorg_flashcards.ui.dashboard").render({
+    width = main_width(),
+    height = vim.fn.winheight(state.main.win),
+    ascii = config.ui.ascii,
+    label = collection_label(),
+    cards = state.all_cards,
+    history = state.history_entries,
+    progress = state.progress_entries,
+    errors = state.history_errors,
+    metadata = state.metadata,
+    date = state.date,
+    health_lines = lines,
+    health_spans = spans,
+  })
 end
 
 local function set_pane_lines(pane, lines)
@@ -1204,7 +1043,7 @@ local function tab_bar()
   for index, page in ipairs(PAGES) do
     local label = page:sub(1, 1):upper() .. page:sub(2)
     local hl = page == state.page and HIGHLIGHTS.tab_active or HIGHLIGHTS.tab_inactive
-    table.insert(chunks, string.format("%%#%s# %d %s ", hl, index, label))
+    table.insert(chunks, string.format("%%#%s# %s%s ", hl, review.is_active() and "" or (index .. " "), label))
     table.insert(chunks, "%#" .. HIGHLIGHTS.muted .. "# ")
   end
   return table.concat(chunks)
@@ -1215,22 +1054,103 @@ local function apply_chrome()
   local action_state = current_action_state()
   for _, pane in ipairs({ state.main, state.side }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) then
+      window.configure(pane.win)
       local footer = " "
       if show_shortcuts() then
         footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), action_state)
       end
-      -- A global statusline (for example lualine with laststatus=3) can replace
-      -- a window-local statusline after we render. Keep the page tabs in the
-      -- primary pane and use the always-visible secondary winbar as the key
-      -- ribbon. The statusline remains a useful fallback for simpler setups.
-      if pane == state.side and show_shortcuts() then
+      -- Keep one shortcut ribbon. Window statuslines may be replaced by the
+      -- user's global statusline, so they are decorative separators only.
+      if pane == state.side and state.page == "desk" then
+        vim.wo[pane.win].winbar = ""
+      elseif pane == state.side and show_shortcuts() then
         vim.wo[pane.win].winbar = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
       else
         vim.wo[pane.win].winbar = nav
       end
-      vim.wo[pane.win].statusline = "%#" .. HIGHLIGHTS.footer .. "#" .. statusline_escape(footer)
+      vim.wo[pane.win].statusline = "%#Normal# "
+      -- Calendar details include explanations and source labels. Keep them
+      -- readable in the narrow sidebar without changing the canvas layout.
+      vim.wo[pane.win].wrap = pane == state.side and state.page == "stats"
+      vim.wo[pane.win].linebreak = true
+      vim.wo[pane.win].breakindent = true
     end
   end
+end
+
+local function day_detail()
+  local key = calendar.day(state.date)
+  local today = calendar.day(os.time())
+  local days = calendar.activity(state.progress_entries)
+  local day = days[key]
+  local lines = { " " .. os.date("%A %d %B", state.date), "" }
+  if state.pending_events > 0 then
+    table.insert(lines, "  Provisional: " .. state.pending_events .. " events awaiting history delivery")
+  end
+  if key <= today then
+    local unique, answers = day and day.unique or 0, day and day.answers or 0
+    table.insert(
+      lines,
+      string.format(
+        "  %d unique card%s / %d answer%s",
+        unique,
+        unique == 1 and "" or "s",
+        answers,
+        answers == 1 and "" or "s"
+      )
+    )
+    if day then
+      table.insert(lines, string.format("  Again %d / Hard %d / Good %d", unpack(day.ratings)))
+      table.insert(
+        lines,
+        day.timed > 0
+            and string.format(
+              "  %.1f min recorded answer time (%d/%d timed)",
+              day.duration_ms / 60000,
+              day.timed,
+              day.answers
+            )
+          or "  Answer time unavailable"
+      )
+      table.insert(lines, string.format("  Hints used on %d answer%s", day.hints, day.hints == 1 and "" or "s"))
+      local goal = state.metadata.goals[key]
+      if goal and goal > 0 then
+        table.insert(
+          lines,
+          string.format("  Daily goal: %d / %d%s", day.unique, goal, day.unique >= goal and "  [REACHED]" or "")
+        )
+      end
+      table.insert(lines, "")
+      local by_id = {}
+      for _, card in ipairs(state.all_cards) do
+        by_id[card_key(card)] = card
+      end
+      local ids = vim.tbl_keys(day.ids)
+      table.sort(ids)
+      for index = 1, math.min(5, #ids) do
+        local card = by_id[ids[index]]
+        local label = ids[index] .. " (source unavailable)"
+        if card then
+          local _, front = schema.front(config, card)
+          label = front:gsub("\n", " ")
+        end
+        table.insert(lines, "  " .. label)
+      end
+      if #ids > 5 then
+        table.insert(lines, "  + " .. (#ids - 5) .. " more in Overview")
+      end
+    end
+  end
+  if key >= today then
+    local scheduled = #calendar.scheduled(state.all_cards, state.date, os.time(), config)
+    table.insert(lines, "")
+    table.insert(lines, string.format("  %d card%s currently scheduled", scheduled, scheduled == 1 and "" or "s"))
+    table.insert(lines, "  Schedule snapshot; future ratings can change it.")
+  end
+  table.insert(lines, "")
+  table.insert(lines, "  Enter: inspect this day's cards in Overview")
+  table.insert(lines, "")
+  return lines, { { line = 1, start_col = 0, end_col = -1, hl = HIGHLIGHTS.heading } }
 end
 
 local function render()
@@ -1238,25 +1158,54 @@ local function render()
     return
   end
   local main_lines, main_spans, side_lines, side_spans
-  if state.page == "cards" then
-    main_lines, main_spans, state.card_entries = build_cards_browser()
+  if state.page == "overview" then
+    if state.browser_level == "cards" then
+      main_lines, main_spans, state.card_entries = build_cards_browser()
+    else
+      main_lines, main_spans, state.card_entries = build_library_browser()
+    end
     side_lines, side_spans = build_card_detail()
   elseif state.page == "stats" then
-    main_lines, main_spans = build_stats_insights()
-    side_lines, side_spans = build_full_stats()
+    main_lines, main_spans = build_full_stats()
+    side_lines, side_spans = day_detail()
   else
-    main_lines, main_spans, state.entries = build_overview()
-    side_lines, side_spans = build_overview_side()
+    local counts = count_states(state.all_cards, os.time())
+    local decks = type(handlers.on_decks) == "function" and handlers.on_decks()
+      or { { id = config.id, label = collection_label() } }
+    main_lines, main_spans, state.entries, state.columns, state.sel = desk.render({
+      width = main_width(),
+      height = vim.fn.winheight(state.main.win),
+      ascii = config.ui.ascii,
+      selected = state.sel,
+      decks = decks,
+      config = config,
+      cards = state.all_cards,
+      groups = state.desk_grouping == "tags" and state.groups
+        or chapters.groups(state.all_cards, state.metadata, config, os.time()),
+      grouping = state.desk_grouping,
+      ready = counts.ready,
+      label = collection_label(),
+      query = state.desk_query,
+      history = state.progress_entries,
+      pending = state.pending_events,
+      metadata = state.metadata,
+      error = state.metadata_error,
+    })
+    side_lines, side_spans =
+      {
+        review.is_active() and " Review in progress. q returns to the desk." or (show_shortcuts() and actions.footer("desk", main_width(), current_action_state()) or ""),
+      }, {}
   end
   set_pane_lines(state.main, main_lines)
   paint(state.main, main_spans)
   set_pane_lines(state.side, side_lines)
   paint(state.side, side_spans)
   apply_chrome()
-  local entry = state.page == "cards" and selected_card_entry()
-    or (state.page == "overview" and selected_overview_entry())
+  local entry = state.page == "overview" and selected_card_entry()
+    or (state.page == "desk" and selected_overview_entry())
   if entry and state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
-    pcall(vim.api.nvim_win_set_cursor, state.main.win, { entry.line, 0 })
+    local prefix = entry.col and canvas.fit(main_lines[entry.line] or "", entry.col - 1) or ""
+    pcall(vim.api.nvim_win_set_cursor, state.main.win, { entry.line, #prefix })
   end
 end
 
@@ -1316,6 +1265,17 @@ end
 
 function M.review_group()
   local entry = selected_overview_entry()
+  if entry and entry.kind == "deck" then
+    call_handler("on_select_deck", entry.id)
+    state.sel = 1
+    for _, item in ipairs(state.entries) do
+      if item.kind == "deck" then
+        state.sel = state.sel + 1
+      end
+    end
+    render()
+    return
+  end
   if not entry then
     return
   end
@@ -1327,13 +1287,27 @@ function M.review_group()
     end
   end
   if #due == 0 then
-    util.notify("No due cards in group: " .. entry.group.name, vim.log.levels.WARN)
+    util.notify("Caught up: " .. entry.group.label .. ". Use A to review all active cards.", vim.log.levels.WARN)
     return
   end
-  review_cards(due, "tag:" .. entry.group.name, nil)
+  local tag = entry.group.name
+  review_cards(
+    due,
+    entry.group.chapter and ("chapter: " .. entry.group.label)
+      or (tag == "" and "untagged" or (tag and "tag:" .. tag or "due")),
+    nil
+  )
 end
 
 function M.review_selected()
+  local entry = selected_card_entry()
+  if state.page == "overview" and entry and entry.group then
+    local due = vim.tbl_filter(function(card)
+      return is_ready(card, os.time())
+    end, entry.group.cards)
+    review_cards(due, entry.label, "No due cards in " .. entry.label)
+    return
+  end
   local card = selected_card()
   if not card then
     util.notify("No card selected", vim.log.levels.WARN)
@@ -1368,9 +1342,9 @@ end
 
 local function selection_for_page()
   local list, field
-  if state.page == "cards" then
+  if state.page == "overview" then
     list, field = state.card_entries, "card_sel"
-  elseif state.page == "overview" then
+  elseif state.page == "desk" then
     list, field = state.entries, "sel"
   end
   return list, field
@@ -1381,7 +1355,7 @@ local function select_index(list, field, index)
     return
   end
   state[field] = math.max(1, math.min(#list, index))
-  if state.page == "cards" then
+  if state.page == "overview" then
     state.selected_card_key = browser_entry_key(list[state.card_sel])
   end
   render()
@@ -1403,8 +1377,13 @@ local function scroll_window(win, delta)
     return
   end
   vim.api.nvim_win_call(win, function()
+    if vim.wo[win].wrap then
+      vim.cmd.normal({ args = { tostring(math.abs(delta)) .. string.char(delta > 0 and 5 or 25) }, bang = true })
+      return
+    end
     local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    -- winheight() excludes the winbar; the API height includes that row.
+    local height = math.max(1, vim.fn.winheight(0))
     local max_topline = math.max(1, line_count - height + 1)
     local view = vim.fn.winsaveview()
     view.lnum = math.max(1, math.min(line_count, view.lnum + delta))
@@ -1418,8 +1397,12 @@ local function scroll_window_edge(win, edge)
     return
   end
   vim.api.nvim_win_call(win, function()
+    if vim.wo[win].wrap then
+      vim.cmd.normal({ args = { edge == "top" and "ggzt" or "Gzb" }, bang = true })
+      return
+    end
     local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    local height = math.max(1, vim.fn.winheight(0))
     local view = vim.fn.winsaveview()
     if edge == "top" then
       view.lnum, view.topline = 1, 1
@@ -1456,7 +1439,11 @@ local function move_selection_page(direction, win)
       end
     end
   end
-  select_index(list, field, target_index)
+  -- At the end of a shelf, leave the viewport intact so repeated paging can
+  -- reach the progress note below the last selectable item.
+  if target_index ~= index then
+    select_index(list, field, target_index)
+  end
 end
 
 function M.move(delta)
@@ -1464,7 +1451,12 @@ function M.move(delta)
   if not win then
     return
   end
-  if state.page == "stats" or win == state.side.win then
+  if state.page == "stats" and win == state.main.win then
+    state.date = calendar.shift(state.date, delta * 7)
+    render()
+    return
+  end
+  if win == state.side.win then
     move_window_cursor(win, delta)
     return
   end
@@ -1472,7 +1464,18 @@ function M.move(delta)
   if not list or #list == 0 then
     return
   end
-  select_index(list, field, state[field] + delta)
+  if state.page == "desk" then
+    local current = list[state[field]]
+    local target, distance = state[field], math.huge
+    for index, entry in ipairs(list) do
+      if current and entry.row == current.row + delta and math.abs(entry.col - current.col) < distance then
+        target, distance = index, math.abs(entry.col - current.col)
+      end
+    end
+    select_index(list, field, target)
+  else
+    select_index(list, field, state[field] + delta)
+  end
 end
 
 function M.scroll_page(direction)
@@ -1482,8 +1485,12 @@ function M.scroll_page(direction)
   end
   direction = direction < 0 and -1 or 1
   if state.page ~= "stats" and win == state.main.win then
+    local selected = state.sel
     move_selection_page(direction, win)
-    return
+    if state.page ~= "desk" or state.sel ~= selected then
+      return
+    end
+    -- Once the shelf ends, continue into the goal and status notes below it.
   end
   local distance = math.max(1, math.floor(vim.api.nvim_win_get_height(win) / 2))
   scroll_window(win, direction * distance)
@@ -1508,7 +1515,7 @@ function M.peek()
   if not card then
     return
   end
-  local entry = state.page == "cards" and selected_card_entry() or nil
+  local entry = state.page == "overview" and selected_card_entry() or nil
   local lines = {}
   if entry and entry.invalid then
     table.insert(lines, "** [INVALID] Flashcard block")
@@ -1567,6 +1574,7 @@ function M.context_help()
   popup.open(key_help, {
     title = " " .. state.page:sub(1, 1):upper() .. state.page:sub(2) .. " keys ",
     footer = actions.help_footer(),
+    wrap = true,
     min_width = 48,
     max_width = 72,
     min_height = 12,
@@ -1590,7 +1598,7 @@ function M.help_close()
 end
 
 function M.edit_card()
-  local entry = state.page == "cards" and selected_card_entry() or nil
+  local entry = state.page == "overview" and selected_card_entry() or nil
   local card = entry and entry.card or selected_card()
   if not card then
     return
@@ -1614,15 +1622,16 @@ function M.search()
     if input == nil or not same_hub(token) then
       return
     end
+    state.browser_level = "cards"
     state.query = util.trim(input)
     state.card_sel, state.selected_card_key = 1, nil
-    M.show("cards")
+    M.show("overview")
   end)
 end
 
 local FILTERS = {
   { value = "all", label = "All cards" },
-  { value = "clinic", label = "Card clinic" },
+  { value = "clinic", label = "Needs attention (Card Clinic)" },
   { value = "invalid", label = "Invalid blocks" },
   { value = "ready", label = "Ready now" },
   { value = "overdue", label = "Overdue" },
@@ -1637,6 +1646,15 @@ local FILTERS = {
 }
 
 filter_label = function(value)
+  if value == "day" then
+    return (calendar.day(state.date) > calendar.day(os.time()) and "Scheduled " or "Reviewed ")
+      .. calendar.day(state.date)
+      .. (calendar.day(state.date) > calendar.day(os.time()) and " (schedule snapshot)" or "")
+  elseif value:sub(1, 4) == "tag:" then
+    local tag = value:sub(5)
+    local settings = state.metadata.categories[tag] or {}
+    return "Category · " .. (settings.label or (tag == "" and "Untagged" or tag))
+  end
   if value:sub(1, 5) == "type:" then
     local id = value:sub(6)
     local card_schema = schema.for_kind(config, id)
@@ -1688,8 +1706,9 @@ function M.choose_filter()
     if not choice or not same_hub(token) then
       return
     end
+    state.browser_level = "cards"
     state.filter, state.card_sel, state.selected_card_key = choice.value, 1, nil
-    M.show("cards")
+    M.show("overview")
   end)
 end
 
@@ -1745,7 +1764,7 @@ local function delete_source(entry)
 end
 
 function M.delete_selected()
-  if state.page ~= "cards" or not state.capabilities.delete then
+  if state.page ~= "overview" or not state.capabilities.delete then
     return false
   end
 
@@ -1836,6 +1855,10 @@ function M.focus_main()
 end
 
 function M.focus_side()
+  if state.page == "desk" then
+    M.focus_main()
+    return
+  end
   if state.side.win and vim.api.nvim_win_is_valid(state.side.win) then
     vim.api.nvim_set_current_win(state.side.win)
   end
@@ -1850,21 +1873,35 @@ function M.focus_other_pane()
   end
 end
 
+function M.review_host()
+  if M.is_open() and vim.api.nvim_get_current_tabpage() == state.tab then
+    if state.page ~= "desk" then
+      M.show("desk")
+    end
+    return state.main.win
+  end
+end
+
 function M.current_view()
   return state.page
 end
 
 function M.show(view)
   view = lower(view)
-  if view ~= "overview" and view ~= "cards" and view ~= "stats" then
+  if view == "cards" then
     view = "overview"
   end
+  if view ~= "desk" and view ~= "overview" and view ~= "stats" then
+    view = "desk"
+  end
   state.page = view
+  apply_layout()
   render()
-  if view == "stats" then
-    M.focus_side()
-  else
-    M.focus_main()
+  M.focus_main()
+  if view ~= "desk" then
+    vim.api.nvim_win_call(state.main.win, function()
+      vim.fn.winrestview({ lnum = view == "stats" and 1 or vim.api.nvim_win_get_cursor(0)[1], col = 0, topline = 1 })
+    end)
   end
   return view
 end
@@ -1880,15 +1917,117 @@ local function cycle_page(delta)
   M.show(PAGES[((index - 1 + delta) % #PAGES) + 1])
 end
 
+local function reset_library(level, chapter)
+  state.browser_level, state.chapter_id = level, chapter
+  state.card_sel, state.selected_card_key = 1, nil
+  state.query, state.filter = "", "all"
+  render()
+end
+
+local function library_open()
+  local entry = selected_card_entry()
+  if not entry then
+    return
+  end
+  if entry.kind == "deck" then
+    if entry.id ~= config.id then
+      call_handler("on_select_deck", entry.id)
+    end
+    reset_library("chapters")
+  elseif entry.kind == "chapter" then
+    reset_library("cards", entry.id)
+  else
+    M.review_selected()
+  end
+end
+
+local function library_back()
+  reset_library(state.browser_level == "cards" and "chapters" or "collections")
+end
+
+local function manage_selection(action)
+  local entry = state.page == "overview" and selected_card_entry() or nil
+  if entry and entry.kind == "deck" and entry.id ~= config.id then
+    call_handler("on_select_deck", entry.id)
+    reset_library("collections")
+  end
+  local token = hub_token()
+  call_handler("on_manage", function()
+    return same_hub(token)
+  end, {
+    chapter = entry and entry.kind == "chapter" and entry.id or state.chapter_id,
+    card = entry and entry.card,
+  }, action)
+end
+
+local pane_directions = { focus_left = "h", focus_down = "j", focus_up = "k", focus_right = "l" }
+
 local function dispatch(action)
+  if review.is_active() then
+    util.notify("Finish or close the active review before navigating the workspace", vim.log.levels.WARN)
+    return false
+  end
   if not actions.is_available("hub", action, state.page, current_action_state()) then
     return false
   end
-  if action == "close" then
+  if action == "left" or action == "right" then
+    local direction = action == "left" and -1 or 1
+    if state.page == "stats" then
+      state.date = calendar.shift(state.date, direction)
+      render()
+    elseif state.page == "desk" then
+      select_index(state.entries, "sel", state.sel + direction)
+    elseif direction < 0 then
+      library_back()
+    else
+      library_open()
+    end
+  elseif action == "month_previous" or action == "month_next" then
+    state.date = calendar.month(state.date, action == "month_previous" and -1 or 1)
+    render()
+  elseif action == "today" then
+    state.date = os.time()
+    render()
+  elseif action == "manage" then
+    manage_selection()
+  elseif action == "new_chapter" then
+    manage_selection("New chapter")
+  elseif action == "move_card" then
+    manage_selection("Move card to chapter")
+  elseif action == "category" and state.page == "desk" then
+    state.desk_grouping = state.desk_grouping == "chapters" and "tags" or "chapters"
+    state.sel, state.desk_query = 1, ""
+    render()
+  elseif action == "category" then
+    local token = hub_token()
+    local choices = { { label = "All cards", filter = "all" } }
+    for _, group in ipairs(state.groups) do
+      table.insert(choices, { label = group.label, filter = "tag:" .. group.name })
+    end
+    vim.ui.select(choices, {
+      prompt = "Category",
+      format_item = function(item)
+        return item.label
+      end,
+    }, function(choice)
+      if choice and same_hub(token) then
+        state.browser_level, state.chapter_id = "cards", nil
+        state.filter = choice.filter
+        state.day_filter = nil
+        render()
+      end
+    end)
+  elseif action == "close" then
     M.close()
   elseif action == "escape" then
-    if state.page == "cards" and (state.query ~= "" or state.filter ~= "all") then
+    if state.page == "desk" and state.desk_query ~= "" then
+      state.desk_query = ""
+      state.sel = 1
+      render()
+    elseif state.page == "overview" and (state.query ~= "" or state.filter ~= "all") then
       M.clear_browser()
+    elseif state.page == "overview" and state.browser_level ~= "collections" then
+      library_back()
     else
       M.close()
     end
@@ -1900,7 +2039,7 @@ local function dispatch(action)
     end
   elseif action == "collection" then
     call_handler("on_collection")
-  elseif action == "overview" or action == "cards" or action == "stats" then
+  elseif action == "desk" or action == "overview" or action == "stats" then
     M.show(action)
   elseif action == "next_page" then
     cycle_page(1)
@@ -1912,6 +2051,10 @@ local function dispatch(action)
     M.move(-1)
   elseif action == "focus_other_pane" then
     M.focus_other_pane()
+  elseif pane_directions[action] then
+    -- Use Neovim's spatial navigation so stacked layouts and pane edges behave
+    -- exactly like Ctrl-W h/j/k/l, without changing the selected item or date.
+    vim.cmd("wincmd " .. pane_directions[action])
   elseif action == "scroll_down" then
     M.scroll_page(1)
   elseif action == "scroll_up" then
@@ -1921,17 +2064,30 @@ local function dispatch(action)
   elseif action == "scroll_bottom" then
     M.scroll_edge("bottom")
   elseif action == "activate" then
-    if state.page == "overview" then
-      M.review_due()
-    elseif state.page == "cards" then
-      M.review_selected()
+    if state.page == "desk" then
+      M.review_group()
+    elseif state.page == "overview" then
+      library_open()
     else
-      M.show("cards")
+      local day = calendar.activity(state.progress_entries)[calendar.day(state.date)]
+      state.day_filter = day and vim.deepcopy(day.ids) or {}
+      if
+        calendar.day(state.date) > calendar.day(os.time())
+        or (not day and calendar.day(state.date) == calendar.day(os.time()))
+      then
+        for _, card in ipairs(calendar.scheduled(state.all_cards, state.date, os.time(), config)) do
+          state.day_filter[card_key(card)] = true
+        end
+      end
+      state.browser_level, state.chapter_id = "cards", nil
+      state.filter = "day"
+      state.query = ""
+      M.show("overview")
     end
   elseif action == "review" then
-    if state.page == "overview" then
+    if state.page == "desk" then
       M.review_group()
-    elseif state.page == "cards" then
+    elseif state.page == "overview" then
       M.review_selected()
     else
       M.review_due()
@@ -1941,9 +2097,32 @@ local function dispatch(action)
   elseif action == "review_all" then
     M.review_all()
   elseif action == "add" then
-    call_handler("on_add")
+    local entry = state.page == "desk" and selected_overview_entry() or selected_card_entry()
+    if state.page == "overview" and state.browser_level == "collections" then
+      manage_selection("New deck")
+    else
+      local group = entry and entry.group
+      local chapter = group and group.chapter and group.name or state.chapter_id
+      if state.page == "overview" and entry and entry.kind == "chapter" then
+        chapter = entry.id
+      end
+      local tag = state.page == "desk" and state.desk_grouping == "tags" and group and group.name
+        or (state.page == "overview" and state.filter:sub(1, 4) == "tag:" and state.filter:sub(5))
+      call_handler("on_add", tag or nil, chapter)
+    end
   elseif action == "search" then
-    M.search()
+    if state.page == "desk" then
+      local token = hub_token()
+      vim.ui.input({ prompt = "Find " .. state.desk_grouping .. ": ", default = state.desk_query }, function(value)
+        if value ~= nil and same_hub(token) then
+          state.desk_query = value
+          state.sel = 1
+          render()
+        end
+      end)
+    else
+      M.search()
+    end
   elseif action == "filter" then
     M.choose_filter()
   elseif action == "sort" then
@@ -1955,11 +2134,21 @@ local function dispatch(action)
   elseif action == "bury" then
     M.bury()
   elseif action == "delete_card" then
-    M.delete_selected()
+    local entry = selected_card_entry()
+    if entry and entry.kind then
+      manage_selection(entry.kind == "deck" and "Detach UI-created deck" or "Remove chapter")
+    else
+      M.delete_selected()
+    end
   elseif action == "peek" then
     M.peek()
   elseif action == "edit_card" then
-    M.edit_card()
+    local entry = state.page == "overview" and selected_card_entry()
+    if entry and entry.kind then
+      manage_selection(entry.kind == "deck" and "Deck label" or "Rename chapter")
+    else
+      M.edit_card()
+    end
   elseif action == "check" then
     call_handler("on_check")
   elseif action == "refresh" then
@@ -1972,12 +2161,13 @@ local function new_scratch()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].filetype = "norg"
+  vim.bo[buf].filetype = "neorg_flashcards"
   vim.bo[buf].swapfile = false
   return buf
 end
 
 local function configure_window(win)
+  window.configure(win)
   vim.wo[win].number = false
   vim.wo[win].relativenumber = false
   vim.wo[win].cursorline = true
@@ -1985,36 +2175,94 @@ local function configure_window(win)
   vim.wo[win].foldcolumn = "0"
   vim.wo[win].wrap = false
   vim.wo[win].spell = false
+  vim.wo[win].fillchars = "eob: "
 end
 
 local function panel_width()
-  return math.max(38, math.min(54, math.floor(vim.o.columns * 0.36)))
+  return state.page == "stats" and 42 or math.max(38, math.min(54, math.floor(vim.o.columns * 0.36)))
 end
 
-local function apply_layout()
+apply_layout = function()
   if not M.is_open() then
     return
   end
-  local desired = vim.o.columns < 105 and "stacked" or "columns"
+  local desired = state.page == "desk" and "desk" or (vim.o.columns < 105 and "stacked" or "columns")
   local function rearrange()
     local current = vim.api.nvim_get_current_win()
-    vim.api.nvim_set_current_win(state.side.win)
-    if desired == "stacked" then
-      vim.wo[state.side.win].winfixwidth = false
-      vim.cmd("wincmd J")
-      vim.api.nvim_win_set_height(state.side.win, math.max(10, math.floor((vim.o.lines - 4) * 0.38)))
+    state.relayout = true
+    local floating = vim.api.nvim_win_get_config(state.side.win).relative ~= ""
+    if desired == "desk" then
+      if not floating then
+        vim.bo[state.side.buf].bufhidden = "hide"
+        local previous = state.side.win
+        state.side.win = nil
+        vim.api.nvim_win_close(previous, true)
+        state.side.win = vim.api.nvim_open_win(state.side.buf, false, {
+          relative = "win",
+          win = state.main.win,
+          row = math.max(0, vim.api.nvim_win_get_height(state.main.win) - 2),
+          col = 0,
+          width = vim.api.nvim_win_get_width(state.main.win),
+          height = 2,
+          style = "minimal",
+          focusable = false,
+          zindex = 40,
+        })
+        vim.wo[state.side.win].winbar = ""
+        vim.api.nvim_win_set_config(state.side.win, {
+          relative = "win",
+          win = state.main.win,
+          row = math.max(0, vim.api.nvim_win_get_height(state.main.win) - 1),
+          col = 0,
+          height = 1,
+        })
+      else
+        vim.api.nvim_win_set_config(state.side.win, {
+          relative = "win",
+          win = state.main.win,
+          col = 0,
+          row = math.max(0, vim.api.nvim_win_get_height(state.main.win) - 1),
+          width = vim.api.nvim_win_get_width(state.main.win),
+        })
+      end
+      vim.wo[state.side.win].winhighlight = "NormalFloat:Normal"
     else
-      vim.cmd("wincmd L")
-      vim.api.nvim_win_set_width(state.side.win, panel_width())
-      vim.wo[state.side.win].winfixwidth = true
+      if floating then
+        local previous = state.side.win
+        state.side.win = nil
+        vim.api.nvim_win_close(previous, true)
+        vim.api.nvim_set_current_win(state.main.win)
+        vim.cmd("belowright vsplit")
+        state.side.win = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(state.side.win, state.side.buf)
+        configure_window(state.side.win)
+      end
+      vim.api.nvim_set_current_win(state.side.win)
+      vim.wo[state.side.win].winfixheight = false
+      if desired == "stacked" then
+        vim.wo[state.side.win].winfixwidth = false
+        vim.cmd("wincmd J")
+        vim.api.nvim_win_set_height(
+          state.side.win,
+          state.page == "stats" and 5 or math.max(5, math.floor((vim.o.lines - 4) * 0.38))
+        )
+      else
+        vim.cmd("wincmd L")
+        vim.api.nvim_win_set_width(state.side.win, panel_width())
+        vim.wo[state.side.win].winfixwidth = true
+      end
     end
+    vim.wo[state.main.win].cursorline = state.page == "overview"
+    state.relayout = false
     if vim.api.nvim_win_is_valid(current) then
       vim.api.nvim_set_current_win(current)
+    else
+      M.focus_main()
     end
   end
   if vim.api.nvim_get_current_tabpage() == state.tab then
     rearrange()
-  elseif type(vim.api.nvim_tabpage_call) == "function" and state.tab and vim.api.nvim_tabpage_is_valid(state.tab) then
+  elseif type(vim.api.nvim_tabpage_call) == "function" then
     vim.api.nvim_tabpage_call(state.tab, rearrange)
   end
   state.layout = desired
@@ -2043,7 +2291,17 @@ function M.close()
   popup.close(peek)
   popup.close(key_help)
   local hub_tab = state.tab
-  for _, pane in ipairs({ state.main, state.side }) do
+  -- Neovim 0.10/0.11 can crash when deleting a background tab's last split
+  -- while a window-relative float still refers to it. Close the strip first.
+  if
+    state.side.win
+    and vim.api.nvim_win_is_valid(state.side.win)
+    and vim.api.nvim_win_get_config(state.side.win).relative ~= ""
+  then
+    pcall(vim.api.nvim_win_close, state.side.win, true)
+    state.side.win = nil
+  end
+  for _, pane in ipairs({ state.side, state.main }) do
     if pane.buf and vim.api.nvim_buf_is_valid(pane.buf) then
       pcall(vim.api.nvim_buf_delete, pane.buf, { force = true })
     end
@@ -2078,11 +2336,21 @@ function M.open(collect, opts)
     state.card_sel = 1
     state.selected_card_key = nil
     state.query = ""
+    state.desk_query = ""
+    state.desk_grouping = "chapters"
     state.filter = "all"
+    state.browser_level = opts.browser_level or state.browser_level or "collections"
+    state.chapter_id = nil
     state.sort = "due"
   end
+  state.browser_level = opts.browser_level or state.browser_level
   state.sel = opts.sel or state.sel or 1
+  if opts.reset_browser or not M.is_open() then
+    state.sel = 0 -- Resolve the active deck within the visible shelf at render time.
+  end
   state.capabilities = {
+    manage = type(handlers.on_manage) == "function",
+    move_card = type(handlers.on_manage) == "function",
     add = type(handlers.on_add) == "function",
     collection = type(handlers.on_collection) == "function",
     help = type(handlers.on_help) == "function",
@@ -2111,7 +2379,7 @@ function M.open(collect, opts)
     install_maps(state.side.buf)
     apply_layout()
   end
-  M.show(opts.view or state.page or "overview")
+  M.show(opts.view or state.page or "desk")
   return M.is_open()
 end
 
@@ -2132,7 +2400,7 @@ function M.setup(opts, extra_handlers)
     group = group,
     callback = function(args)
       local closed_win = tonumber(args.match)
-      if state.closing or (closed_win ~= state.main.win and closed_win ~= state.side.win) then
+      if state.relayout or state.closing or (closed_win ~= state.main.win and closed_win ~= state.side.win) then
         return
       end
       local hub_tab = state.tab

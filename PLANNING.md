@@ -8,6 +8,12 @@ the feature understandable.
 The architectural choices behind this plan live in
 [`docs/adr/`](docs/adr/README.md).
 
+The [ASCII study desk redesign](docs/desk-redesign.md) records the 2026-10-15
+brainstorm for Desk, Overview, and Stats, including the agreed cozy visual
+style, light gamification, interaction sketches, and implementation slices.
+It is a design draft; its scope and release placement are not yet folded into
+the milestones below.
+
 ## 0.2: Finish the unified workspace
 
 Status: released as v0.2.0 (2026-08-22)
@@ -97,6 +103,16 @@ Validation completed on 2026-08-23:
 Automatic forward/reverse siblings and cloze siblings still need a separate
 note identity design. They must not silently duplicate scheduling state inside
 one card block.
+
+## Study desk release candidate
+
+The v0.3 candidate now includes Desk / Overview / Stats, category management,
+UI-created deck definitions, an interactive calendar, unique-card goals,
+theme-aware card stacks, reduced motion, and ASCII borders. See the
+[release checklist](docs/release-checklist.md) for current validation and the
+[study desk ADR](docs/adr/0014-study-desk-and-workspace-metadata.md) for ownership
+and persistence decisions. The goal meter is a presentation target; it does
+not implement the queue quotas below.
 
 ## 0.4: Daily study plans and scheduler adapters
 

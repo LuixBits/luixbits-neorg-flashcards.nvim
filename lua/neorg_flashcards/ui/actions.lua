@@ -3,7 +3,7 @@
 
 local M = {}
 
-local HUB = { "overview", "cards", "stats" }
+local HUB = { "desk", "overview", "stats" }
 local REVIEW_ACTIVE = { "review_question", "review_answer" }
 local REVIEW_ALL = { "review_question", "review_answer", "review_complete" }
 
@@ -18,98 +18,129 @@ end
 
 local catalog = {
   hub = {
+    action({ "h", "<Left>" }, "left", "Select left / go back", HUB, {
+      descriptions = {
+        desk = "Select the previous box or note",
+        overview = "Go back to chapters or collections",
+        stats = "Select the previous day",
+      },
+    }),
+    action({ "l", "<Right>" }, "right", "Select right / open selection", HUB, {
+      descriptions = {
+        desk = "Select the next box or note",
+        overview = "Open the collection, chapter or card",
+        stats = "Select the next day",
+      },
+    }),
+    action({ "[" }, "month_previous", "Previous month", { "stats" }),
+    action({ "]" }, "month_next", "Next month", { "stats" }),
+    action({ "." }, "today", "Select today", { "stats" }),
+    action(
+      { "m" },
+      "manage",
+      "Manage collections, chapters and tags",
+      { "overview" },
+      { hints = { overview = "manage" }, capability = "manage" }
+    ),
+    action({ "g" }, "category", "Filter cards by tag / switch Desk chapters and tags", { "desk", "overview" }),
+    action({ "n" }, "new_chapter", "Create a chapter", { "overview" }, { capability = "manage" }),
+    action({ "M" }, "move_card", "Move the selected card to a chapter", { "overview" }, { capability = "move_card" }),
     action({ "q" }, "close", "Close the flashcard hub", HUB, {
-      hints = { overview = "close", cards = "close", stats = "close" },
+      hints = { desk = "close", overview = "close", stats = "close" },
       essential = true,
     }),
     action({ "<Esc>" }, "escape", "Clear a card filter, or close the hub", HUB),
     action({ "?" }, "context_help", "Show keys for the current page", HUB, {
-      hints = { overview = "keys", cards = "keys", stats = "keys" },
+      hints = { desk = "keys", overview = "keys", stats = "keys" },
       essential = true,
     }),
     -- Keep destructive discovery near `?` so the Cards ribbon retains it in
     -- the normal 54-column detail pane. It still drops before core navigation
     -- in the narrowest stacked layout.
-    action({ "D" }, "delete_card", "Delete the selected card after confirmation", { "cards" }, {
-      hints = { cards = "delete" },
+    action({ "D" }, "delete_card", "Delete the selected card after confirmation", { "overview" }, {
+      hints = { overview = "delete" },
       capability = "delete",
     }),
     action({ "H" }, "plugin_help", "Open the quick plugin guide", HUB, { capability = "help" }),
     action({ "C" }, "collection", "Switch collection", HUB, {
-      hints = { overview = "collection", cards = "collection", stats = "collection" },
+      hints = { desk = "collection", overview = "collection", stats = "collection" },
       capability = "collection",
     }),
-    action({ "1" }, "overview", "Open Overview", HUB),
-    action({ "2" }, "cards", "Open Cards", HUB, { hints = { overview = "cards", stats = "cards" } }),
-    action({ "3" }, "stats", "Open Stats", HUB, { hints = { overview = "stats" } }),
+    action({ "1" }, "desk", "Open Desk", HUB),
+    action({ "2" }, "overview", "Open Overview", HUB, { hints = { desk = "overview", stats = "overview" } }),
+    action({ "3" }, "stats", "Open Stats", HUB, { hints = { desk = "stats" } }),
     action({ "<Tab>" }, "next_page", "Open the next page", HUB),
     action({ "<S-Tab>" }, "previous_page", "Open the previous page", HUB),
     action({ "j", "<Down>" }, "next", "Select the next item or scroll the focused pane", HUB, {
       hint_key = "j/k",
-      hints = { overview = "navigate", cards = "navigate", stats = "scroll" },
-      essential = true,
+      hints = { desk = "navigate", overview = "navigate", stats = "calendar" },
+      essential = { desk = true, overview = true },
       descriptions = {
-        overview = "Select the next card; scroll when the side pane is focused",
-        cards = "Select the next card; scroll when the detail pane is focused",
-        stats = "Scroll the focused pane down",
+        desk = "Select the next row of boxes or notes",
+        overview = "Select the next collection, chapter or card; scroll in details",
+        stats = "Select the next week; scroll when the detail pane is focused",
       },
     }),
     action({ "k", "<Up>" }, "previous", "Select the previous item or scroll the focused pane", HUB, {
       descriptions = {
-        overview = "Select the previous card; scroll when the side pane is focused",
-        cards = "Select the previous card; scroll when the detail pane is focused",
-        stats = "Scroll the focused pane up",
+        desk = "Select the previous row of boxes or notes",
+        overview = "Select the previous collection, chapter or card; scroll in details",
+        stats = "Select the previous week; scroll when the detail pane is focused",
       },
     }),
-    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", HUB, {
-      hint_key = "<C-w>w",
-      hints = { overview = "pane", cards = "pane", stats = "pane" },
+    action({ "<C-h>" }, "focus_left", "Focus the pane to the left (also Ctrl-W h)", { "overview", "stats" }, {
+      hint_key = "Ctrl-h/j/k/l",
+      hints = { overview = "panes", stats = "panes" },
     }),
+    action({ "<C-j>" }, "focus_down", "Focus the pane below (also Ctrl-W j)", { "overview", "stats" }),
+    action({ "<C-k>" }, "focus_up", "Focus the pane above (also Ctrl-W k)", { "overview", "stats" }),
+    action({ "<C-l>" }, "focus_right", "Focus the pane to the right (also Ctrl-W l)", { "overview", "stats" }),
+    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", { "overview", "stats" }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
       hint_key = "Ctrl-D/U",
       hint_id = "page_scroll",
-      hints = { overview = "page", cards = "page", stats = "page" },
+      hints = { desk = "page", overview = "page", stats = "scroll" },
+      essential = { stats = true },
     }),
     action({ "<C-u>", "<PageUp>" }, "scroll_up", "Scroll the focused pane up half a page", HUB),
     action({ "gg" }, "scroll_top", "Go to the first item or top of the focused pane", HUB),
     action({ "G" }, "scroll_bottom", "Go to the last item or bottom of the focused pane", HUB),
     action({ "<CR>" }, "activate", "Run the primary action", HUB, {
       descriptions = {
-        overview = "Review everything due now",
-        cards = "Review the selected card",
-        stats = "Open Cards",
+        desk = "Open the selected deck or study category",
+        overview = "Open the collection or chapter; review a selected card",
+        stats = "Inspect cards reviewed or scheduled on the selected day",
       },
-      hints = { overview = "review due", cards = "review" },
-      capability = "review_selected",
+      hints = { desk = "open/study", overview = "open" },
     }),
     action({ "r" }, "review", "Review the selected queue or card", HUB, { capability = "review_selected" }),
     action({ "d" }, "review_due", "Review everything due now", HUB, {
       hints = { stats = "review due" },
     }),
     action({ "A" }, "review_all", "Review the full collection", HUB, { hints = { stats = "review all" } }),
-    action({ "a" }, "add", "Add a flashcard", { "overview", "cards" }, {
-      hints = { overview = "add" },
+    action({ "a" }, "add", "Add a card here / create a collection", { "desk", "overview" }, {
+      hints = { desk = "add" },
       capability = "add",
     }),
-    action({ "/" }, "search", "Search cards", { "cards" }, {
-      hints = { cards = "search" },
+    action({ "/" }, "search", "Search cards or category notes", { "desk", "overview" }, {
+      hints = { overview = "search" },
     }),
-    action({ "f" }, "filter", "Choose a card view or type", { "cards" }, { hints = { cards = "view" } }),
-    action({ "o" }, "sort", "Cycle card sorting", { "cards" }, { hints = { cards = "sort" } }),
-    action({ "X" }, "clear", "Clear search and filter", { "cards" }),
-    action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "cards" }, {
-      hints = { cards = "suspend" },
+    action({ "f" }, "filter", "Choose a card view or type", { "overview" }, { hints = { overview = "view" } }),
+    action({ "o" }, "sort", "Cycle card sorting", { "overview" }, { hints = { overview = "sort" } }),
+    action({ "X" }, "clear", "Clear search and filter", { "overview" }),
+    action({ "x" }, "toggle_suspend", "Suspend or resume the selected card", { "overview" }, {
+      hints = { overview = "suspend" },
       capability = "suspend",
       presentation = function(_, action_state)
         if action_state and action_state.selected_availability == "suspended" then
           return { description = "Resume the selected card", hint = "resume" }
         elseif action_state and action_state.selected_availability then
-          return { description = "Suspend the selected card", hint = "suspend" }
+          return { description = "Suspend the selected card until you resume it", hint = "suspend" }
         end
       end,
     }),
-    action({ "b" }, "bury", "Bury the selected card until tomorrow", { "cards" }, {
-      hints = { cards = "bury" },
+    action({ "b" }, "bury", "Bury the selected card until tomorrow", { "overview" }, {
+      hints = { overview = "bury" },
       capability = "bury",
       presentation = function(_, action_state)
         if action_state and action_state.selected_availability == "buried" then
@@ -117,35 +148,47 @@ local catalog = {
         end
       end,
     }),
-    action({ "p" }, "peek", "Open the selected card preview", { "overview", "cards" }),
-    action({ "e" }, "edit_card", "Edit the selected card", { "overview", "cards" }),
+    action({ "p" }, "peek", "Open the selected card preview", { "desk", "overview" }),
+    action({ "e" }, "edit_card", "Edit the selected card", { "desk", "overview" }, {
+      presentation = function(_, state)
+        if state and state.selection_kind and state.selection_kind ~= "card" then
+          return { description = "Rename the selected collection or chapter" }
+        end
+      end,
+    }),
     action({ "c" }, "check", "Check the flashcard collection", HUB, { capability = "check" }),
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },
   review = {
-    action({ "q", "<Esc>" }, "close", "Close review", REVIEW_ALL, {
-      hints = { review_question = "close", review_answer = "close", review_complete = "close" },
+    action({ "h", "<Left>", "q", "<Esc>" }, "close", "Return to the workspace", REVIEW_ALL, {
+      hints = { review_question = "back", review_answer = "back", review_complete = "back" },
       essential = true,
     }),
     action({ "?" }, "context_help", "Show keys for the current review state", REVIEW_ALL, {
       hints = { review_question = "keys", review_answer = "keys", review_complete = "keys" },
       essential = true,
     }),
-    action({ "<CR>", "<Space>" }, "flip_or_next", "Reveal the answer", { "review_question", "review_complete" }, {
-      descriptions = {
-        review_question = "Reveal the answer",
-        review_complete = "Close the completed review",
-      },
-      hint_key = { review_question = "Enter/Space", review_complete = "Enter" },
-      hints = { review_question = "reveal", review_complete = "return" },
-      essential = { review_question = true },
-    }),
-    action({ "j" }, "next", "Browse the next pending card", REVIEW_ACTIVE, {
+    action(
+      { "l", "<Right>", "<CR>", "<Space>" },
+      "flip_or_next",
+      "Reveal the answer",
+      { "review_question", "review_complete" },
+      {
+        descriptions = {
+          review_question = "Reveal the answer",
+          review_complete = "Close the completed review",
+        },
+        hint_key = "l/Enter",
+        hints = { review_question = "reveal", review_complete = "return" },
+        essential = { review_question = true },
+      }
+    ),
+    action({ "j", "<Down>" }, "next", "Browse the next pending card", REVIEW_ACTIVE, {
       hint_key = "j/k",
       hints = { review_question = "browse", review_answer = "browse" },
     }),
-    action({ "k" }, "previous", "Browse the previous pending card", REVIEW_ACTIVE),
-    action({ "h" }, "hint", "Show a progressive hint", { "review_question" }, {
+    action({ "k", "<Up>" }, "previous", "Browse the previous pending card", REVIEW_ACTIVE),
+    action({ "H" }, "hint", "Show a progressive hint", { "review_question" }, {
       hints = { review_question = "hint" },
     }),
     action({ "t" }, "type_answer", "Type and check the answer", { "review_question" }, {
@@ -177,12 +220,16 @@ local catalog = {
       hints = { review_answer = "undo", review_complete = "undo" },
       essential = { review_complete = true },
     }),
+    action({ "s" }, "stats", "Open Stats", { "review_complete" }, {
+      hints = { review_complete = "stats" },
+      capability = "stats",
+    }),
     action({ "e" }, "edit", "Edit the current card", REVIEW_ACTIVE),
     action({ "b" }, "bury", "Bury the card until tomorrow", REVIEW_ACTIVE, {
       hints = { review_question = "bury", review_answer = "bury" },
       capability = "bury",
     }),
-    action({ "x" }, "suspend", "Suspend the card", REVIEW_ACTIVE, {
+    action({ "x" }, "suspend", "Suspend the card until you resume it with x in Overview", REVIEW_ACTIVE, {
       hints = { review_question = "suspend", review_answer = "suspend" },
       capability = "suspend",
     }),
@@ -227,12 +274,12 @@ local catalog = {
     action({ "<Esc>" }, "leave_insert", "Leave the field and return to Normal mode", { "form" }, {
       modes = { "i" },
     }),
-    action({ "j" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
+    action({ "j", "<Down>" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
       modes = { "n" },
       hint_key = "j/k",
       hints = { form = "fields" },
     }),
-    action({ "k" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
+    action({ "k", "<Up>" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
       modes = { "n" },
     }),
     action({ "<CR>", "i" }, "edit_field", "Edit the selected field (Normal mode)", { "form" }, {
@@ -242,8 +289,8 @@ local catalog = {
 }
 
 local context_titles = {
+  desk = "Desk keys",
   overview = "Overview keys",
-  cards = "Cards keys",
   stats = "Stats keys",
   review_question = "Review keys · question",
   review_answer = "Review keys · answer",
@@ -285,6 +332,12 @@ local function display_key(key)
     ["<Space>"] = "Space",
     ["<Down>"] = "Down",
     ["<Up>"] = "Up",
+    ["<Left>"] = "Left",
+    ["<Right>"] = "Right",
+    ["<C-h>"] = "Ctrl-H",
+    ["<C-j>"] = "Ctrl-J",
+    ["<C-k>"] = "Ctrl-K",
+    ["<C-l>"] = "Ctrl-L",
     ["<C-s>"] = "Ctrl-S",
     ["<C-n>"] = "Ctrl-N",
     ["<C-d>"] = "Ctrl-D",
@@ -383,12 +436,12 @@ function M.footer(context, width, capabilities)
     end
   end
 
-  local function rendered()
+  local function rendered(compact)
     local values = {}
     for _, part in ipairs(parts) do
       table.insert(values, part.text)
     end
-    return " " .. table.concat(values, "  \194\183  ") .. " "
+    return " " .. table.concat(values, compact and " \194\183 " or "  \194\183  ") .. " "
   end
 
   width = math.max(12, tonumber(width) or 80)
@@ -407,7 +460,7 @@ function M.footer(context, width, capabilities)
     table.remove(parts, remove_index)
     result = rendered()
   end
-  return result
+  return vim.fn.strdisplaywidth(result) > width and rendered(true) or result
 end
 
 function M.help_lines(context, capabilities)
@@ -417,13 +470,17 @@ function M.help_lines(context, capabilities)
     "These are the shortcuts available here.",
     "",
   }
+  local rows, key_width = {}, 17
   for _, item in ipairs(catalog[surface_for(context)] or {}) do
     if contains(item.contexts, context) and has_capability(item, capabilities) then
-      table.insert(
-        lines,
-        string.format("  %-17s %s", keys_for_help(item), description_for(item, context, capabilities))
-      )
+      local keys = keys_for_help(item)
+      key_width = math.max(key_width, vim.fn.strdisplaywidth(keys))
+      table.insert(rows, { keys = keys, description = description_for(item, context, capabilities) })
     end
+  end
+  for _, row in ipairs(rows) do
+    local padding = string.rep(" ", key_width - vim.fn.strdisplaywidth(row.keys) + 2)
+    table.insert(lines, "  " .. row.keys .. padding .. row.description)
   end
   table.insert(lines, "")
   table.insert(lines, "  /                 find text in this help window")

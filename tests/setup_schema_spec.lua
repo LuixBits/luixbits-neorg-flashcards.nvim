@@ -110,29 +110,43 @@ return function(T)
 
   do
     local actions = require("neorg_flashcards.ui.actions")
-    local cards_footer = actions.footer("cards", 80, { suspend = true, bury = true })
+    local cards_footer = actions.footer("overview", 80, { suspend = true, bury = true })
     assert_contains(cards_footer, "? keys", "Cards footer keeps contextual help visible")
-    local narrow_footer = actions.footer("cards", 38, { suspend = true, bury = true })
+    local narrow_footer = actions.footer("overview", 38, { suspend = true, bury = true })
     assert_true(vim.fn.strdisplaywidth(narrow_footer) <= 38, "compact shortcut hints fit the narrowest pane")
     assert_contains(narrow_footer, "? keys", "narrow shortcut hints retain help")
     assert_contains(narrow_footer, "j/k navigate", "narrow Cards hints retain focused-pane navigation")
     local narrow_stats_footer = actions.footer("stats", 38, {})
     assert_true(vim.fn.strdisplaywidth(narrow_stats_footer) <= 38, "Stats shortcut hints fit the narrowest pane")
-    assert_contains(narrow_stats_footer, "j/k scroll", "narrow Stats hints explain how to scroll")
-    local delete_footer = actions.footer("cards", 54, { delete = true })
+    assert_contains(narrow_stats_footer, "Ctrl-D/U scroll", "narrow Stats hints retain dashboard scrolling")
+    local delete_footer = actions.footer("overview", 54, { delete = true })
     assert_contains(delete_footer, "D delete", "standard Cards ribbon exposes confirmed deletion")
-    local delete_help = table.concat(actions.help_lines("cards", { delete = true }), "\n")
+    local delete_help = table.concat(actions.help_lines("overview", { delete = true }), "\n")
     assert_contains(delete_help, "D", "Cards help shows the deletion key")
     assert_contains(delete_help, "Delete the selected card after confirmation", "Cards help explains safe deletion")
     local stats_help = table.concat(actions.help_lines("stats", {}), "\n")
     assert_contains(stats_help, "Ctrl-D / PageDown", "Stats help exposes half-page scrolling")
+    assert_contains(stats_help, "Ctrl-H", "Stats help exposes directional pane navigation")
+    assert_contains(stats_help, "also Ctrl-W j", "Stats help includes native window navigation")
     assert_contains(stats_help, "gg", "Stats help exposes top navigation")
     assert_contains(stats_help, "G", "Stats help exposes bottom navigation")
     local hub_keys = {}
     for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true, delete = true })) do
       hub_keys[binding.key] = true
     end
-    for _, key in ipairs({ "<C-d>", "<C-u>", "<PageDown>", "<PageUp>", "<C-w>w", "gg", "G" }) do
+    for _, key in ipairs({
+      "<C-d>",
+      "<C-u>",
+      "<PageDown>",
+      "<PageUp>",
+      "<C-w>w",
+      "<C-h>",
+      "<C-j>",
+      "<C-k>",
+      "<C-l>",
+      "gg",
+      "G",
+    }) do
       assert_true(hub_keys[key], "hub scrolling mapping is registered: " .. key)
     end
     assert_true(hub_keys.D, "Cards deletion mapping is registered when supported")
@@ -146,7 +160,7 @@ return function(T)
     "default Japanese word → reading + English",
     "help names the configured card type in plain language"
   )
-  assert_contains(help_text, "Collections: add in setup", "help explains where new collections come from")
+  assert_contains(help_text, "Collections: setup or m > New deck", "help explains where new collections come from")
   assert_contains(help_text, "/ find", "quick guide explains native search")
   assert_contains(window_footer(), "/ find", "quick guide keeps search visible")
   assert_buffer_maps(help_popup, { "q" })

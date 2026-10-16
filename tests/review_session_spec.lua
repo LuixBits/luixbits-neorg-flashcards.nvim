@@ -28,8 +28,9 @@ return function(T)
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, -1, 0, -1, { details = true })) do
       local details = mark[4] or {}
       local label = rating_labels[details.hl_group]
-      if label then
-        local line = lines[mark[2] + 1]
+      local line = lines[mark[2] + 1]
+      -- Session counters use whole spans; controls color the exact label.
+      if label and line:sub(mark[3] + 1, details.end_col) == label then
         table.insert(marks, {
           group = details.hl_group,
           label = line:sub(mark[3] + 1, details.end_col),
@@ -103,7 +104,7 @@ return function(T)
     assert_equal(#semantic_rating_marks(review_popup), 0, "rating words in card text are not colored before reveal")
     assert_buffer_maps(review_popup, { "q", "?", "j", "k", "1", "2", "3" })
     assert_buffer_maps_absent(review_popup, { "n", "p" })
-    assert_contains(window_footer(), "Enter/Space reveal", "question review shows its current shortcuts")
+    assert_contains(window_footer(), "l/Enter reveal", "question review shows its current shortcuts")
 
     vim.cmd("Flashcards add")
     assert_true(review_engine.is_active(), "add cannot strand an active review session")
@@ -140,8 +141,10 @@ return function(T)
   assert_true(recovered, "review rendering recovers after its popup buffer is manually replaced")
   assert_true(review_engine.is_open(), "review recreates its popup after manual replacement")
   assert_true(not gated, "a popup rating cannot bypass answer reveal")
+  assert_true(not flashcards.get_review_state().showing_answer, "rating does not reveal an unseen next card")
+  review_engine.flip_or_next()
   local _, revealed_text = current_popup()
-  assert_contains(revealed_text, "Choose a rating", "first rating key reveals the answer and interval choices")
+  assert_contains(revealed_text, "Choose a rating", "explicit reveal shows the answer and interval choices")
   assert_contains(revealed_text, "1 Again", "revealed card previews the Again interval")
   do
     local marks = semantic_rating_marks(vim.api.nvim_get_current_buf())
@@ -188,7 +191,7 @@ return function(T)
     assert_equal(#marks, 3, "completion colors only the three generated rating summary labels")
     for _, mark in ipairs(marks) do
       assert_equal(mark.label, rating_labels[mark.group], "completion highlights cover exact rating labels")
-      assert_true(mark.line:match("^%d%s%s") ~= nil, "completion semantic spans stay on generated summary rows")
+      assert_true(mark.line:match("%d%s%s[AGH]") ~= nil, "completion semantic spans stay on generated summary rows")
     end
   end
   local completed_state = flashcards.get_review_state()

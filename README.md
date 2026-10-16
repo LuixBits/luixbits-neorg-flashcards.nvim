@@ -1,6 +1,6 @@
 # luixbits-neorg-flashcards.nvim
 
-![Creating and reviewing Japanese flashcards](docs/demo/review.gif?raw=true&v=0.3.0)
+![The study desk with deck boxes and chapter notes](docs/demo/desk.png)
 
 Local flashcards for Neovim, stored as plain `.norg` files.
 
@@ -13,7 +13,11 @@ it is not required to use the plugin.
 
 - Keeps cards and review history on your machine. There is no account, server,
   SQLite database, or Anki dependency.
-- Opens one full-tab workspace with Overview, Cards, and Stats pages.
+- Opens a study desk with deck boxes, chapter notes, and paper card stacks.
+  Overview manages collections, chapters, and cards; Stats combines a compact
+  calendar with progress, ratings, and forecasts.
+- Adds short card animations, session receipts, and a daily unique-card goal.
+  Motion can be disabled and borders can use plain ASCII.
 - Separates subjects such as Japanese and computer science so their cards,
   queues, and statistics never mix.
 - Supports recognition, production, kanji, sentences, question-and-answer,
@@ -39,9 +43,9 @@ composer, workspace, review window, and statistics still work.
 
 ## Install
 
-Version 0.3 is still unreleased, so these examples follow the `main` branch.
-After the release, use a `0.3.x` version constraint if you prefer a fixed
-release line.
+These examples pin v0.3.0. If you are updating from v0.2, follow the
+[upgrade guide](docs/UPGRADING.md) to configure named collections before
+opening the workspace. Existing named-collection setups need no card migration.
 
 ### lazy.nvim
 
@@ -56,7 +60,7 @@ With Neorg:
 },
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  branch = "main",
+  tag = "v0.3.0",
   cmd = "Flashcards",
   dependencies = { "nvim-neorg/neorg" },
   config = function()
@@ -84,7 +88,7 @@ does not need LuaRocks:
 ```lua
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  branch = "main",
+  tag = "v0.3.0",
   cmd = "Flashcards",
   config = function()
     local presets = require("neorg_flashcards.presets")
@@ -107,7 +111,7 @@ does not need LuaRocks:
 
 ### Native packages and other plugin managers
 
-Clone the current main branch into a Neovim package directory, load it, then use the same
+Clone the release into a Neovim package directory, load it, then use the same
 setup table:
 
 ```sh
@@ -115,7 +119,7 @@ plugin_root="$(nvim --headless --clean \
   '+lua io.write(vim.fn.stdpath("data") .. "/site/pack/luixbits/opt")' \
   +qa 2>/dev/null)"
 mkdir -p "$plugin_root"
-git clone --branch main --depth 1 \
+git clone --branch v0.3.0 --depth 1 \
   https://github.com/LuixBits/luixbits-neorg-flashcards.nvim.git \
   "$plugin_root/luixbits-neorg-flashcards.nvim"
 ```
@@ -133,13 +137,17 @@ with `dir = "~/projects/luixbits-neorg-flashcards.nvim"`.
 1. Run `:Flashcards`.
 2. Press `a` to add a card. With the setup above, the composer opens directly.
 3. Fill the required fields and press `Ctrl-S`.
-4. Press `Enter` in Overview to review everything due now.
+4. Open the deck box with `Enter`, then choose All due or a chapter note.
+   Press `Enter` again to start its due stack. `d` starts all due cards directly.
 5. Reveal with `Space` or `Enter`, then rate with `1`, `2`, or `3`.
 
 The workspace shows useful current shortcuts in its winbar by default. Press
 `?` for the complete list for the page or review state you are in. That help
 window is searchable with Neovim's normal `/`, `n`, and `N` keys. Set
 `ui.show_shortcuts = false` if you prefer less persistent chrome.
+
+App scratch windows suppress visible whitespace and concealment; normal note
+buffers retain their settings.
 
 The plugin does not install global mappings. If you want one, map only the
 workspace entry point:
@@ -188,8 +196,8 @@ require("neorg_flashcards").setup({
 
 Setup creates either directory when it is missing. Restart Neovim, then press
 `C` anywhere in the workspace to switch between the configured collections, or
-run `:Flashcards collection computer_science`. `C` does not create a collection
-or edit your configuration. Switching is blocked while a composer or review
+run `:Flashcards collection computer_science`. To create a deck in the UI,
+open Overview with `2`, press `m`, and choose New deck. Switching is blocked while a composer or review
 session is open so a draft or rating cannot drift into another subject.
 
 Each collection above enables one card type, so `a` opens its composer directly.
@@ -218,8 +226,9 @@ configured collection and card-type IDs.
 
 | Command | Action |
 | --- | --- |
-| `:Flashcards` / `:Flashcards overview` | Open Overview |
-| `:Flashcards cards` | Open the searchable Cards page |
+| `:Flashcards` / `:Flashcards desk` | Open the study desk |
+| `:Flashcards overview` | Open the manager |
+| `:Flashcards cards` | Compatibility alias for Overview |
 | `:Flashcards stats` | Open Stats |
 | `:Flashcards collection [id]` | Choose or directly switch collection |
 | `:Flashcards add [type]` | Choose or directly add a card type |
@@ -237,31 +246,47 @@ configured collection and card-type IDs.
 The workspace uses buffer-local mappings. Nothing remains mapped after it
 closes.
 
-- `1`, `2`, `3`: open Overview, Cards, or Stats.
+- `1`, `2`, `3`: open Desk, Overview, or Stats.
 - `Tab`, `Shift-Tab`: move between pages.
 - `C`: switch collection.
 - `?`: show the current page's complete key list.
 - `H`: open the short plugin guide.
-- `Ctrl-W w`: focus the other pane.
-- `j`, `k`, arrows: select a card in the primary pane or scroll the focused
-  detail/statistics pane.
+- `Ctrl-h/j/k/l` or `Ctrl-W h/j/k/l`: focus the pane in that direction.
+  `Ctrl-W w` cycles panes. In narrow windows, use `Ctrl-j/k` for the stacked panes.
+- `h/j/k/l` or arrows: move through the Desk and calendar; in Overview,
+  `j/k` selects rows, `l`/Right opens a selection, and `h`/Left goes back.
+  `j/k` or Up/Down scrolls the focused detail pane.
 - `Ctrl-D`, `Ctrl-U`, PageDown, PageUp: move half a page.
 - `gg`, `G`: go to the top or bottom.
 - `d`, `A`: review due cards or all active cards.
-- `a`: add a card from Overview or Cards.
+- `a`: add a card in its chapter; on Overview’s collection list, create a collection.
 - `c`: run the collection check; `R`: reload; `q`: close.
 
-Overview groups cards by tags and keeps the due queue as the primary action.
-Cards is the working list:
+Desk shows one box per collection, with chapter notes inside it. `Enter` opens
+a box, then studies the selected note's due cards. `g` switches between chapters
+and tags. Move by rows with `j/k` and by items with `h/l`; `/` finds notes. `C`
+reaches every collection when the shelf has more boxes than fit. All due
+contains each card once. Caught-up notes do not start a cram session.
 
-- `/`: search fronts, answers, tags, types, sources, dates, and states.
-- `f`: choose a state, Card Clinic, or a card type.
-- `o`: cycle due, front, state, and source sorting.
-- `X`: clear the current search and view. `Esc` clears it when active, then
-  closes the workspace when pressed again.
-- `Enter` or `r`: review the selected active, valid card.
-- `p`: preview; `e`: edit; `x`: suspend or resume; `b`: bury or unbury.
-- `D`: delete the exact selected block after confirmation.
+Overview opens a compact collection → chapter → card browser. `Enter`, `l` or
+Right opens a collection or chapter; `h` or Left goes back. The side pane shows
+the selected item's details and actions. `:Flashcards cards` goes straight to
+the card list.
+
+| Selection | Create | Rename/edit | Remove | Other |
+| --- | --- | --- | --- | --- |
+| Collection | `a` new collection | `e` display label | `D` detach UI-created collection | `m` settings |
+| Chapter | `n` new chapter; `a` card here | `e` name | `D` move its cards to Unfiled | `r` study due cards |
+| Card | `a` card in this chapter | `e` composer | `D` confirmed source deletion | `M` move to chapter; `p` preview |
+
+- `/` searches fronts, answers, tags, types, sources, dates, and states.
+- `f` selects a state, Card Clinic, or card type; `g` filters by tag.
+- `o` cycles due, front, state, and source sorting.
+- `X` clears search/filter; `Esc` clears an active filter, goes back a level,
+  or closes the collection list.
+- `Enter` or `r` reviews a selected active, valid card.
+- `x` suspends/resumes a card; `b` buries/unburies it.
+- `m` manages the selected collection or chapter, tags, and daily goal.
 
 Invalid cards appear as `[INVALID]`. They remain searchable and editable, but
 cannot be reviewed or scheduled. A closed invalid block can also be deleted;
@@ -271,14 +296,68 @@ first saves the previous complete source as
 change unsaved so normal buffer undo still works. Deleting a card does not
 remove its review-history entries.
 
-Stats shows review totals, streaks, retention, answer distribution, card
-states, median answer time, a heatmap, a seven-day forecast, tag sizes, and
-cards that need attention.
+Stats opens a Monday-first month calendar. Use `h/l` for days, `j/k` for weeks,
+`[` and `]` for months, and `.` for today. `Enter` opens that day's cards in
+Overview. The detail pane shows unique cards, answers, ratings, recorded answer
+time, hints, and saved goals. Historical cards that no longer exist are marked
+as unavailable. Future dates show a schedule snapshot that later ratings can
+change; overdue cards stay in today's backlog.
+
+The main area shows totals, streaks, retention, card states, median answer
+time, heatmap, seven-day forecast, and Needs attention beside the compact
+calendar. `Ctrl-D` / `Ctrl-U` scroll down/up, and `G` / `gg` go to the
+bottom/top. These keys leave the selected date unchanged. Use `Ctrl-h/l` to
+switch between analytics and day details, or `Ctrl-j/k` when they are stacked.
+`Ctrl-W w` also switches panes; scrolling affects the focused pane.
+Weekly card-days count a card once per day; they are not a
+count of distinct cards across the week. Retention means Hard or Good as a
+percentage of effective ratings. Recorded answer time includes time with a
+card open, and missing durations remain unavailable.
+
+### Collections, chapters, tags, and goals
+
+A collection is a subject such as Japanese or Computer Science. Chapters such
+as Lesson 1, Lesson 2, or Verbs organize cards inside it. A card belongs to at
+most one chapter and can have several tags, such as `travel` or `household`.
+Neither chapter names nor tags depend on source filenames.
+
+Existing cards start in Unfiled. Create a chapter with `n`, then use `M` on a
+card to move it. For lesson tags already in your cards, `m` → Create chapter
+from tag creates a chapter and moves matching cards after confirmation. Tags
+stay on the cards. Removing a chapter returns its cards to Unfiled and keeps
+their IDs, scheduling, and history. Adding from a chapter assigns the new card
+to it; the card still goes into the collection's configured default file.
+
+Press `m` in Overview to change the deck's display label or daily goal; create,
+label, color, or order category notes; rename or merge tags; or remove a tag
+without deleting its cards. Rename and merge operate on complete tag tokens:
+changing `food` leaves `seafood` alone. The operation confirms its card count,
+preflights sources, and saves `<source>.flashcards-tags-backup` snapshots.
+Modified source buffers stay unsaved until you write them. A partial failure
+reports the changed files and the point where it stopped.
+
+New deck asks for an ID, name, directory, and bundled card type. The same root,
+schema, and history-isolation checks used by setup apply. Enable another card
+type and Deck default card type manage UI-created decks. Configured decks keep
+those settings in Lua or Nix. Detaching a UI-created deck preserves its files.
+
+The default goal is 20 unique cards per day; set it to 0 to disable it. Again
+counts as study, and retries on the same day count once. Undo reverses progress.
+The day's goal is saved when study begins, so editing the default does not
+change historical stamps. A goal does not limit queues or change scheduling.
+Cards awaiting durable history delivery count provisionally and are deduplicated
+on replay. Reviews in unsaved source buffers enter daily history when saved.
+
+Chapter names and membership, presentation, and goal snapshots live in each root's
+`.flashcards-workspace.json`. UI-created deck definitions live in
+`stdpath("data")/neorg-flashcards/decks.json`; set `deck_registry` to another
+path, or `false` for a wholly declarative setup. Include these files in your
+normal backups. Invalid sidecars are reported and preserved for repair.
 
 ## Card Clinic
 
-Card Clinic is a Cards view, not another command or mode. Press `f` in Cards
-and choose it. A card appears when it is active and any of these are true:
+Press `f` in Overview and choose Needs attention (Card Clinic). A card appears
+when it is active and any of these are true:
 
 - its lapse count reached `leech_threshold`;
 - at least two of its last three effective reviews were Again;
@@ -288,7 +367,7 @@ and choose it. A card appears when it is active and any of these are true:
 Undo events are respected. Suspended and buried cards stay out of the clinic.
 The detail pane states the non-redundant evidence and shows a compact recall
 trail, with the newest rating on the right. Stats uses the same rules, so its
-“Needs attention” count and the Cards view cannot disagree.
+“Needs attention” count and the Overview filter cannot disagree.
 
 ## Composer
 
@@ -298,7 +377,7 @@ Delete cannot merge them into the value.
 
 - Insert mode: `Enter` advances and saves on the final field; `Tab` and
   `Shift-Tab` move between fields.
-- Normal mode: `j` and `k` select a field; `Enter` or `i` edits it.
+- Normal mode: `j/k` or Down/Up selects a field; `Enter` or `i` edits it.
 - `Ctrl-S`: save and return.
 - `Ctrl-N`: save and start another card.
 - `q` or `Esc` in Normal mode: cancel, with confirmation for a changed draft.
@@ -428,20 +507,33 @@ silently attached to the preceding field.
 
 Review mappings exist only in the review window:
 
-- `Space` or `Enter`: reveal.
-- `h`: show a progressively larger hint.
+- `l`, Right, `Space` or `Enter`: reveal.
+- `h`, Left, `q` or `Esc`: return to the workspace.
+- `H`: show a progressively larger hint.
 - `t`: type and compare an answer when the card type enables it.
 - `1`: Again; requeue once later in this session.
 - `2`: Hard; remove from the current queue.
 - `3`: Good; remove from the current queue.
-- `j`, `k`: browse pending cards.
+- `j/k` or Down/Up: browse pending cards.
 - `u`: undo the latest rating while it is still the latest action.
 - `b`: bury until tomorrow; `x`: suspend; `e`: edit.
-- `?`: current review keys; `q` or `Esc`: close.
+- `?`: current review keys.
 
-Pressing a rating before reveal reveals the answer first. The revealed card
-shows the next interval beside each rating. An Again card is requeued only once
-per session, so Again cannot create an endless retry loop.
+Rating keys do nothing until you explicitly reveal the answer. This prevents
+a held key from revealing and rating the next card. The piles distinguish
+pending attempts from cards reviewed in this session. A finished receipt shows
+unique cards and answer counts separately; `u` undoes the last rating, `Enter`
+returns to the desk, and `s` opens Stats.
+
+The source filename appears in muted workspace chrome, outside the study card.
+The revealed card shows the next interval beside each rating. An Again card is
+requeued only once per session, so Again cannot create an endless retry loop.
+
+Bury (`b`) sets a card aside until the next local midnight. It becomes eligible
+again automatically, subject to its existing due date. Suspend (`x`) excludes
+the card until you resume it with `x` in Overview. You can unbury a card early
+with `b` there too. Both actions remove it from the current review and preserve
+its content, learning schedule and history. They do not count as ratings.
 
 Typed answers are intended for short answers and are opt-in per field.
 Comparison ignores case, outside spaces, and repeated whitespace, then chooses
@@ -512,7 +604,11 @@ Top-level options:
 | --- | --- |
 | `default_collection` | ID selected at startup; required |
 | `collections` | Non-empty map of collection IDs to collection tables |
+| `deck_registry` | Path for UI-created deck definitions, or `false` to disable them |
 | `ui.show_shortcuts` | Show compact shortcut ribbons; default `true` (the focused long editor keeps its apply/cancel footer) |
+| `ui.motion` | Short, cancellable card animations; default `true` |
+| `ui.ascii` | Plain ASCII desk/card borders; default `false` |
+| `ui.desk_highlights` | Theme links or exact attributes for desk materials and selection |
 | `ui.rating_highlights` | Again, Hard, and Good highlight definitions |
 | `ui.heatmap_highlights` | Activity highlight definitions for levels 0–4 |
 | `on_review(event)` | Optional observer after a source change persists |
@@ -544,6 +640,18 @@ The defaults follow the colorscheme:
 
 ```lua
 ui = {
+  motion = true,
+  ascii = false,
+  desk_highlights = {
+    ink = { link = "Normal" },
+    edge = { link = "Comment" },
+    shadow = { link = "NonText" },
+    note = { link = "String" },
+    title = { link = "Title" },
+    selected = { link = "IncSearch" },
+    accent = { link = "Special" },
+    muted = { link = "Comment" },
+  },
   rating_highlights = {
     again = { link = "DiagnosticError" },
     hard = { link = "DiagnosticWarn" },
@@ -605,7 +713,7 @@ Add the flake input:
 
 ```nix
 inputs.luixbits-neorg-flashcards.url =
-  "github:LuixBits/luixbits-neorg-flashcards.nvim";
+  "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.0";
 ```
 
 Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:
@@ -742,7 +850,7 @@ lua/neorg_flashcards/form.lua          protected add/edit composer
 lua/neorg_flashcards/review.lua        finite review queue and answer rendering
 lua/neorg_flashcards/answer_diff.lua   UTF-8-aware typed-answer comparison
 lua/neorg_flashcards/card_insights.lua recall trails and clinic signals
-lua/neorg_flashcards/overview.lua      Overview, Cards, Clinic, and Stats UI
+lua/neorg_flashcards/overview.lua      Desk, Overview, Clinic, and Stats workspace
 lua/neorg_flashcards/schedule.lua      scheduling and card-state calculation
 lua/neorg_flashcards/store.lua         guarded source writes and deletion
 lua/neorg_flashcards/history.lua       append-only JSONL ledger and retry outbox

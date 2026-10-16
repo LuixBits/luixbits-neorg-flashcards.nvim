@@ -3,6 +3,19 @@ local util = require("neorg_flashcards.util")
 local M = {}
 
 M.groups = {
+  desk = {
+    ink = "NeorgFlashcardsInk",
+    edge = "NeorgFlashcardsEdge",
+    shadow = "NeorgFlashcardsShadow",
+    note = "NeorgFlashcardsNote",
+    title = "NeorgFlashcardsDeskTitle",
+    selected = "NeorgFlashcardsDeskSelected",
+    accent = "NeorgFlashcardsDeskAccent",
+    muted = "NeorgFlashcardsDeskMuted",
+    again = "NeorgFlashcardsAgain",
+    hard = "NeorgFlashcardsHard",
+    good = "NeorgFlashcardsGood",
+  },
   hub = {
     due = "NeorgFlashcardsDue",
     overdue = "NeorgFlashcardsOverdue",
@@ -52,6 +65,16 @@ M.groups = {
 }
 
 M.defaults = {
+  desk_highlights = {
+    ink = { link = "Normal" },
+    edge = { link = "Comment" },
+    shadow = { link = "NonText" },
+    note = { link = "String" },
+    title = { link = "Title" },
+    selected = { link = "Visual" },
+    accent = { link = "Special" },
+    muted = { link = "Comment" },
+  },
   rating_highlights = {
     again = { link = "DiagnosticError" },
     hard = { link = "DiagnosticWarn" },
@@ -138,6 +161,9 @@ local function define_configured(section, key, group, fallback)
 end
 
 function M.apply()
+  for name, definition in pairs(M.defaults.desk_highlights) do
+    define_configured("desk_highlights", name, M.groups.desk[name], definition.link)
+  end
   for group, link in pairs(DEFAULT_LINKS) do
     vim.api.nvim_set_hl(0, group, { bold = DEFAULT_BOLD[group] or nil, default = true, link = link })
   end

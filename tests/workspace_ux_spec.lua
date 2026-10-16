@@ -364,8 +364,8 @@ return function(T)
       "english: old",
       "@end",
     }, first.collections.japanese.path .. "/cards.norg")
-    assert_true(flashcards.overview({ view = "cards", reset_browser = true }), "the Cards page opens")
-    assert_equal(overview.current_view(), "cards", "the hub starts on Cards")
+    assert_true(flashcards.overview({ view = "overview", reset_browser = true }), "the Cards page opens")
+    assert_equal(overview.current_view(), "overview", "the hub starts on Cards")
 
     local second = one_type_workspace("hub-second")
     second.collections.japanese.label = "Fresh Japanese"
@@ -378,12 +378,12 @@ return function(T)
       "@end",
     }, second.collections.japanese.path .. "/cards.norg")
     assert_true(flashcards.setup(second), "an idle open hub can be reconfigured")
-    assert_equal(overview.current_view(), "cards", "reconfiguration preserves the current hub page")
+    assert_equal(overview.current_view(), "overview", "reconfiguration preserves the current hub page")
     local hub_text = T.current_tab_text()
     assert_contains(hub_text, "Fresh Japanese", "the open hub adopts the new collection label")
     assert_contains(hub_text, "新しい", "the open hub reloads cards from the new collection")
     assert_true(not hub_text:find("古い", 1, true), "the open hub does not retain cards from the old provider")
-    overview.show("overview")
+    overview.show("desk")
   end
 
   form.close({ force = true })

@@ -177,7 +177,7 @@ return function(T)
 
   vim.cmd("silent! bwipeout!")
   T.setup(T.config)
-  assert_true(flashcards.overview({ view = "overview", reset_browser = true }), "the shared hub state is restored")
+  assert_true(flashcards.overview({ view = "desk", reset_browser = true }), "the shared hub state is restored")
   overview.close()
   vim.fn.delete(test_root, "rf")
 end

@@ -54,7 +54,7 @@ vim.cmd.write()
 vim.cmd("Flashcards review file")
 
 local popup = vim.api.nvim_get_current_buf()
-if vim.bo[popup].buftype ~= "nofile" or vim.bo[popup].filetype ~= "norg" then
+if vim.bo[popup].buftype ~= "nofile" or vim.bo[popup].filetype ~= "neorg_flashcards" then
   error("plain-Neovim review popup was not created")
 end
 

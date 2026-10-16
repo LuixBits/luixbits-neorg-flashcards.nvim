@@ -14,6 +14,10 @@ local stats = require("neorg_flashcards.stats")
 local store = require("neorg_flashcards.store")
 local util = require("neorg_flashcards.util")
 
+local registry = require("neorg_flashcards.registry")
+local manage = require("neorg_flashcards.manage")
+local setup_options = nil
+
 local M = {}
 M.presets = presets
 
@@ -33,6 +37,7 @@ local record_card_state = function() end
 local activate_collection_runtime = function() end
 
 local command_routes = {
+  "desk",
   "overview",
   "cards",
   "stats",
@@ -353,6 +358,13 @@ local function insert_card(kind, values, target, card_config)
     return result
   end
 
+  if target.chapter and target.chapter ~= "" then
+    local card = parser.parse_lines(card_lines, target.path)[1]
+    local assigned, chapter_error = require("neorg_flashcards.chapters").move(card_config, { card }, target.chapter)
+    if not assigned then
+      util.notify("Card saved in Unfiled; chapter assignment failed: " .. tostring(chapter_error), vim.log.levels.WARN)
+    end
+  end
   advance_add_anchor(target, row, #card_lines, bufnr)
   local message = write_err or ("Flashcard saved to " .. target.label)
   local result = add_result(target, true, persisted, message)
@@ -526,13 +538,15 @@ end
 ---Add a card straight to the default file, no matter which buffer is current.
 ---Used by the overview's `a` key. Falls back to default_card_type.
 ---@param kind string|nil
-function M.add_to_default(kind)
+function M.add_to_default(kind, initial_values, chapter)
   kind = util.trim(kind or "")
   if kind == "" then
     if form_blocks("adding another card") or review_blocks("adding a card") then
       return false
     end
-    return choose_card_type(M.add_to_default)
+    return choose_card_type(function(selected)
+      return M.add_to_default(selected, initial_values, chapter)
+    end)
   end
 
   if not schema.for_kind(config, kind) then
@@ -554,10 +568,12 @@ function M.add_to_default(kind)
     append = true,
     create_with_heading = true,
   })
+  target.chapter = chapter
   local card_config = config
   local opened = form.open(card_config, kind, {
     target_label = target.label,
     target_path = target.path,
+    initial_values = initial_values,
     on_close = function()
       clear_add_anchor(target.anchor)
     end,
@@ -597,6 +613,16 @@ function M.validate_collection()
   local counts = health.counts(issues)
   local diagnostics = vim.deepcopy(errors)
   local _, history_errors = history.read(config)
+  local metadata = require("neorg_flashcards.metadata")
+  local _, metadata_error = metadata.load(config)
+  if metadata_error then
+    table.insert(history_errors, metadata.path(config) .. ": " .. metadata_error)
+  end
+  local pending, outbox_errors = history.read_outbox(config)
+  vim.list_extend(history_errors, outbox_errors)
+  if #pending > 0 then
+    table.insert(history_errors, #pending .. " review events awaiting history delivery")
+  end
   vim.list_extend(diagnostics, history_errors)
   local messages = vim.deepcopy(diagnostics)
   for _, item in ipairs(issues) do
@@ -673,7 +699,11 @@ function M.overview(opts)
   end
   return overview.open(function()
     return parser.collect_flashcards(config)
-  end, opts)
+  end, opts or { view = "overview" })
+end
+
+function M.desk()
+  return M.overview({ view = "desk" })
 end
 
 function M.stats()
@@ -681,7 +711,7 @@ function M.stats()
 end
 
 function M.cards()
-  return M.overview({ view = "cards" })
+  return M.overview({ view = "overview", browser_level = "cards" })
 end
 
 -- Validate the current file against every card identity in the collection.
@@ -1102,9 +1132,11 @@ end
 ---@param args string|nil
 function M.command(args)
   local words = command_words(args)
-  local route = table.remove(words, 1) or "overview"
+  local route = table.remove(words, 1) or "desk"
 
-  if route == "overview" then
+  if route == "desk" then
+    return M.desk()
+  elseif route == "overview" then
     return M.overview()
   elseif route == "cards" then
     return M.cards()
@@ -1170,10 +1202,22 @@ function M.setup(opts)
   end
   local hub_was_open = overview.is_open()
   local hub_view = hub_was_open and overview.current_view() or nil
+  local original_options = vim.deepcopy(opts)
+  if type(opts) == "table" then
+    if opts.deck_registry ~= nil and opts.deck_registry ~= false and type(opts.deck_registry) ~= "string" then
+      error("neorg_flashcards.setup: deck_registry must be a path or false", 2)
+    end
+    local merged, registry_error = registry.merge(opts)
+    if not merged then
+      error("neorg_flashcards.setup: " .. tostring(registry_error), 2)
+    end
+    opts = merged
+  end
   local next_workspace, config_errors = collections.prepare(opts)
   if not next_workspace then
     error("neorg_flashcards.setup: invalid configuration:\n- " .. table.concat(config_errors, "\n- "), 2)
   end
+  setup_options = original_options
   workspace = next_workspace
   config = collections.active(workspace)
 
@@ -1491,6 +1535,15 @@ function M.setup(opts)
       on_bury = M.bury_card,
       on_suspend = M.toggle_suspend,
       on_edit = M.edit_card,
+      review_host = overview.review_host,
+      on_stats = function()
+        M.stats()
+      end,
+      on_close = function()
+        if overview.is_open() then
+          overview.refresh()
+        end
+      end,
     })
     history.setup(context)
     highlights.setup(context)
@@ -1498,8 +1551,121 @@ function M.setup(opts)
     stats.setup(context)
     help.setup(context)
     overview.setup(context, {
-      on_add = function()
-        M.add_to_default("")
+      on_manage = function(hub_is_current, selection, action)
+        local expected_workspace, expected_config = workspace, config
+        local function valid()
+          return workspace == expected_workspace
+            and config == expected_config
+            and overview.is_open()
+            and (not hub_is_current or hub_is_current())
+        end
+        local cards = parser.collect_flashcards(config)
+        manage.open({
+          config = config,
+          cards = cards,
+          chapter = selection and selection.chapter,
+          card = selection and selection.card,
+          action = action,
+          valid = valid,
+          refresh = overview.refresh,
+          create_deck = function(id, definition)
+            local ok, err = registry.update(setup_options, function(decks)
+              if decks[id] then
+                error("Deck ID already exists: " .. id)
+              end
+              decks[id] = definition
+            end)
+            if not ok then
+              return false, err
+            end
+            M.setup(setup_options)
+            M.select_collection(id)
+            return true, "Deck created"
+          end,
+          detach_deck = function()
+            if setup_options.collections[config.id] then
+              return false, "This deck is defined in your configuration; remove it there to detach it"
+            end
+            local id = config.id
+            local ok, err = registry.update(setup_options, function(decks)
+              decks[id] = nil
+            end)
+            if not ok then
+              return false, err
+            end
+            M.setup(setup_options)
+            return true, "Deck detached; cards and history are kept"
+          end,
+          deck_type = function()
+            if setup_options.collections[config.id] then
+              util.notify("Card types are owned by collections." .. config.id .. ".schemas in your configuration")
+              return
+            end
+            local id, kinds = config.id, {}
+            for kind, value in pairs(require("neorg_flashcards.presets")) do
+              if type(value) == "table" and not config.schemas[kind] then
+                table.insert(kinds, kind)
+              end
+            end
+            table.sort(kinds)
+            vim.ui.select(kinds, { prompt = "Enable bundled card type" }, function(kind)
+              if not kind or not valid() then
+                return
+              end
+              local ok, err = registry.update(setup_options, function(decks)
+                table.insert(decks[id].types, kind)
+              end)
+              if not ok then
+                util.notify(err, vim.log.levels.ERROR)
+                return
+              end
+              M.setup(setup_options)
+              M.select_collection(id)
+            end)
+          end,
+          deck_default = function()
+            if setup_options.collections[config.id] then
+              util.notify(
+                "Default card type is owned by collections." .. config.id .. ".default_card_type in your configuration"
+              )
+              return
+            end
+            local id, kinds = config.id, vim.tbl_keys(config.schemas)
+            table.sort(kinds)
+            vim.ui.select(kinds, { prompt = "Default card type" }, function(kind)
+              if not kind or not valid() then
+                return
+              end
+              local ok, err = registry.update(setup_options, function(decks)
+                decks[id].default_card_type = kind
+              end)
+              if not ok then
+                util.notify(err, vim.log.levels.ERROR)
+                return
+              end
+              M.setup(setup_options)
+              M.select_collection(id)
+            end)
+          end,
+        })
+      end,
+      on_decks = function()
+        local result = {}
+        for _, id in ipairs(collections.ids(workspace)) do
+          local deck = collections.get(workspace, id)
+          local presentation = require("neorg_flashcards.metadata").load(deck)
+          table.insert(result, {
+            id = id,
+            label = presentation.label or deck.label or id,
+            path = deck.path,
+            owned = setup_options.collections[id] ~= nil,
+          })
+        end
+        return result
+      end,
+      on_select_deck = M.select_collection,
+      on_add = function(tag, chapter)
+        M.add_to_default("", tag and { tags = tag } or nil, chapter)
       end,
       on_review_due = M.review_due,
       on_review_all = M.review_all,

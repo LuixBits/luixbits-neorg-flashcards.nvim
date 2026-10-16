@@ -713,6 +713,7 @@ function M.context_help()
   popup.open(key_help, {
     title = " " .. actions.title("form", form_capabilities()) .. " ",
     footer = actions.help_footer(),
+    wrap = true,
     min_width = 56,
     max_width = 76,
     min_height = 12,
@@ -1060,6 +1061,7 @@ end
 
 local function configure_window(buf)
   state.win = vim.api.nvim_open_win(buf, true, window_config())
+  require("neorg_flashcards.ui.window").configure(state.win)
   vim.wo[state.win].cursorline = true
   vim.wo[state.win].number = false
   vim.wo[state.win].relativenumber = false

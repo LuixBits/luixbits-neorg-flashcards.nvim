@@ -1,5 +1,51 @@
 # Upgrade guide
 
+## Study desk update within v0.3
+
+Existing named-collection setups, card files, scheduling fields, and version-1
+history remain compatible. No card migration is required for this UI update.
+
+- The pages are now `1 Desk`, `2 Overview`, and `3 Stats`. Bare `:Flashcards`
+  opens Desk; `:Flashcards overview` opens the manager. `:Flashcards cards` and
+  `cards()` open its card-list level. Use `desk()` for the new study surface.
+- Enter opens a deck box, then studies the due cards on the selected chapter
+  note. `g` switches to tag notes. `review tag` retains its explicit all-active matching-card behavior.
+  `A` remains an intentional cram action.
+- In review, `h`/Left returns to the workspace and `l`/Right reveals the answer.
+  Hints moved from `h` to `H`. `j/k` and Up/Down browse pending cards.
+  Enter/Space reveal and q/Esc close remain available.
+- `Ctrl-h/j/k/l` moves between Overview and Stats panes by direction, alongside
+  native `Ctrl-W h/j/k/l`. Narrow windows stack panes; use `Ctrl-j/k` there.
+- Rating keys require explicit reveal. They no longer reveal
+  a hidden answer. This prevents key repeat from rating the next question.
+- Optional metadata appears at `<collection>/.flashcards-workspace.json` when
+  you study or change presentation/goals. Back it up with the collection.
+  Existing days without a saved goal show activity rather than invented stamps.
+- UI-created decks use `stdpath("data")/neorg-flashcards/decks.json`. Set the
+  top-level `deck_registry = false` if Lua/Nix should define every deck. A
+  registry ID cannot override a configured collection.
+- `ui.motion = false` disables card animation. `ui.ascii = true` uses plain
+  ASCII borders. `ui.desk_highlights` accepts theme links or exact attributes;
+  the defaults adapt to light and dark colorschemes.
+
+Chapters are separate from filenames and tags. Existing cards appear in
+Unfiled; create chapters with `n` in Overview and move cards with `M`. For
+existing lesson tags, `m` → Create chapter from tag moves their cards after
+confirmation and keeps those tags. Removing a chapter returns cards to Unfiled.
+Optional `chapters` and `chapter_cards` fields extend the existing workspace
+sidecar; card syntax and history versions stay unchanged. Back up the sidecar
+to preserve chapter organization.
+
+Scratch windows now use `neorg_flashcards`, not `norg`, so source-file hooks,
+visible spaces, and concealment cannot damage the app layout. Normal note
+buffers keep the user's settings.
+
+Category rename/merge/removal writes tag fields and creates
+`*.flashcards-tags-backup` snapshots. Removing a category keeps its cards.
+Inspect any reported partial operation before restoring a backup; the backup
+contains the whole source file. Configured deck schemas and defaults are still
+edited in Lua or Nix.
+
 ## Upgrade from v0.2 to v0.3
 
 Version 0.3 replaces the flat, single-root setup with named collections. It

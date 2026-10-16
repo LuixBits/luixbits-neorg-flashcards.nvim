@@ -33,19 +33,19 @@ return function(T)
   }, invalid_ui_path)
 
   vim.cmd("Flashcards")
+  assert_contains(select(2, current_popup()), "Unfiled", "unassigned cards have a chapter home")
+  vim.api.nvim_feedkeys("g", "xt", false) -- Tag notes are a separate Desk view.
   local overview_popup, overview_text = current_popup()
   _G.__flashcards_hub_test = { main_win = vim.api.nvim_get_current_win() }
-  assert_equal(overview.current_view(), "overview", "bare :Flashcards opens the Overview page")
-  assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "dashboard opens cards and analytics panes")
+  assert_equal(overview.current_view(), "desk", "bare :Flashcards opens the Desk page")
+  assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "desk opens a canvas and shortcut strip")
   assert_contains(overview_text, "nature", "overview lists the shared tag group")
   assert_contains(overview_text, "hiking", "overview lists the second tag group")
-  assert_contains(overview_text, "untagged", "overview groups cards without tags")
-  assert_contains(overview_text, "nature · 2 cards · 2 due", "overview counts cards and due per group")
-  assert_contains(overview_text, "▸", "overview shows the selected card marker")
-  assert_contains(overview_text, "● overdue   ● due   ● scheduled", "overview shows every timing state")
-  assert_true(not overview_text:find("● soon", 1, true), "overview does not advertise an unused timing state")
-  assert_contains(overview_text, "山 — mountain", "card lines show front and reveal")
-  assert_contains(overview_text, "due now", "a new card has an honest ready-now label")
+  assert_contains(overview_text, "Untagged", "desk groups cards without tags")
+  assert_contains(overview_text, "2 ready", "category notes show ready counts")
+  assert_contains(overview_text, "OPEN", "desk identifies the active box")
+  assert_contains(overview_text, "All due", "desk provides a deduplicated due stack")
+  assert_contains(overview_text, "TODAY", "desk includes the daily goal note")
   assert_buffer_maps(overview_popup, {
     "q",
     "<Esc>",
@@ -99,40 +99,14 @@ return function(T)
       stats_pane_buf = vim.api.nvim_win_get_buf(win)
     end
   end
-  local analytics_text = table.concat(vim.api.nvim_buf_get_lines(stats_pane_buf, 0, -1, false), "\n")
-  assert_contains(analytics_text, "Analytics", "dashboard shows the analytics pane")
-  assert_contains(analytics_text, "Due forecast", "analytics pane shows the forecast")
+  local shortcut_text = table.concat(vim.api.nvim_buf_get_lines(stats_pane_buf, 0, -1, false), "\n")
+  assert_contains(shortcut_text, "? keys", "desk keeps contextual help visible")
   assert_contains(
     vim.wo[_G.__flashcards_hub_test.main_win].winbar,
-    "Flashcards",
+    "1 Desk",
     "primary winbar keeps page navigation visible"
   )
-  assert_contains(
-    vim.wo[_G.__flashcards_hub_test.side_win].winbar,
-    "? keys",
-    "secondary winbar keeps shortcut help visible"
-  )
-  assert_contains(
-    vim.wo[_G.__flashcards_hub_test.side_win].winbar,
-    "j/k navigate",
-    "Overview shortcut ribbon truthfully describes focused-pane movement"
-  )
-
-  _G.__flashcards_hub_test.main_cursor = vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.main_win)
-  overview.focus_side()
-  assert_equal(vim.api.nvim_get_current_win(), _G.__flashcards_hub_test.side_win, "focus_side selects the side pane")
-  vim.api.nvim_win_set_cursor(_G.__flashcards_hub_test.side_win, { 1, 0 })
-  overview.move(1)
-  assert_equal(
-    vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.side_win)[1],
-    2,
-    "j/k movement scrolls a focused secondary pane"
-  )
-  assert_equal(
-    vim.api.nvim_win_get_cursor(_G.__flashcards_hub_test.main_win)[1],
-    _G.__flashcards_hub_test.main_cursor[1],
-    "scrolling the secondary pane does not change the primary selection"
-  )
+  assert_equal(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "", "desk has one shortcut strip")
   overview.focus_main()
   assert_equal(vim.api.nvim_get_current_win(), _G.__flashcards_hub_test.main_win, "focus_main selects the main pane")
 
@@ -144,18 +118,18 @@ return function(T)
     "moving the selection repositions the cursor"
   )
 
-  overview.move(-1) -- back onto the alphabetically first group (chapter-01)
+  vim.api.nvim_feedkeys("l", "xt", false) -- First category after All due.
   overview.review_group()
   local _, group_review_text = current_popup()
-  assert_contains(group_review_text, "tag:chapter-01 | 1/1", "overview reviews the selected group")
+  assert_contains(group_review_text, "tag:chapter-01 | 1/1", "desk studies only due cards in the selected category")
   flashcards.close_review()
   local _, canvas_text = current_popup()
-  assert_contains(canvas_text, "▸", "closing the group review returns to the card list")
+  assert_contains(canvas_text, "TAGS", "closing review returns to the desk")
 
   vim.cmd("Flashcards cards")
-  assert_equal(overview.current_view(), "cards", ":Flashcards cards routes into the Cards browser")
+  assert_equal(overview.current_view(), "overview", ":Flashcards cards routes into the Cards browser")
   local cards_popup, cards_text = current_popup()
-  assert_contains(cards_text, " Cards", "Cards page renders its primary table")
+  assert_contains(cards_text, " Overview", "Cards page renders its primary table")
   assert_contains(cards_text, "shown of", "Cards page reports the filtered collection size")
   assert_contains(current_tab_text(), " Card details", "Cards browser retains its contextual detail pane")
   assert_buffer_maps(cards_popup, { "/", "f", "o", "X", "x", "b", "p", "e" })
@@ -168,7 +142,12 @@ return function(T)
     "Press D to delete this exact invalid block",
     "invalid details expose safe deletion"
   )
-  assert_contains(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "D delete", "Cards ribbon exposes deletion")
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= vim.api.nvim_get_current_win() then
+      _G.__flashcards_hub_test.side_win = win
+    end
+  end
+  assert_contains(vim.wo[_G.__flashcards_hub_test.side_win].winbar, "m manage", "Overview exposes management")
 
   overview.context_help()
   local invalid_help_buf, invalid_help_text = current_popup()
@@ -330,12 +309,14 @@ return function(T)
   assert_equal(overview.current_view(), "stats", ":Flashcards stats routes into the Stats page")
   assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "stats opens the two-pane dashboard")
   local stats_popup, stats_text = current_popup()
+  assert_contains(stats_text, "THIS WEEK", "Stats opens the month calendar")
+  stats_text = current_tab_text()
   assert_contains(stats_text, expected_stats.reviews .. " reviews total", "stats totals versioned review history")
   assert_contains(stats_text, expected_stats.today .. " today", "stats counts today's effective reviews")
   assert_contains(stats_text, "Retention", "stats shows recall retention windows")
   assert_contains(stats_text, "Answer buttons", "stats shows rating distribution")
   assert_contains(stats_text, "Card states", "stats shows lifecycle and availability counts")
-  assert_contains(stats_text, "Mon", "stats heatmap has weekday rows")
+  assert_contains(stats_text, "Mo", "stats calendar has weekday columns")
   assert_contains(stats_text, "Due forecast", "stats shows the due forecast")
   assert_buffer_maps(stats_popup, {
     "q",
@@ -357,8 +338,10 @@ return function(T)
     "A",
     "R",
   })
-  assert_contains(vim.wo[0].winbar, "? keys", "Stats keeps current shortcuts in its winbar")
-  assert_contains(vim.wo[0].winbar, "j/k scroll", "Stats winbar makes line scrolling discoverable")
+  overview.focus_side()
+  stats_popup = vim.api.nvim_get_current_buf()
+  assert_contains(vim.wo[0].winbar, "? keys", "Stats keeps current shortcuts in its detail winbar")
+  assert_contains(vim.wo[0].winbar, "Ctrl-D/U scroll", "Stats exposes scrolling beyond the calendar")
 
   local stats_help = table.concat(require("neorg_flashcards.ui.actions").help_lines("stats", {}), "\n")
   assert_contains(stats_help, "Ctrl-W W", "Stats help exposes explicit pane focus")
@@ -392,15 +375,15 @@ return function(T)
   _G.__flashcards_hub_test.laststatus = vim.o.laststatus
   vim.o.laststatus = 3
   vim.wo[0].statusline = "%#lualine_transparent#"
-  assert_contains(vim.wo[0].winbar, "j/k scroll", "global statuslines do not replace the shortcut ribbon")
+  assert_contains(vim.wo[0].winbar, "Ctrl-D/U scroll", "global statuslines do not replace the shortcut ribbon")
   vim.o.laststatus = _G.__flashcards_hub_test.laststatus
 
   overview.context_help()
   _G.__flashcards_hub_test.help_buf, _G.__flashcards_hub_test.help_text = current_popup()
   assert_contains(
     _G.__flashcards_hub_test.help_text,
-    "Scroll the focused pane down",
-    "Stats help explains j/Down scrolling"
+    "Select the next week; scroll when the detail pane is focused",
+    "Stats help explains the two navigation contexts"
   )
   assert_contains(
     _G.__flashcards_hub_test.help_text,
@@ -434,6 +417,26 @@ return function(T)
   )
   overview.scroll_edge("top")
   assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Stats gg navigation reaches the top")
+  overview.focus_main()
+  local function press(key)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "xt", false)
+  end
+  press("gg")
+  local calendar_before = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  press("<C-d>")
+  assert_true(vim.fn.winsaveview().topline > 1, "Ctrl-D scrolls the main Stats dashboard")
+  press("G")
+  assert_equal(vim.fn.line("."), vim.fn.line("$"), "G reaches the end of analytics using the keyboard")
+  local bottom = vim.fn.winsaveview().topline
+  press("<C-u>")
+  assert_true(vim.fn.winsaveview().topline < bottom, "Ctrl-U scrolls back through analytics")
+  press("gg")
+  assert_equal(vim.fn.winsaveview().topline, 1, "gg returns to the calendar")
+  assert_equal(
+    table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"),
+    calendar_before,
+    "scrolling leaves the selected calendar day unchanged"
+  )
   overview.close()
   _G.__flashcards_hub_test = nil
   assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")

@@ -27,7 +27,7 @@ fi
 if command -v luacheck >/dev/null 2>&1; then
   luacheck --config "$ROOT/.luacheckrc" "$ROOT/lua" "$ROOT/tests" "$ROOT/scripts"
 fi
-XDG_STATE_HOME="$TEST_STATE_DIR" NVIM_LOG_FILE="${NVIM_LOG_FILE:-/dev/null}" "$NVIM_BIN" --headless -u NONE -i NONE -n \
+XDG_DATA_HOME="$TEST_STATE_DIR/data" XDG_STATE_HOME="$TEST_STATE_DIR" NVIM_LOG_FILE="${NVIM_LOG_FILE:-/dev/null}" "$NVIM_BIN" --headless -u NONE -i NONE -n \
   --cmd "set rtp^=$ROOT" \
   -c "luafile $ROOT/tests/run.lua" \
   -c "if !get(g:, 'neorg_flashcards_tests_passed', v:false) | cquit 1 | endif" \

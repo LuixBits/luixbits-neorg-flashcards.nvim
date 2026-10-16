@@ -61,7 +61,7 @@ end
 function M.current_popup()
   local bufnr = vim.api.nvim_get_current_buf()
   M.assert_equal(vim.bo[bufnr].buftype, "nofile", "plugin opens a nofile popup")
-  M.assert_equal(vim.bo[bufnr].filetype, "norg", "plugin popup uses the norg filetype")
+  M.assert_equal(vim.bo[bufnr].filetype, "neorg_flashcards", "app buffers use their own filetype")
   return bufnr, table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
 end
 

@@ -783,7 +783,7 @@ return function(T)
     end
     overview.context_help()
     local _, hidden_hub_help = current_popup()
-    assert_contains(hidden_hub_help, "Cards keys", "hub help remains available when shortcut chrome is hidden")
+    assert_contains(hidden_hub_help, "Overview keys", "hub help remains available when shortcut chrome is hidden")
     overview.help_close()
     overview.close()
 
