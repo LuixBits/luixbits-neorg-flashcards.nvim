@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented here.
 
+## Unreleased
+
+## 0.3.1 - 2026-10-16
+
+- Reworked card entry with labels above each input, front/answer roles,
+  explicit required/optional markers, and more space between fields. The
+  header shows collection, chapter, type, and destination, including the
+  previously hidden context above the first field.
+- Made the form follow theme input colors and ASCII-border settings. Save
+  controls appear first, and Tab/Shift-Tab navigate in both editing modes.
+- Made Notes and other multiline fields directly editable in the same form.
+  Tab and Enter preserve Insert mode across every field; Ctrl-S saves the whole
+  card. Multiline paste, native o/O, and undo/redo preserve field boundaries,
+  line breaks, and indentation. Paragraphs wrap within the composer.
+- Protected composer controls from completion and pairing plugin mappings.
+  Fixed Tab and Ctrl-N being replaced by Blink in a configured editor.
+
 ## 0.3.0 - 2026-10-16
 
 - Added directional Ctrl-h/j/k/l pane navigation alongside native Ctrl-W keys.

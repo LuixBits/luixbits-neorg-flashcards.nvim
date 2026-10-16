@@ -43,7 +43,7 @@ composer, workspace, review window, and statistics still work.
 
 ## Install
 
-These examples pin v0.3.0. If you are updating from v0.2, follow the
+These examples pin v0.3.1. If you are updating from v0.2, follow the
 [upgrade guide](docs/UPGRADING.md) to configure named collections before
 opening the workspace. Existing named-collection setups need no card migration.
 
@@ -60,7 +60,7 @@ With Neorg:
 },
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   cmd = "Flashcards",
   dependencies = { "nvim-neorg/neorg" },
   config = function()
@@ -88,7 +88,7 @@ does not need LuaRocks:
 ```lua
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   cmd = "Flashcards",
   config = function()
     local presets = require("neorg_flashcards.presets")
@@ -119,7 +119,7 @@ plugin_root="$(nvim --headless --clean \
   '+lua io.write(vim.fn.stdpath("data") .. "/site/pack/luixbits/opt")' \
   +qa 2>/dev/null)"
 mkdir -p "$plugin_root"
-git clone --branch v0.3.0 --depth 1 \
+git clone --branch v0.3.1 --depth 1 \
   https://github.com/LuixBits/luixbits-neorg-flashcards.nvim.git \
   "$plugin_root/luixbits-neorg-flashcards.nvim"
 ```
@@ -371,23 +371,32 @@ trail, with the newest rating on the right. Stats uses the same rules, so its
 
 ## Composer
 
-The form renders one protected row per field. Field names, required markers,
-placeholders, errors, and the destination are decorations; Backspace and
-Delete cannot merge them into the value.
+The composer gives each field a label above its input, with room between
+fields on larger screens. Labels identify the front and answer fields and
+spell out which values are required or optional. The header shows the
+collection, chapter, card type, and destination file. Colors follow your theme.
 
-- Insert mode: `Enter` advances and saves on the final field; `Tab` and
-  `Shift-Tab` move between fields.
-- Normal mode: `j/k` or Down/Up selects a field; `Enter` or `i` edits it.
+Labels, placeholders, and errors stay outside the editable values. Backspace
+and Delete cannot join adjacent fields. The form opts out of completion through
+the buffer-local `completion` flag, which Blink supports, and reapplies its
+navigation and deletion guards when entering the draft.
+
+- `Tab` and `Shift-Tab` move between fields in Normal or Insert mode.
+- Insert mode: `Enter` advances and saves on the final field.
+- Normal mode: `j/k` or arrows move through the editable lines; `Enter` or `i`
+  edits at the cursor.
 - `Ctrl-S`: save and return.
 - `Ctrl-N`: save and start another card.
 - `q` or `Esc` in Normal mode: cancel, with confirmation for a changed draft.
 - `?`: show every form shortcut.
 
-A multiline field stays as one protected preview row. Press `Enter` on it to
-open a focused editor containing only the value. Use normal editing commands,
-then press `Ctrl-S` to apply it to the draft or `Esc` to cancel. Unsaved long
-text gets its own discard confirmation. Applying the field does not save the
-card; the parent composer still does that.
+Every field is editable directly in the form, including Notes. Tab and Enter
+keep you in Insert mode as you move between fields. For longer notes, answers,
+or code, paste multiple lines or use native `o`/`O` in Normal mode to add a
+line. Paragraphs wrap to fit the window; line breaks and indentation are
+preserved when saving. `Ctrl-S` saves the whole card in one step.
+
+See the [composer screenshots](docs/demo/README.md#card-entry-refinement).
 
 ## Card types
 
@@ -713,7 +722,7 @@ Add the flake input:
 
 ```nix
 inputs.luixbits-neorg-flashcards.url =
-  "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.0";
+  "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.1";
 ```
 
 Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:

@@ -67,3 +67,38 @@ The retained `live-desk.png`, `live-calendar.png`, and earlier review media are
 historical captures from the previous candidate. They are not evidence of the
 current chapter hierarchy or Stats layout. Updated video takes belong in the
 private Remotion capture inventory.
+
+## Card entry refinement
+
+Captured on 2026-10-16 from runtime `cb0eba6` using the configured NVF editor
+and temporary synthetic collections. These images come from Neovim's external
+line grid. These changes are included in v0.3.1.
+
+| View | Terminal | Theme | Image |
+| --- | --- | --- | --- |
+| Previous composer | 122 × 30 | Kanagawa | [Before](composer-before.png) |
+| New card, with collection and chapter | 122 × 30 | Kanagawa | [Composer](composer.png) |
+| Completed required fields | 122 × 30 | Kanagawa | [Filled form](composer-filled.png) |
+| Compact field layout | 80 × 24 | peachpuff | [Light form](composer-light.png) |
+| Missing required fields | 80 × 24 | peachpuff | [Validation](composer-errors.png) |
+| Last field in a short ASCII window | 60 × 20 | habamax | [Small form](composer-compact.png) |
+| Inline multiline Notes | 122 × 30 | Kanagawa | [Notes](composer-notes.png) |
+| Inline Notes in a light theme | 80 × 24 | peachpuff | [Light Notes](composer-notes-light.png) |
+
+The composer keeps labels and inputs together and distinguishes required and
+optional values. Every field, including Notes, is directly editable. Multiline
+values expand in place; there is no preview row, second editor, or apply step.
+Narrow windows reduce spacing. Tab and Shift-Tab select fields, while native
+j/k and arrows move through their lines.
+
+The configured-editor interaction check used actual keys to enter two Japanese
+cards, including Notes and Tags, without leaving Insert mode. Ctrl-N saved the
+first and Ctrl-S saved the second; both retained their chapter assignment.
+Editing Notes inline with o, resizing to 60 × 20, and saving once preserved
+line breaks, indentation, and the card ID. Backspace stopped at field boundaries.
+
+The regression suite covers multiline paste, o/O, line deletion, undo/redo after
+moving to another field, rejected cross-field joins, required validation,
+discard protection, and a fresh undo history after save-and-new. It passed on
+Neovim 0.10.4, 0.11.5, and 0.12.4. The x86_64-linux Nix flake checks also passed,
+including the package and Neorg integration checks.
