@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local overview = require("neorg_flashcards.overview")
   local form = require("neorg_flashcards.form")
   local stats = require("neorg_flashcards.stats")
@@ -183,10 +184,10 @@ return function(T)
     "blocked invalid-card actions do not rewrite the source"
   )
 
-  _G.__flashcards_hub_test.select_original = vim.ui.select
-  vim.ui.select = function(items, opts, callback)
+  _G.__flashcards_hub_test.select_original = dialog.select
+  dialog.select = function(items, opts, callback)
     _G.__flashcards_hub_test.delete_choices = items
-    _G.__flashcards_hub_test.delete_prompt = opts.prompt
+    _G.__flashcards_hub_test.delete_prompt = table.concat(opts.description, "\n")
     _G.__flashcards_hub_test.delete_callback = callback
   end
   assert_true(overview.delete_selected(), "Cards opens deletion confirmation for an invalid block")
@@ -223,7 +224,7 @@ return function(T)
   assert_true(overview.delete_selected(), "the reopened Cards page can request a fresh deletion")
   overview.move(1)
   _G.__flashcards_hub_test.delete_callback("Delete card")
-  vim.ui.select = _G.__flashcards_hub_test.select_original
+  dialog.select = _G.__flashcards_hub_test.select_original
   _G.__flashcards_hub_test.invalid_after_delete = table.concat(vim.fn.readfile(invalid_ui_path), "\n")
   assert_true(
     not _G.__flashcards_hub_test.invalid_after_delete:find("japanese: 壱", 1, true),
@@ -241,23 +242,23 @@ return function(T)
   local _, repaired_cards_text = current_popup()
   assert_true(not repaired_cards_text:find("[INVALID]", 1, true), "refresh removes repaired or deleted invalid rows")
 
-  local input_original = vim.ui.input
+  local input_original = dialog.input
   local search_prompt
-  vim.ui.input = function(opts, callback)
+  dialog.input = function(opts, callback)
     search_prompt = opts.prompt
     callback("mountain")
   end
   overview.search()
-  vim.ui.input = input_original
+  dialog.input = input_original
   assert_equal(search_prompt, "Search cards: ", "Cards search uses a concise prompt")
   local _, searched_text = current_popup()
   assert_contains(searched_text, "search: “mountain”", "Cards search displays the active query")
   assert_contains(searched_text, "山", "Cards search matches answer text as well as card fronts")
   overview.clear_browser()
 
-  local select_original = vim.ui.select
+  local select_original = dialog.select
   local filter_prompt
-  vim.ui.select = function(items, opts, callback)
+  dialog.select = function(items, opts, callback)
     filter_prompt = opts.prompt
     local selected
     for _, item in ipairs(items) do
@@ -269,7 +270,7 @@ return function(T)
     callback(selected)
   end
   overview.choose_filter()
-  vim.ui.select = select_original
+  dialog.select = select_original
   assert_equal(filter_prompt, "Card view", "Cards filtering covers states and card types")
   local _, filtered_text = current_popup()
   assert_contains(filtered_text, "filter: New", "Cards browser renders the active lifecycle filter")
@@ -351,19 +352,19 @@ return function(T)
   local hidden_source_before = table.concat(vim.fn.readfile(hidden_source), "\n")
   local hidden_input_called = false
   local hidden_select_called = false
-  local hidden_input_original = vim.ui.input
-  local hidden_select_original = vim.ui.select
-  vim.ui.input = function()
+  local hidden_input_original = dialog.input
+  local hidden_select_original = dialog.select
+  dialog.input = function()
     hidden_input_called = true
   end
-  vim.ui.select = function()
+  dialog.select = function()
     hidden_select_called = true
   end
   for _, key in ipairs({ "/", "x", "b", "D" }) do
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "xt", false)
   end
-  vim.ui.input = hidden_input_original
-  vim.ui.select = hidden_select_original
+  dialog.input = hidden_input_original
+  dialog.select = hidden_select_original
   assert_true(not hidden_input_called, "Cards-only search does not dispatch from Stats")
   assert_true(not hidden_select_called, "Cards-only deletion does not dispatch from Stats")
   assert_equal(

@@ -1,3 +1,4 @@
+local dialog = require("neorg_flashcards.dialog")
 -- Safe add-card composer. The buffer contains field values only; labels,
 -- validation, target context, and guidance are UI decorations rendered with
 -- extmarks so they cannot accidentally become part of a saved card.
@@ -502,6 +503,8 @@ local function close_now()
   -- completed close and must not run on_close twice.
   state = fresh_state()
 
+  dialog.close_for_parent(form_win)
+
   local popup_ok, popup_err = pcall(popup.close, key_help)
   if not popup_ok then
     table.insert(errors, popup_err)
@@ -571,8 +574,10 @@ function M.close(opts)
   state.closing_prompt = true
   local expected_generation = state.generation
   local expected_buffer = state.buf
-  vim.ui.select({ "Keep editing", "Discard draft" }, {
-    prompt = "Discard this unsaved flashcard?",
+  dialog.select({ "Keep editing", "Discard draft" }, {
+    prompt = "Discard draft",
+    description = { "This card has unsaved changes." },
+    danger = "Discard draft",
   }, function(choice)
     if state.generation ~= expected_generation or state.buf ~= expected_buffer or not M.is_open() then
       return
@@ -582,7 +587,9 @@ function M.close(opts)
       close_now()
       return
     end
-    focus_form()
+    if vim.api.nvim_get_current_tabpage() == vim.api.nvim_win_get_tabpage(state.win) then
+      focus_form()
+    end
   end)
   return false
 end

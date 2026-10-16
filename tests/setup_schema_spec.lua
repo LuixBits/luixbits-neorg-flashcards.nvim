@@ -160,7 +160,11 @@ return function(T)
     "default Japanese word → reading + English",
     "help names the configured card type in plain language"
   )
-  assert_contains(help_text, "Collections: setup or m > New deck", "help explains where new collections come from")
+  assert_contains(
+    help_text,
+    "Collections: setup or m > New collection",
+    "help explains where new collections come from"
+  )
   assert_contains(help_text, "/ find", "quick guide explains native search")
   assert_contains(window_footer(), "/ find", "quick guide keeps search visible")
   assert_buffer_maps(help_popup, { "q" })

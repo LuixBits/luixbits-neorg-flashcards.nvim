@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local flashcards = require("neorg_flashcards")
   local history = require("neorg_flashcards.history")
   local overview = require("neorg_flashcards.overview")
@@ -63,9 +64,9 @@ return function(T)
   end
 
   vim.cmd("Flashcards cards")
-  local select_original = vim.ui.select
+  local select_original = dialog.select
   local clinic_choice
-  vim.ui.select = function(items, _, callback)
+  dialog.select = function(items, _, callback)
     for _, item in ipairs(items) do
       if item.value == "clinic" then
         clinic_choice = item
@@ -75,7 +76,7 @@ return function(T)
     end
   end
   overview.choose_filter()
-  vim.ui.select = select_original
+  dialog.select = select_original
   assert_true(clinic_choice ~= nil, "Card clinic is available through the existing Cards filter")
   assert_equal(clinic_choice.count, 1, "the clinic picker previews its current card count")
 

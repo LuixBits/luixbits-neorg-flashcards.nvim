@@ -1,3 +1,4 @@
+local dialog = require("neorg_flashcards.dialog")
 local collections = require("neorg_flashcards.collections")
 local form = require("neorg_flashcards.form")
 local help = require("neorg_flashcards.help")
@@ -265,7 +266,7 @@ function M.choose_collection()
     )
     return true
   end
-  vim.ui.select(ids, {
+  dialog.select(ids, {
     prompt = "Flashcard collection",
     format_item = function(id)
       local context = collections.get(expected_workspace, id)
@@ -500,7 +501,7 @@ local function choose_card_type(callback)
   elseif #ids == 1 then
     return callback(ids[1])
   end
-  vim.ui.select(ids, {
+  dialog.select(ids, {
     prompt = "What do you want to practice?",
     format_item = function(id)
       local card_schema = schema.for_kind(expected_config, id)
@@ -811,7 +812,7 @@ function M.review_tag(tag)
 
   if tag == "" then
     local expected_config = config
-    vim.ui.input({ prompt = "Tag: " }, function(input)
+    dialog.input({ prompt = "Tag: " }, function(input)
       if input == nil then
         util.notify("Tag review cancelled", vim.log.levels.WARN)
         return
@@ -845,7 +846,7 @@ function M.review_score(score)
 
   if score == "" then
     local expected_config = config
-    vim.ui.input({ prompt = "Rating (again/hard/good/new): " }, function(input)
+    dialog.input({ prompt = "Rating (again/hard/good/new): " }, function(input)
       if input == nil then
         util.notify("Rating review cancelled", vim.log.levels.WARN)
         return
@@ -1540,6 +1541,7 @@ function M.setup(opts)
     end,
   })
   activate_collection_runtime = function(context)
+    dialog.setup(context)
     local review_config = vim.tbl_deep_extend("force", {}, context, {
       on_review = append_review_history,
       on_review_pending = queue_pending_history,
@@ -1576,6 +1578,17 @@ function M.setup(opts)
           cards = cards,
           chapter = selection and selection.chapter,
           card = selection and selection.card,
+          card_label = selection and selection.card_label,
+          kind = selection and selection.kind,
+          owned = setup_options.collections[config.id] ~= nil,
+          can_create = setup_options.deck_registry ~= false,
+          add_card = function()
+            M.add_to_default("", nil, selection and selection.chapter)
+          end,
+          edit_card = function()
+            M.edit_card(selection and selection.card, selection)
+          end,
+          delete_card = selection and selection.delete,
           action = action,
           valid = valid,
           refresh = overview.refresh,
@@ -1619,7 +1632,7 @@ function M.setup(opts)
               end
             end
             table.sort(kinds)
-            vim.ui.select(kinds, { prompt = "Enable bundled card type" }, function(kind)
+            dialog.select(kinds, { prompt = "Enable bundled card type" }, function(kind)
               if not kind or not valid() then
                 return
               end
@@ -1643,7 +1656,7 @@ function M.setup(opts)
             end
             local id, kinds = config.id, vim.tbl_keys(config.schemas)
             table.sort(kinds)
-            vim.ui.select(kinds, { prompt = "Default card type" }, function(kind)
+            dialog.select(kinds, { prompt = "Default card type" }, function(kind)
               if not kind or not valid() then
                 return
               end

@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local form = require("neorg_flashcards.form")
   local help = require("neorg_flashcards.help")
   local overview = require("neorg_flashcards.overview")
@@ -147,8 +148,8 @@ return function(T)
   assert_true(resume_persisted, "toggle_suspend reports a durable clean-buffer write")
 
   local prompt_callback
-  input_original = vim.ui.input
-  vim.ui.input = function(_, callback)
+  input_original = dialog.input
+  dialog.input = function(_, callback)
     prompt_callback = callback
   end
   assert_true(flashcards.review_tag(""), "review_tag returns true when its prompt is launched")
@@ -158,7 +159,7 @@ return function(T)
   assert_true(flashcards.command("review score"), "command returns asynchronous prompt initiation")
   assert_true(type(prompt_callback) == "function", "command preserves the routed prompt callback")
   prompt_callback(nil)
-  vim.ui.input = input_original
+  dialog.input = input_original
 
   assert_true(flashcards.command("help"), "command returns the routed UI result")
   help.close()
