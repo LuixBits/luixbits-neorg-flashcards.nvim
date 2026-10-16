@@ -102,3 +102,30 @@ moving to another field, rejected cross-field joins, required validation,
 discard protection, and a fresh undo history after save-and-new. It passed on
 Neovim 0.10.4, 0.11.5, and 0.12.4. The x86_64-linux Nix flake checks also passed,
 including the package and Neorg integration checks.
+
+## Workspace dialogs
+
+Captured on 2026-10-16 from runtime `4105033`, through the configured NVF editor
+with the same synthetic collections. These are rasterized Neovim line-grid
+captures. The dialog changes are not yet released.
+
+| View | Terminal | Theme | Image |
+| --- | --- | --- | --- |
+| Collection actions | 122 × 30 | Kanagawa | [Collection menu](dialog-collection.png) |
+| Card actions | 122 × 30 | Kanagawa | [Card menu](dialog-card.png) |
+| Remove a chapter | 122 × 30 | Kanagawa | [Chapter confirmation](dialog-chapter-delete.png) |
+| Delete a card, ASCII borders | 60 × 20 | habamax | [Compact confirmation](dialog-card-delete.png) |
+| Rename a chapter | 80 × 24 | peachpuff | [Rename input](dialog-chapter-rename.png) |
+| Correct an invalid goal | 80 × 24 | peachpuff | [Inline error](dialog-error.png) |
+| Tags and card counts | 80 × 24 | Kanagawa | [Tag menu](dialog-tags.png) |
+
+Image review caught a blank input and a validation message disappearing after
+submission. The input now renders its value and keeps the error until it is
+changed. Dialog text uses the theme's normal foreground for readable
+consequences; boundaries, headings, and selection reuse the desk's groups.
+
+The configured-editor keyboard check creates a card with Japanese text and
+inline Notes, renames its chapter, opens card actions, cancels deletion,
+resizes to 60 × 20, and confirms deletion. Regression tests also exercise
+tag backups, collection creation and detachment, stale prompts, invalid
+blocks, focus changes, native close, long names, and replaced popup buffers.

@@ -4,6 +4,15 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+- Replaced workspace management, confirmation, and small-input prompts with
+  compact dialogs using the desk's theme colors and ASCII border setting.
+- Made `m` contextual: collection actions, chapter actions, or card actions.
+  Tag appearance and UI-created collection preferences live in smaller submenus.
+- Kept deletion on Cancel initially, named the target and consequences, and
+  preserved existing backups, source checks, and stale-prompt protection.
+- Added familiar menu keys, input editing, inline validation, resize handling,
+  and cancellation when the originating workspace closes.
+
 ## 0.3.1 - 2026-10-16
 
 - Reworked card entry with labels above each input, front/answer roles,

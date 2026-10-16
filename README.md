@@ -197,7 +197,8 @@ require("neorg_flashcards").setup({
 Setup creates either directory when it is missing. Restart Neovim, then press
 `C` anywhere in the workspace to switch between the configured collections, or
 run `:Flashcards collection computer_science`. To create a deck in the UI,
-open Overview with `2`, press `m`, and choose New deck. Switching is blocked while a composer or review
+open Overview with `2`, select a collection, press `m`, and choose New collection.
+Switching is blocked while a composer or review
 session is open so a draft or rating cannot drift into another subject.
 
 Each collection above enables one card type, so `a` opens its composer directly.
@@ -286,7 +287,15 @@ the card list.
   or closes the collection list.
 - `Enter` or `r` reviews a selected active, valid card.
 - `x` suspends/resumes a card; `b` buries/unburies it.
-- `m` manages the selected collection or chapter, tags, and daily goal.
+- `m` opens actions for the selected collection, chapter, or card.
+
+Menus, confirmations, and small inputs open in a bordered box using the desk's
+colors and `ui.ascii` setting. Use `j/k`, Ctrl-j/k, or arrows to select, Enter
+or `l` to choose, `h` to go back in a submenu, and `q` or Esc to cancel.
+Long lists support Ctrl-D/U and gg/G. Inputs open ready to type; Enter confirms,
+Esc returns to Normal mode, and `q` cancels there. Invalid values stay in the
+input with an explanation. Deletion starts on Cancel and describes what gets
+removed or kept. There is no extra picker setup.
 
 Invalid cards appear as `[INVALID]`. They remain searchable and editable, but
 cannot be reviewed or scheduled. A closed invalid block can also be deleted;
@@ -322,24 +331,32 @@ most one chapter and can have several tags, such as `travel` or `household`.
 Neither chapter names nor tags depend on source filenames.
 
 Existing cards start in Unfiled. Create a chapter with `n`, then use `M` on a
-card to move it. For lesson tags already in your cards, `m` → Create chapter
-from tag creates a chapter and moves matching cards after confirmation. Tags
+card to move it. Select a collection, then use `m` → Tags → a tag → Create
+chapter from tag to move matching cards into a new chapter after confirmation. Tags
 stay on the cards. Removing a chapter returns its cards to Unfiled and keeps
 their IDs, scheduling, and history. Adding from a chapter assigns the new card
 to it; the card still goes into the collection's configured default file.
 
-Press `m` in Overview to change the deck's display label or daily goal; create,
-label, color, or order category notes; rename or merge tags; or remove a tag
-without deleting its cards. Rename and merge operate on complete tag tokens:
+The collection menu has Rename collection, New chapter, Tags, and Daily goal.
+For UI-created collections, the goal and card types are under Study settings.
+The chapter menu has Add card, New chapter, Rename chapter, and Remove chapter.
+The card menu has Edit card, Move card to chapter, and Delete card. Invalid
+cards offer source repair; unclosed blocks cannot be deleted.
+
+Under Tags, choose a tag to rename, merge, or remove it without deleting cards.
+Note appearance holds its display label, theme color, and shelf order.
+Rename and merge operate on complete tag tokens:
 changing `food` leaves `seafood` alone. The operation confirms its card count,
 preflights sources, and saves `<source>.flashcards-tags-backup` snapshots.
 Modified source buffers stay unsaved until you write them. A partial failure
 reports the changed files and the point where it stopped.
 
-New deck asks for an ID, name, directory, and bundled card type. The same root,
-schema, and history-isolation checks used by setup apply. Enable another card
-type and Deck default card type manage UI-created decks. Configured decks keep
-those settings in Lua or Nix. Detaching a UI-created deck preserves its files.
+New collection asks for an ID, name, directory, and bundled card type. The same
+root, schema, and history-isolation checks used by setup apply. Study settings
+can enable another card type or change the default for UI-created collections.
+Configured collections keep those settings in Lua or Nix. Detach collection is
+available for UI-created collections and preserves their files. Setting
+`deck_registry = false` hides New collection from the menu.
 
 The default goal is 20 unique cards per day; set it to 0 to disable it. Again
 counts as study, and retries on the same day count once. Undo reverses progress.
@@ -813,7 +830,7 @@ Useful entry points:
 | `command(args?)` | Dispatch the same route as `:Flashcards` |
 
 UI-opening and control functions return whether the synchronous request was
-accepted. A `vim.ui` picker can return `true` before its later callback receives
+accepted. A picker or input dialog can return `true` before its callback receives
 a choice. Inspection calls such as `active_collection()` and
 `get_review_state()` return data, while validation calls return their documented
 status and diagnostics. Source mutations return `ok, message, persisted`;
