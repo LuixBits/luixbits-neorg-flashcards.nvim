@@ -7,9 +7,9 @@ history remain compatible. No card migration is required for this UI update.
 
 - The pages are now `1 Desk`, `2 Overview`, and `3 Stats`. Bare `:Flashcards`
   opens Desk; `:Flashcards overview` opens the manager. `:Flashcards cards` and
-  `cards()` remain manager aliases. Use `desk()` for the new study surface.
-- Enter opens a deck box, then studies the due cards on the selected category
-  note. `review tag` retains its explicit all-active matching-card behavior.
+  `cards()` open its card-list level. Use `desk()` for the new study surface.
+- Enter opens a deck box, then studies the due cards on the selected chapter
+  note. `g` switches to tag notes. `review tag` retains its explicit all-active matching-card behavior.
   `A` remains an intentional cram action.
 - Rating keys require explicit reveal with Enter/Space. They no longer reveal
   a hidden answer. This prevents key repeat from rating the next question.
@@ -22,6 +22,18 @@ history remain compatible. No card migration is required for this UI update.
 - `ui.motion = false` disables card animation. `ui.ascii = true` uses plain
   ASCII borders. `ui.desk_highlights` accepts theme links or exact attributes;
   the defaults adapt to light and dark colorschemes.
+
+Chapters are separate from filenames and tags. Existing cards appear in
+Unfiled; create chapters with `n` in Overview and move cards with `M`. For
+existing lesson tags, `m` → Create chapter from tag moves their cards after
+confirmation and keeps those tags. Removing a chapter returns cards to Unfiled.
+Optional `chapters` and `chapter_cards` fields extend the existing workspace
+sidecar; card syntax and history versions stay unchanged. Back up the sidecar
+to preserve chapter organization.
+
+Scratch windows now use `neorg_flashcards`, not `norg`, so source-file hooks,
+visible spaces, and concealment cannot damage the app layout. Normal note
+buffers keep the user's settings.
 
 Category rename/merge/removal writes tag fields and creates
 `*.flashcards-tags-backup` snapshots. Removing a category keeps its cards.

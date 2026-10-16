@@ -4,8 +4,19 @@ All notable changes to this project will be documented here.
 
 ## 0.3.0 - Unreleased
 
+- Added a collection → chapter → card manager with contextual create, rename,
+  move, and confirmed removal. Chapters are independent of filenames and tags;
+  existing cards appear in Unfiled. Chapter-from-tag preserves the source tags.
+- Framed and tightened the Desk, removed decorative filler, and added useful
+  pending/reviewed stack counts: unseen, retries, finished, set aside, and ratings.
+- Rebalanced Stats around a bounded calendar, visible progress, ratings, recall
+  trends, forecast, and a separate selected-day pane. Short windows retain the
+  selected date and resizing keeps keyboard focus in active reviews.
+- Isolated app buffers from inherited whitespace markers and Neorg concealment
+  using their own filetype and local window options. Note editing is unchanged.
+
 - Reworked the workspace into Desk, Overview, and Stats. Desk shows collection
-  boxes and category notes, opens due-only stacks, and keeps review on the same
+  boxes and chapter/tag notes, opens due-only stacks, and keeps review on the same
   canvas with pending/reviewed piles and a completion receipt. `cards` remains
   an alias for the manager in Overview.
 - Added theme-linked desk highlights, plain ASCII borders, responsive layouts,

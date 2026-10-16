@@ -1,6 +1,6 @@
 # luixbits-neorg-flashcards.nvim
 
-![The study desk with deck boxes and category notes](docs/demo/desk.png)
+![The study desk with deck boxes and chapter notes](docs/demo/desk.png)
 
 Local flashcards for Neovim, stored as plain `.norg` files.
 
@@ -13,8 +13,9 @@ it is not required to use the plugin.
 
 - Keeps cards and review history on your machine. There is no account, server,
   SQLite database, or Anki dependency.
-- Opens a study desk with deck boxes, category notes, and paper card stacks.
-  Overview handles editing; Stats shows a navigable calendar and review history.
+- Opens a study desk with deck boxes, chapter notes, and paper card stacks.
+  Overview manages collections, chapters, and cards; Stats combines a compact
+  calendar with progress, ratings, and forecasts.
 - Adds short card animations, session receipts, and a daily unique-card goal.
   Motion can be disabled and borders can use plain ASCII.
 - Separates subjects such as Japanese and computer science so their cards,
@@ -136,7 +137,7 @@ with `dir = "~/projects/luixbits-neorg-flashcards.nvim"`.
 1. Run `:Flashcards`.
 2. Press `a` to add a card. With the setup above, the composer opens directly.
 3. Fill the required fields and press `Ctrl-S`.
-4. Open the deck box with `Enter`, then choose All due or a category note.
+4. Open the deck box with `Enter`, then choose All due or a chapter note.
    Press `Enter` again to start its due stack. `d` starts all due cards directly.
 5. Reveal with `Space` or `Enter`, then rate with `1`, `2`, or `3`.
 
@@ -144,6 +145,9 @@ The workspace shows useful current shortcuts in its winbar by default. Press
 `?` for the complete list for the page or review state you are in. That help
 window is searchable with Neovim's normal `/`, `n`, and `N` keys. Set
 `ui.show_shortcuts = false` if you prefer less persistent chrome.
+
+App scratch windows suppress visible whitespace and concealment; normal note
+buffers retain their settings.
 
 The plugin does not install global mappings. If you want one, map only the
 workspace entry point:
@@ -253,27 +257,33 @@ closes.
 - `Ctrl-D`, `Ctrl-U`, PageDown, PageUp: move half a page.
 - `gg`, `G`: go to the top or bottom.
 - `d`, `A`: review due cards or all active cards.
-- `a`: add a card from Desk or Overview; a selected category prefills its tag.
+- `a`: add a card in its chapter; on Overview’s collection list, create a collection.
 - `c`: run the collection check; `R`: reload; `q`: close.
 
-Desk shows one box per collection. `Enter` opens a box, then starts a due stack
-from the selected category note. Move by rows with `j/k` and by items with
-`h/l`. `/` finds category notes; `C` reaches every deck when the shelf has more
-boxes than fit. A card with several tags appears in each category, but All due
-contains it once. Empty categories remain visible; Untagged collects cards
-without tags. Caught-up notes never silently start a cram session.
+Desk shows one box per collection, with chapter notes inside it. `Enter` opens
+a box, then studies the selected note's due cards. `g` switches between chapters
+and tags. Move by rows with `j/k` and by items with `h/l`; `/` finds notes. `C`
+reaches every collection when the shelf has more boxes than fit. All due
+contains each card once. Caught-up notes do not start a cram session.
 
-Overview is the working list:
+Overview opens a compact collection → chapter → card browser. `Enter` or `l`
+opens a collection or chapter; `h` goes back. The side pane shows the selected
+item's details and actions. `:Flashcards cards` goes straight to the card list.
 
-- `/`: search fronts, answers, tags, types, sources, dates, and states.
-- `f`: choose a state, Card Clinic, or a card type.
-- `o`: cycle due, front, state, and source sorting.
-- `X`: clear the current search and view. `Esc` clears it when active, then
-  closes the workspace when pressed again.
-- `Enter` or `r`: review the selected active, valid card.
-- `p`: preview; `e`: edit; `x`: suspend or resume; `b`: bury or unbury.
-- `D`: delete the exact selected block after confirmation.
-- `g`: choose a category; `m`: manage decks, categories, and the daily goal.
+| Selection | Create | Rename/edit | Remove | Other |
+| --- | --- | --- | --- | --- |
+| Collection | `a` new collection | `e` display label | `D` detach UI-created collection | `m` settings |
+| Chapter | `n` new chapter; `a` card here | `e` name | `D` move its cards to Unfiled | `r` study due cards |
+| Card | `a` card in this chapter | `e` composer | `D` confirmed source deletion | `M` move to chapter; `p` preview |
+
+- `/` searches fronts, answers, tags, types, sources, dates, and states.
+- `f` selects a state, Card Clinic, or card type; `g` filters by tag.
+- `o` cycles due, front, state, and source sorting.
+- `X` clears search/filter; `Esc` clears an active filter, goes back a level,
+  or closes the collection list.
+- `Enter` or `r` reviews a selected active, valid card.
+- `x` suspends/resumes a card; `b` buries/unburies it.
+- `m` manages the selected collection or chapter, tags, and daily goal.
 
 Invalid cards appear as `[INVALID]`. They remain searchable and editable, but
 cannot be reviewed or scheduled. A closed invalid block can also be deleted;
@@ -290,14 +300,27 @@ time, hints, and saved goals. Historical cards that no longer exist are marked
 as unavailable. Future dates show a schedule snapshot that later ratings can
 change; overdue cards stay in today's backlog.
 
-The detail pane also retains totals, streaks, retention, card states, median
-answer time, heatmap, seven-day forecast, and Needs attention. `Ctrl-W w` focuses
-it for scrolling. Weekly card-days count a card once per day; they are not a
+The main area shows totals, streaks, retention, card states, median answer
+time, heatmap, seven-day forecast, and Needs attention beside the compact
+calendar. `Ctrl-D/U` scrolls analytics; `Ctrl-W w` focuses the day details. Weekly card-days count a card once per day; they are not a
 count of distinct cards across the week. Retention means Hard or Good as a
 percentage of effective ratings. Recorded answer time includes time with a
 card open, and missing durations remain unavailable.
 
-### Decks, categories, and goals
+### Collections, chapters, tags, and goals
+
+A collection is a subject such as Japanese or Computer Science. Chapters such
+as Lesson 1, Lesson 2, or Verbs organize cards inside it. A card belongs to at
+most one chapter and can have several tags, such as `travel` or `household`.
+Neither chapter names nor tags depend on source filenames.
+
+Existing cards start in Unfiled. Create a chapter with `n`, then use `M` on a
+card to move it. For lesson tags already in your cards, `m` → Create chapter
+from tag creates a chapter and moves matching cards after confirmation. Tags
+stay on the cards. Removing a chapter returns its cards to Unfiled and keeps
+their IDs, scheduling, and history. Adding from a chapter assigns the new card
+to it; the card still goes into the collection's configured default file.
+
 
 Press `m` in Overview to change the deck's display label or daily goal; create,
 label, color, or order category notes; rename or merge tags; or remove a tag
@@ -319,7 +342,7 @@ change historical stamps. A goal does not limit queues or change scheduling.
 Cards awaiting durable history delivery count provisionally and are deduplicated
 on replay. Reviews in unsaved source buffers enter daily history when saved.
 
-Presentation and goal snapshots live in each root's
+Chapter names and membership, presentation, and goal snapshots live in each root's
 `.flashcards-workspace.json`. UI-created deck definitions live in
 `stdpath("data")/neorg-flashcards/decks.json`; set `deck_registry` to another
 path, or `false` for a wholly declarative setup. Include these files in your

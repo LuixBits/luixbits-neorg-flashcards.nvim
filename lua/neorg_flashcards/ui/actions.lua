@@ -65,14 +65,14 @@ local catalog = {
       essential = true,
       descriptions = {
         desk = "Select the next row of boxes or notes",
-        overview = "Select the next card; scroll when the detail pane is focused",
+        overview = "Select the next collection, chapter or card; scroll in details",
         stats = "Select the next week; scroll when the detail pane is focused",
       },
     }),
     action({ "k", "<Up>" }, "previous", "Select the previous item or scroll the focused pane", HUB, {
       descriptions = {
         desk = "Select the previous row of boxes or notes",
-        overview = "Select the previous card; scroll when the detail pane is focused",
+        overview = "Select the previous collection, chapter or card; scroll in details",
         stats = "Select the previous week; scroll when the detail pane is focused",
       },
     }),
@@ -132,7 +132,13 @@ local catalog = {
       end,
     }),
     action({ "p" }, "peek", "Open the selected card preview", { "desk", "overview" }),
-    action({ "e" }, "edit_card", "Edit the selected card", { "desk", "overview" }),
+    action({ "e" }, "edit_card", "Edit the selected card", { "desk", "overview" }, {
+      presentation = function(_, state)
+        if state and state.selection_kind and state.selection_kind ~= "card" then
+          return { description = "Rename the selected collection or chapter" }
+        end
+      end,
+    }),
     action({ "c" }, "check", "Check the flashcard collection", HUB, { capability = "check" }),
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },

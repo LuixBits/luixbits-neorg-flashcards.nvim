@@ -736,21 +736,6 @@ local function build_cards_browser()
   return lines, spans, entries
 end
 
-local function detail_hint(status)
-  if status.availability == "suspended" then
-    return "Suspended cards stay out of normal review queues."
-  elseif status.availability == "buried" then
-    return "Buried cards are hidden until tomorrow."
-  elseif status.timing == "overdue" then
-    return "Overdue is a scheduling fact, not a verdict. Review it honestly."
-  elseif status.lifecycle == "new" then
-    return "First review: recall before revealing, then choose an honest rating."
-  elseif status.lifecycle == "learning" or status.lifecycle == "relearning" then
-    return "Short intervals are expected while this card settles in."
-  end
-  return "Try to answer before reading the back; recognition is deceptively easy."
-end
-
 local function short_interval(seconds)
   seconds = tonumber(seconds)
   if not seconds then
@@ -866,6 +851,7 @@ local function build_card_detail()
     end
     return lines, spans
   end
+  add_line(lines, spans, " e edit  M move  D delete  p preview", HIGHLIGHTS.accent)
   local status = card_state(card, os.time())
   local card_schema = schema.for_kind(config, card.kind) or {}
   local insight = state.insights.by_card[card] or { reviews = {}, reasons = {} }
@@ -891,9 +877,8 @@ local function build_card_detail()
   end
   add_line(lines, spans, "")
   add_line(lines, spans, " Scheduling", HIGHLIGHTS.title)
-  add_line(lines, spans, "  Card type    " .. (card_schema.label or card.kind), HIGHLIGHTS.muted)
-  add_line(lines, spans, "  Lifecycle    " .. status.lifecycle, HIGHLIGHTS.muted)
-  add_line(lines, spans, "  Availability " .. status.availability, HIGHLIGHTS.muted)
+  add_line(lines, spans, "  " .. truncate(card_schema.label or card.kind, side_width() - 4), HIGHLIGHTS.muted)
+  add_line(lines, spans, "  " .. status.lifecycle .. " · " .. status.availability, HIGHLIGHTS.muted)
   add_line(
     lines,
     spans,
@@ -903,20 +888,12 @@ local function build_card_detail()
   add_line(
     lines,
     spans,
-    "  Interval      "
-      .. (util.trim(card.values.interval) ~= "" and util.trim(card.values.interval) .. " days" or "—"),
-    HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    "  Ease          " .. (util.trim(card.values.ease) ~= "" and util.trim(card.values.ease) or "—"),
-    HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    "  Last rating   " .. (util.trim(card.values.score) ~= "" and util.trim(card.values.score) or "—"),
+    string.format(
+      "  Interval %s d · ease %s · rating %s",
+      util.trim(card.values.interval) ~= "" and card.values.interval or "—",
+      util.trim(card.values.ease) ~= "" and card.values.ease or "—",
+      util.trim(card.values.score) ~= "" and card.values.score or "—"
+    ),
     HIGHLIGHTS.muted
   )
   if #insight.reasons > 0 then
@@ -935,13 +912,12 @@ local function build_card_detail()
   add_line(lines, spans, "")
   add_line(lines, spans, " Source", HIGHLIGHTS.title)
   add_line(lines, spans, "  " .. truncate(card_source(card), math.max(20, side_width() - 4)), HIGHLIGHTS.muted)
+  local chapter = state.metadata.chapters[chapters.id(state.metadata, card)]
+  add_line(lines, spans, "  Chapter: " .. (chapter and chapter.label or "Unfiled"), HIGHLIGHTS.muted)
   add_line(lines, spans, "  Tags: " .. table.concat(card_tags(card), ", "), HIGHLIGHTS.muted)
   if util.trim(card.values.id) ~= "" then
     add_line(lines, spans, "  ID: " .. util.trim(card.values.id), HIGHLIGHTS.muted)
   end
-  add_line(lines, spans, "")
-  add_line(lines, spans, " Hint", HIGHLIGHTS.title)
-  add_line(lines, spans, "  " .. truncate(detail_hint(status), math.max(20, side_width() - 4)), HIGHLIGHTS.accent)
   if state.capabilities.suspend or state.capabilities.bury or state.capabilities.delete then
     add_line(lines, spans, "")
     add_line(lines, spans, " Actions", HIGHLIGHTS.title)

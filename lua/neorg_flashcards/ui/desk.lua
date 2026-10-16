@@ -97,7 +97,10 @@ function M.render(model)
   end
   local groups = { { name = nil, label = "All due", cards = model.cards, due = model.ready, accent = "accent" } }
   for _, group in ipairs(model.groups) do
-    if model.query == "" or (group.label .. " " .. group.name):lower():find(model.query:lower(), 1, true) then
+    if
+      not (group.chapter and group.name == "" and #group.cards == 0)
+      and (model.query == "" or (group.label .. " " .. group.name):lower():find(model.query:lower(), 1, true))
+    then
       table.insert(groups, group)
     end
   end

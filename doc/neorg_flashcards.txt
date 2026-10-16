@@ -206,7 +206,9 @@ WORKSPACE AND CARD CLINIC                            *neorg-flashcards-hub*
 
 The workspace has Desk, Overview, and Stats pages in one tab. Desk uses a
 canvas; Overview and Stats use two columns or stacked panes in narrow windows.
-The cards command remains an alias for Overview.
+App buffers use filetype neorg_flashcards with local nolist and no concealment.
+Normal source windows retain their whitespace, spell and conceal settings.
+The cards command opens the card-list level of Overview.
 
 Common keys:
 
@@ -225,27 +227,40 @@ Common keys:
   R               Reload
   q               Close
 
-Desk shows one collection per box and one tag per category note. Enter opens
-the selected box, then studies the selected note's due cards. All due contains
-each card once, including cards with overlapping tags. A caught-up category
-does not start a cram session. Use A explicitly for all active cards.
-Move with h/l (items) and j/k (rows); / searches notes and C chooses any deck.
-Press a on a category to add a card with that tag prefilled.
+Desk shows one collection per box and its chapters as notes. Enter opens a
+box, then studies a note's due cards. g switches chapter notes and tag notes.
+All due deduplicates cards across tags. Caught-up notes do not start a cram
+session. Use A explicitly for all active cards. Move with h/l (items) and j/k
+(rows); / searches notes and C chooses any collection. a adds to the selected
+chapter, or prefills the selected tag in tag view.
 
-Overview is the working list:
+Overview browses collections -> chapters -> cards:
 
+  Enter / l       Open a collection/chapter; review a selected card
+  h               Back to chapters or collections
+  a               New collection at root; otherwise add a card here
+  n               New chapter in the selected collection
+  e               Rename collection/chapter; edit a card
+  D               Confirm detach / remove chapter / delete card
+  M               Move a card to another chapter or Unfiled
+  r               Study due cards in a chapter; review a selected card
   /               Search card text, tags, type, source, date, and state
   f               Choose a state, Card Clinic, or card type
   o               Cycle due, front, state, and source sorting
   X               Clear search and view
-  Esc             Clear an active view; otherwise close the workspace
-  Enter / r       Review the selected active, valid card
-  p / e           Preview / edit
+  Esc             Clear filter, back one level, or close collections
+  p               Preview a card
   x               Suspend or resume
   b               Bury until tomorrow or unbury
-  D               Delete the exact source block after confirmation
-  g               Choose a category
-  m               Manage decks, categories, and daily goals
+  g               Filter cards by tag
+  m               Manage collections, chapters, tags, and daily goals
+
+Collections are subjects, chapters organize cards within a subject, and tags
+categorize cards independently. Existing cards appear in Unfiled. n creates a
+chapter; M moves cards. m > Create chapter from tag moves matching cards after
+confirmation and leaves their tags intact. Removing a chapter keeps its cards
+in Unfiled. Renames and moves preserve IDs, schedules and history. Chapters
+are independent of filenames; new cards use the collection's default file.
 
 Management can create empty category notes, edit labels, theme accents and
 shelf order, rename/merge tag tokens, or remove tags without deleting cards.
@@ -260,8 +275,8 @@ Lua or Nix. The registry defaults to stdpath("data")/neorg-flashcards/decks.json
 deck_registry can override that path or disable UI-created decks with false.
 Setup checks source roots and history isolation for both kinds of deck.
 
-Each collection's .flashcards-workspace.json stores presentation, category
-metadata and goal snapshots. Malformed files are preserved and reported.
+Each collection's .flashcards-workspace.json stores chapters, card-ID membership,
+presentation, category metadata and goal snapshots. Malformed files are preserved and reported.
 
 Invalid cards remain visible as [INVALID] and may be edited. A closed invalid
 block may also be deleted; an unclosed block needs its missing @end first.
@@ -495,7 +510,7 @@ Stats includes totals, streak, 7/30/90-day retention, 30-day ratings, card
 states, leeches, median answer time, estimated workload, an activity heatmap,
 a seven-day forecast, tag sizes, and the Card Clinic attention list.
 
-Its month calendar uses Monday-first local dates. h/l moves by day, j/k by
+The main pane shows analytics alongside a compact Monday-first calendar. h/l moves by day, j/k by
 week, [ and ] by month, and . returns to today. Enter opens the selected day's
 cards in Overview. Ctrl-W w focuses details for scrolling. Past days show
 unique cards, answer counts, ratings, hints, recorded time and saved goals.
