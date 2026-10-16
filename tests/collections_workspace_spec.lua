@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local collections = require("neorg_flashcards.collections")
   local presets = require("neorg_flashcards.presets")
   local schedule = require("neorg_flashcards.schedule")
@@ -375,13 +376,13 @@ return function(T)
     assert_contains(T.current_tab_text(), "Overview · Computer Science", "the open hub switches in place")
 
     local chosen = nil
-    local original_select = vim.ui.select
-    vim.ui.select = function(items, _, callback)
+    local original_select = dialog.select
+    dialog.select = function(items, _, callback)
       chosen = vim.deepcopy(items)
       callback("japanese")
     end
     assert_true(flashcards.choose_collection(), "the collection picker opens")
-    vim.ui.select = original_select
+    dialog.select = original_select
     assert_equal(chosen[1], "computer_science", "the picker uses stable sorted collection IDs")
     assert_equal(chosen[2], "japanese", "the picker includes the default collection")
     assert_equal(flashcards.active_collection().id, "japanese", "the picker switches without another command")

@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local flashcards = require("neorg_flashcards")
   local overview = require("neorg_flashcards.overview")
   local review = require("neorg_flashcards.review")
@@ -188,36 +189,36 @@ return function(T)
       truth(overview.is_open(), "workspace survives resizing and switching to " .. page)
     end
   end
-  local input, select = vim.ui.input, vim.ui.select
+  local input, select = dialog.input, dialog.select
   local answers = { "science", "Science", root .. "/science" }
-  vim.ui.input = function(_, callback)
+  dialog.input = function(_, callback)
     callback(table.remove(answers, 1))
   end
-  vim.ui.select = function(items, _, callback)
-    if vim.tbl_contains(items, "New deck") then
-      callback("New deck")
+  dialog.select = function(items, _, callback)
+    if vim.tbl_contains(items, "New collection") then
+      callback("New collection")
     else
       callback("question_answer")
     end
   end
-  overview.show("overview")
+  flashcards.overview({ view = "overview", browser_level = "collections", reset_browser = true })
   key("m")
   equal(flashcards.active_collection().id, "science", "the deck wizard creates, reloads, and selects the new deck")
   truth(overview.is_open(), "creating a deck keeps the workspace intact")
   local stale_management
-  vim.ui.select = function(_, _, callback)
+  dialog.select = function(_, _, callback)
     stale_management = callback
   end
   key("m")
   overview.close()
   flashcards.overview()
   local prompted = false
-  vim.ui.input = function()
+  dialog.input = function()
     prompted = true
   end
   stale_management("Daily goal")
   truth(not prompted, "management prompts expire when their workspace closes")
-  vim.ui.input, vim.ui.select = input, select
+  dialog.input, dialog.select = input, select
   overview.close()
   truth(flashcards.setup(opts), "registry decks survive a complete setup reload")
   truth(flashcards.select_collection("science"), "a registered deck can be selected after reload")

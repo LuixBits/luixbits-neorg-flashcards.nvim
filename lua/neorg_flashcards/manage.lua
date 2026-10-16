@@ -1,3 +1,4 @@
+local dialog = require("neorg_flashcards.dialog")
 local chapters = require("neorg_flashcards.chapters")
 local metadata = require("neorg_flashcards.metadata")
 local store = require("neorg_flashcards.store")
@@ -102,6 +103,9 @@ end
 
 function M.open(context)
   local config = context.config
+  local initial = metadata.load(config)
+  local collection = initial.label or config.label or config.id
+  local category, menu, tags, tag_actions, settings, run
   local function live()
     if context.valid() then
       return true
@@ -117,21 +121,39 @@ function M.open(context)
       context.refresh()
     end
   end
-  local function input(prompt, default, callback)
-    vim.ui.input({ prompt = prompt, default = default }, function(value)
+  local function input(prompt, default, callback, opts)
+    opts = opts or {}
+    opts.prompt, opts.default = prompt, default
+    opts.description = opts.description or { collection }
+    opts.validate = opts.validate
+      or function(value)
+        if util.trim(value) == "" then
+          return "Enter a value."
+        end
+      end
+    dialog.input(opts, function(value)
       if value ~= nil and live() then
         callback(util.trim(value))
       end
     end)
   end
+  local function tag_token(value)
+    if value == "" or value:find("[%s,]") then
+      return "Use one word; hyphens are allowed."
+    end
+  end
   local function choose_category(callback)
-    local data = metadata.load(config)
-    local groups = metadata.groups(context.cards, data, config, os.time())
+    if category then
+      callback(category)
+      return
+    end
+    local groups = metadata.groups(context.cards, metadata.load(config), config, os.time())
     groups = vim.tbl_filter(function(group)
       return group.name ~= ""
     end, groups)
-    vim.ui.select(groups, {
-      prompt = "Category",
+    dialog.select(groups, {
+      prompt = "Choose tag",
+      description = { collection },
       format_item = function(group)
         return group.label .. " (" .. group.name .. ")"
       end,
@@ -141,43 +163,92 @@ function M.open(context)
       end
     end)
   end
-  local choices = {
-    "New chapter",
-    "Create chapter from tag",
-    "Deck label",
-    "Daily goal",
-    "Create category",
-    "Category label",
-    "Category accent",
-    "Category order",
-    "Rename or merge category",
-    "Remove category tag",
-    "New deck",
-    "Enable another card type",
-    "Deck default card type",
-    "Detach UI-created deck",
-  }
-  if context.chapter and context.chapter ~= "" then
-    table.insert(choices, 1, "Rename chapter")
-    table.insert(choices, 2, "Remove chapter")
+  local function pick(title, description, choices, back)
+    if live() then
+      dialog.select(choices, { prompt = title, description = { description }, back = back }, run)
+    end
   end
-  if context.card then
-    table.insert(choices, 1, "Move card to chapter")
+  tags = function()
+    if not live() then
+      return
+    end
+    category = nil
+    local groups = metadata.groups(context.cards, metadata.load(config), config, os.time())
+    groups = vim.tbl_filter(function(group)
+      return group.name ~= ""
+    end, groups)
+    table.insert(groups, 1, { create = true })
+    dialog.select(groups, {
+      prompt = "Tags",
+      description = { collection },
+      back = menu,
+      format_item = function(group)
+        if group.create then
+          return "+ New tag"
+        end
+        return string.format("%s (%d %s)", group.label, #group.cards, #group.cards == 1 and "card" or "cards")
+      end,
+    }, function(group)
+      if not group or not live() then
+        return
+      end
+      if group.create then
+        run("New tag")
+      else
+        category = group
+        tag_actions()
+      end
+    end)
   end
-  local function run(choice)
+  tag_actions = function()
+    pick("Tag", category.name, {
+      "Rename or merge tag",
+      "Create chapter from tag",
+      "Note appearance",
+      "Remove tag",
+    }, tags)
+  end
+  settings = function()
+    local choices = { "Daily goal" }
+    if not context.owned then
+      vim.list_extend(choices, { "Enable card type", "Default card type" })
+    end
+    pick("Study settings", collection, choices, menu)
+  end
+  run = function(choice)
     if not choice or not live() then
       return
     end
     local data = metadata.load(config)
-    if choice == "New chapter" then
-      input("Chapter name: ", "", function(value)
+    if choice == "Tags" then
+      tags()
+    elseif choice == "Study settings" then
+      settings()
+    elseif choice == "Note appearance" then
+      pick("Note appearance", category.label, { "Note label", "Note color", "Note order" }, tag_actions)
+    elseif choice == "Add card" then
+      context.add_card()
+    elseif choice == "Edit card" or choice == "Repair source" then
+      context.edit_card()
+    elseif choice == "Delete card" then
+      context.delete_card()
+    elseif choice == "New chapter" then
+      input("New chapter", "", function(value)
         finish(chapters.create(config, value))
       end)
     elseif choice == "Create chapter from tag" then
       choose_category(function(group)
-        input("New chapter name: ", group.label, function(value)
-          vim.ui.select({ "Cancel", "Create chapter" }, {
-            prompt = string.format("Move %d cards into %s? Existing tags are kept.", #group.cards, value),
+        input("New chapter", group.label, function(value)
+          dialog.select({ "Cancel", "Create chapter" }, {
+            prompt = "Create chapter",
+            description = {
+              value,
+              string.format(
+                "Move %d %s into this chapter. Existing tags are kept.",
+                #group.cards,
+                #group.cards == 1 and "card" or "cards"
+              ),
+            },
           }, function(answer)
             if answer == "Create chapter" and live() then
               finish(chapters.create(config, value, group.cards))
@@ -188,15 +259,27 @@ function M.open(context)
     elseif choice == "Rename chapter" then
       local chapter = data.chapters[context.chapter]
       if chapter then
-        input("Chapter name: ", chapter.label, function(value)
+        input("Rename chapter", chapter.label, function(value)
           finish(chapters.rename(config, context.chapter, value))
         end)
       end
     elseif choice == "Remove chapter" then
       local chapter = data.chapters[context.chapter]
       if chapter then
-        vim.ui.select({ "Cancel", "Remove chapter" }, {
-          prompt = "Remove " .. chapter.label .. "? Its cards move to Unfiled; history is kept.",
+        local count = 0
+        for _, card in ipairs(context.cards) do
+          if chapters.id(data, card) == context.chapter then
+            count = count + 1
+          end
+        end
+        dialog.select({ "Cancel", "Remove chapter" }, {
+          prompt = "Remove chapter",
+          description = {
+            chapter.label,
+            string.format("%d %s move to Unfiled.", count, count == 1 and "card will" or "cards will"),
+            "Cards and review history are kept.",
+          },
+          danger = "Remove chapter",
         }, function(answer)
           if answer == "Remove chapter" and live() then
             finish(chapters.delete(config, context.chapter))
@@ -204,38 +287,45 @@ function M.open(context)
         end)
       end
     elseif choice == "Move card to chapter" then
-      vim.ui.select(chapters.groups(context.cards, data, config), {
+      dialog.select(chapters.groups(context.cards, data, config), {
         prompt = "Move card to chapter",
+        description = { collection },
         format_item = function(group)
           return group.label
         end,
+        back = menu,
       }, function(group)
         if group and live() then
           finish(chapters.move(config, { context.card }, group.name))
         end
       end)
-    elseif choice == "Deck label" then
-      input("Deck label: ", data.label or config.label, function(value)
-        if value == "" then
-          return
-        end
+    elseif choice == "Rename collection" then
+      input("Rename collection", data.label or config.label, function(value)
         finish(metadata.update(config, function(next_data)
           next_data.label = value
         end))
       end)
     elseif choice == "Daily goal" then
-      input("Unique cards per day (0 disables; today's saved goal stays): ", tostring(data.goal), function(value)
+      input("Daily goal", tostring(data.goal), function(value)
         finish(metadata.update(config, function(next_data)
           next_data.goal = tonumber(value)
         end))
-      end)
-    elseif choice == "Create category" then
-      input("Category tag (one word, hyphens allowed): ", "", function(value)
+      end, {
+        description = { "Unique cards per day. Use 0 to turn it off.", "Today's saved goal stays the same." },
+        validate = function(value)
+          local n = tonumber(value)
+          if not n or n < 0 or n > 10000 or n ~= math.floor(n) then
+            return "Use a whole number from 0 to 10000."
+          end
+        end,
+      })
+    elseif choice == "New tag" then
+      input("New tag", "", function(value)
         finish(metadata.update(config, function(next_data)
           next_data.categories[value:lower()] = next_data.categories[value:lower()] or {}
         end))
-      end)
-    elseif choice == "Category label" or choice == "Category accent" or choice == "Category order" then
+      end, { description = { "One word, such as travel or household." }, validate = tag_token })
+    elseif choice == "Note label" or choice == "Note color" or choice == "Note order" then
       choose_category(function(group)
         local function update(key, value)
           finish(metadata.update(config, function(next_data)
@@ -243,62 +333,76 @@ function M.open(context)
             next_data.categories[group.name][key] = value
           end))
         end
-        if choice == "Category accent" then
-          vim.ui.select({ "note", "accent", "good", "hard", "again" }, { prompt = "Theme accent" }, function(value)
+        if choice == "Note color" then
+          dialog.select({ "note", "accent", "good", "hard", "again" }, {
+            prompt = "Note color",
+            description = { "Uses colors from your theme." },
+          }, function(value)
             if value and live() then
               update("accent", value)
             end
           end)
-        elseif choice == "Category order" then
-          input("Shelf order (lower appears first): ", tostring(group.order), function(value)
-            if not tonumber(value) then
-              finish(false, "Enter a number")
-              return
-            end
+        elseif choice == "Note order" then
+          input("Note order", tostring(group.order), function(value)
             update("order", tonumber(value))
-          end)
+          end, {
+            description = { "Lower numbers appear first on the desk." },
+            validate = function(value)
+              local n = tonumber(value)
+              if not n or n ~= n or math.abs(n) == math.huge then
+                return "Enter a number."
+              end
+            end,
+          })
         else
-          input("Category label: ", group.label, function(value)
+          input("Note label", group.label, function(value)
             update("label", value)
           end)
         end
       end)
-    elseif choice == "Rename or merge category" or choice == "Remove category tag" then
+    elseif choice == "Rename or merge tag" or choice == "Remove tag" then
       choose_category(function(group)
         local function confirm(replacement)
-          vim.ui.select({ "Cancel", "Apply" }, {
-            prompt = string.format(
-              "%s: change tags on %d cards%s?",
-              group.name,
-              #group.cards,
-              replacement and (" to " .. replacement) or " (cards are kept)"
-            ),
+          local action = replacement and "Change tag" or "Remove tag"
+          dialog.select({ "Cancel", action }, {
+            prompt = action,
+            description = {
+              replacement and (group.name .. " -> " .. replacement) or group.name,
+              string.format(
+                "Changes tags on %d %s. Cards and history are kept.",
+                #group.cards,
+                #group.cards == 1 and "card" or "cards"
+              ),
+            },
+            danger = not replacement and action or nil,
           }, function(answer)
-            if answer == "Apply" and live() then
+            if answer == action and live() then
               finish(M.change_tag(config, context.cards, group.name, replacement))
             end
           end)
         end
-        if choice == "Remove category tag" then
+        if choice == "Remove tag" then
           confirm(nil)
         else
-          input("Destination tag (existing tags merge): ", group.name, function(value)
-            if value == group.name then
-              return
+          input("Rename or merge tag", group.name, function(value)
+            if value ~= group.name then
+              confirm(value)
             end
-            confirm(value)
-          end)
+          end, { description = { "Using an existing tag merges the two groups." }, validate = tag_token })
         end
       end)
-    elseif choice == "New deck" then
-      input("Deck ID (lowercase, letters/numbers/hyphens): ", "", function(id)
-        input("Deck name: ", id, function(label)
-          input("Deck directory: ", "", function(path)
-            if path == "" then
-              finish(false, "A deck directory is required")
-              return
-            end
-            vim.ui.select({
+    elseif choice == "New collection" then
+      if context.can_create == false then
+        dialog.select({ "Close" }, {
+          prompt = "Collections are configured",
+          description = { "Your setup disables creating collections here. Add one in your Lua or Nix configuration." },
+        }, function() end)
+        return
+      end
+      input("Collection ID", "", function(id)
+        input("Collection name", id, function(label)
+          input("Collection directory", "", function(path)
+            local kinds = {
               "japanese",
               "japanese_production",
               "japanese_kanji",
@@ -307,34 +411,90 @@ function M.open(context)
               "term_definition",
               "code_output",
               "chinese",
-            }, { prompt = "Card type (more can be configured later)" }, function(kind)
+            }
+            dialog.select(kinds, {
+              prompt = "Card type",
+              description = { label },
+              format_item = function(kind)
+                return require("neorg_flashcards.presets")[kind].label or kind
+              end,
+            }, function(kind)
               if kind and live() then
                 finish(context.create_deck(id, { label = label, path = path, types = { kind } }))
               end
             end)
           end)
         end)
-      end)
-    elseif choice == "Enable another card type" then
-      context.deck_type()
-    elseif choice == "Deck default card type" then
-      context.deck_default()
-    elseif choice == "Detach UI-created deck" then
-      vim.ui.select(
-        { "Cancel", "Detach" },
-        { prompt = "Detach this deck? Its cards and history are kept." },
-        function(answer)
-          if answer == "Detach" and live() then
-            finish(context.detach_deck())
+      end, {
+        description = { "A short ID, such as japanese or computer-science." },
+        validate = function(value)
+          if not value:match("^[a-z][a-z0-9_-]*$") then
+            return "Start with a lowercase letter; use letters, numbers, - or _."
           end
+        end,
+      })
+    elseif choice == "Enable card type" then
+      context.deck_type()
+    elseif choice == "Default card type" then
+      context.deck_default()
+    elseif choice == "Detach collection" then
+      if context.owned then
+        dialog.select({ "Close" }, {
+          prompt = "Collection from configuration",
+          description = {
+            collection,
+            "Remove its entry in your Lua or Nix configuration to detach it. Its files are kept.",
+          },
+        }, function() end)
+        return
+      end
+      dialog.select({ "Cancel", "Detach collection" }, {
+        prompt = "Detach collection",
+        description = {
+          collection,
+          "Removes this collection from the workspace.",
+          "Card files and review history are kept.",
+        },
+        danger = "Detach collection",
+      }, function(answer)
+        if answer == "Detach collection" and live() then
+          finish(context.detach_deck())
         end
-      )
+      end)
     end
+  end
+  menu = function()
+    local title, name, choices
+    if context.card then
+      title, name = "Card", context.card_label or collection
+      choices = context.invalid and { "Repair source" } or { "Edit card", "Move card to chapter" }
+      if context.card.closed ~= false then
+        table.insert(choices, "Delete card")
+      end
+    elseif context.kind == "chapter" or context.kind == "chapters" or context.kind == "cards" then
+      local chapter = initial.chapters[context.chapter]
+      title, name = "Chapter", chapter and chapter.label or (context.chapter == "" and "Unfiled" or "All cards")
+      choices = { "Add card", "New chapter" }
+      if chapter then
+        table.insert(choices, "Rename chapter")
+        table.insert(choices, "Remove chapter")
+      end
+    else
+      title, name = "Collection", collection
+      choices = { "Rename collection", "New chapter", "Tags", context.owned and "Daily goal" or "Study settings" }
+      if context.can_create ~= false then
+        table.insert(choices, "New collection")
+      end
+      if not context.owned then
+        table.insert(choices, "Detach collection")
+      end
+    end
+    pick(title, name, choices)
   end
   if context.action then
     run(context.action)
   else
-    vim.ui.select(choices, { prompt = "Manage " .. (config.label or config.id) }, run)
+    menu()
   end
 end
 

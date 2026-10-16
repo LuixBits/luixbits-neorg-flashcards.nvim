@@ -21,3 +21,4 @@ record is a design target and may change before implementation.
 | [0013](0013-card-clinic-is-an-evidence-filter.md) | Accepted | Keep Card Clinic inside Cards and derive it from review evidence |
 | [0014](0014-study-desk-and-workspace-metadata.md) | Accepted | Integrate study on Desk; keep presentation and UI-created deck metadata separate from cards |
 | [0015](0015-independent-chapters-and-window-isolation.md) | Accepted | Separate chapters from tags; isolate app windows from note editing options |
+| [0016](0016-workspace-dialogs.md) | Accepted | Use shared contextual dialogs for workspace actions |

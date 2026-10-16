@@ -21,6 +21,9 @@ function M.open(state, opts)
   state.buf = vim.api.nvim_create_buf(false, true)
   vim.bo[state.buf].buftype = "nofile"
   vim.bo[state.buf].bufhidden = "wipe"
+  if opts.completion == false then
+    vim.b[state.buf].completion = false
+  end
   vim.bo[state.buf].filetype = opts.filetype or "neorg_flashcards"
   vim.bo[state.buf].swapfile = false
 
@@ -45,12 +48,13 @@ function M.open(state, opts)
     height = height,
     row = row,
     col = col,
-    border = "rounded",
+    border = opts.border or "rounded",
     title = opts.title,
-    title_pos = "center",
+    title_pos = opts.title_pos or "center",
     footer = opts.footer,
     footer_pos = "center",
     style = "minimal",
+    zindex = opts.zindex,
   })
 
   window.configure(state.win)

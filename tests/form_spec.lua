@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local form = require("neorg_flashcards.form")
   local actions = require("neorg_flashcards.ui.actions")
   local flashcards = require("neorg_flashcards")
@@ -278,9 +279,9 @@ return function(T)
     vim.cmd("Flashcards open")
     assert_true(form.is_open(), "open cannot strand an active composer")
     assert_equal(vim.api.nvim_get_current_buf(), dirty_form_buf, "open does not replace the composer buffer")
-    local select_original = vim.ui.select
+    local select_original = dialog.select
     local close_choices, close_callback
-    vim.ui.select = function(items, _, callback)
+    dialog.select = function(items, _, callback)
       close_choices = items
       close_callback = callback
     end
@@ -292,16 +293,16 @@ return function(T)
     assert_true(form.is_open(), "keeping a draft returns to the composer")
     form.close()
     close_callback("Discard draft", 2)
-    vim.ui.select = select_original
+    dialog.select = select_original
     assert_true(not form.is_open(), "discarding a draft closes the composer")
     assert_equal(vim.api.nvim_get_current_buf(), form_target, "discard returns to the original target")
 
     flashcards.add_kind("japanese")
     local stale_prompt_buf = vim.api.nvim_get_current_buf()
     vim.api.nvim_buf_set_lines(stale_prompt_buf, 0, 1, false, { "古い" })
-    local stale_select_original = vim.ui.select
+    local stale_select_original = dialog.select
     local stale_close_callback
-    vim.ui.select = function(_, _, callback)
+    dialog.select = function(_, _, callback)
       stale_close_callback = callback
     end
     assert_true(not form.close(), "stale-confirmation fixture opens a discard prompt")
@@ -309,7 +310,7 @@ return function(T)
     flashcards.add_kind("japanese")
     local replacement_form_buf = vim.api.nvim_get_current_buf()
     stale_close_callback("Discard draft", 2)
-    vim.ui.select = stale_select_original
+    dialog.select = stale_select_original
     assert_true(form.is_open(), "a stale discard callback cannot close a later form generation")
     assert_equal(
       vim.api.nvim_get_current_buf(),
@@ -322,9 +323,9 @@ return function(T)
     flashcards.add_kind("japanese")
     local native_dirty_form = vim.api.nvim_get_current_buf()
     vim.api.nvim_buf_set_lines(native_dirty_form, 0, 1, false, { "native close draft" })
-    local native_select_original = vim.ui.select
+    local native_select_original = dialog.select
     local native_close_choices, native_close_callback
-    vim.ui.select = function(items, _, callback)
+    dialog.select = function(items, _, callback)
       native_close_choices = items
       native_close_callback = callback
     end
@@ -354,7 +355,7 @@ return function(T)
       "a repeated native close asks before discarding again"
     )
     native_close_callback("Discard draft", 2)
-    vim.ui.select = native_select_original
+    dialog.select = native_select_original
     assert_true(not form.is_open(), "discarding the recovered draft closes the composer")
     assert_equal(
       #vim.api.nvim_buf_get_extmarks(form_target, add_anchor_namespace, 0, -1, {}),
@@ -703,9 +704,9 @@ return function(T)
       assert_true(not form.save(), "whitespace-only paragraphs cannot satisfy a required field")
       assert_contains(decoration_text(empty_form), "Question is required", "validation refers to the real field")
       assert_contains(decoration_text(empty_form), "Answer is required", "validation checks all required fields")
-      local inline_select_original = vim.ui.select
+      local inline_select_original = dialog.select
       local discard_prompt
-      vim.ui.select = function(_, _, callback)
+      dialog.select = function(_, _, callback)
         discard_prompt = callback
       end
       assert_true(not form.close(), "closing changed inline text requires one draft decision")
@@ -714,7 +715,7 @@ return function(T)
       assert_true(vim.deep_equal(lines(), { " ", " ", "", "", "" }), "keep editing retains every line")
       form.close()
       discard_prompt("Discard draft")
-      vim.ui.select = inline_select_original
+      dialog.select = inline_select_original
       assert_true(not form.is_open(), "discard closes the complete draft")
 
       local regrouped_values
@@ -736,14 +737,14 @@ return function(T)
         vim.deep_equal(lines(), regrouped_original_lines),
         "moving text between fields can leave physical lines unchanged"
       )
-      local regrouped_select = vim.ui.select
+      local regrouped_select = dialog.select
       local regrouped_prompt = false
-      vim.ui.select = function(_, _, callback)
+      dialog.select = function(_, _, callback)
         regrouped_prompt = true
         callback("Keep editing")
       end
       assert_true(not form.close(), "changing field ownership still makes the draft dirty")
-      vim.ui.select = regrouped_select
+      dialog.select = regrouped_select
       assert_true(regrouped_prompt, "discard protection includes field ranges")
       assert_true(form.save(), "regrouped fields save normally")
       assert_equal(regrouped_values.question, "Question", "the question no longer owns the context line")

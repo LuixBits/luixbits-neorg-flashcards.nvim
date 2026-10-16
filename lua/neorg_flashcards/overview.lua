@@ -1,3 +1,4 @@
+local dialog = require("neorg_flashcards.dialog")
 -- The shared workspace shell and functional card browser.
 
 local actions = require("neorg_flashcards.ui.actions")
@@ -619,7 +620,7 @@ local function build_library_detail(entry)
       add_line(lines, spans, " e      Rename chapter")
       add_line(lines, spans, " D      Remove chapter")
     end
-    add_line(lines, spans, " m      Manage / chapter from tag")
+    add_line(lines, spans, " m      Chapter actions")
     if entry.id == "" then
       add_line(lines, spans, "")
       add_line(lines, spans, " Cards without a chapter appear here. Use M on a card to move it.", HIGHLIGHTS.muted)
@@ -1618,7 +1619,7 @@ end
 
 function M.search()
   local token = hub_token()
-  vim.ui.input({ prompt = "Search cards: ", default = state.query }, function(input)
+  dialog.input({ prompt = "Search cards: ", default = state.query }, function(input)
     if input == nil or not same_hub(token) then
       return
     end
@@ -1697,7 +1698,7 @@ function M.choose_filter()
     end
     table.insert(choices, { value = "type:" .. kind, label = filter_label("type:" .. kind), count = count })
   end
-  vim.ui.select(choices, {
+  dialog.select(choices, {
     prompt = "Card view",
     format_item = function(item)
       return string.format("%s %-14s %d", item.value == state.filter and "●" or " ", item.label, item.count)
@@ -1763,7 +1764,7 @@ local function delete_source(entry)
   return source
 end
 
-function M.delete_selected()
+function M.delete_selected(captured_entry)
   if state.page ~= "overview" or not state.capabilities.delete then
     return false
   end
@@ -1771,12 +1772,12 @@ function M.delete_selected()
   -- Capture the physical browser entry before opening an asynchronous picker.
   -- In particular, duplicate-ID invalid cards must not be resolved by ID after
   -- the user confirms because the selection may have moved in the meantime.
-  local entry = selected_card_entry()
+  local entry = captured_entry or selected_card_entry()
   if not entry or not entry.card then
     util.notify("No card selected", vim.log.levels.WARN)
     return false
   end
-  if selected_card_is_unclosed() then
+  if entry.card.closed == false then
     util.notify("Add the missing @end before deleting this flashcard", vim.log.levels.WARN)
     return false
   end
@@ -1787,12 +1788,6 @@ function M.delete_selected()
   if front == "" then
     front = "@flashcard " .. tostring(card.kind or "unknown")
   end
-  local prompt = string.format(
-    "Delete “%s” from %s? Unloaded sources keep %s.flashcards-backup.",
-    truncate(front, 42),
-    source,
-    card.path
-  )
   local context = {
     invalid = entry.invalid == true,
     messages = vim.deepcopy(entry.messages or {}),
@@ -1800,7 +1795,17 @@ function M.delete_selected()
   }
   local token = hub_token()
 
-  vim.ui.select({ "Cancel", "Delete card" }, { prompt = prompt }, function(choice)
+  dialog.select({ "Cancel", "Delete card" }, {
+    prompt = "Delete card",
+    description = {
+      truncate(front, 100),
+      source,
+      "Removes this card from its source.",
+      "Review history is kept.",
+      "Unloaded sources keep a .flashcards-backup copy. Modified buffers stay unsaved.",
+    },
+    danger = "Delete card",
+  }, function(choice)
     if choice ~= "Delete card" or not same_hub(token) then
       return
     end
@@ -1955,8 +1960,16 @@ local function manage_selection(action)
   call_handler("on_manage", function()
     return same_hub(token)
   end, {
+    kind = entry and entry.kind or (entry and entry.card and "card" or state.browser_level),
     chapter = entry and entry.kind == "chapter" and entry.id or state.chapter_id,
     card = entry and entry.card,
+    card_label = entry and entry.card and card_front(entry.card),
+    invalid = entry and entry.invalid,
+    delete = function()
+      if same_hub(token) then
+        M.delete_selected(entry)
+      end
+    end,
   }, action)
 end
 
@@ -2004,7 +2017,7 @@ local function dispatch(action)
     for _, group in ipairs(state.groups) do
       table.insert(choices, { label = group.label, filter = "tag:" .. group.name })
     end
-    vim.ui.select(choices, {
+    dialog.select(choices, {
       prompt = "Category",
       format_item = function(item)
         return item.label
@@ -2099,7 +2112,7 @@ local function dispatch(action)
   elseif action == "add" then
     local entry = state.page == "desk" and selected_overview_entry() or selected_card_entry()
     if state.page == "overview" and state.browser_level == "collections" then
-      manage_selection("New deck")
+      manage_selection("New collection")
     else
       local group = entry and entry.group
       local chapter = group and group.chapter and group.name or state.chapter_id
@@ -2113,7 +2126,7 @@ local function dispatch(action)
   elseif action == "search" then
     if state.page == "desk" then
       local token = hub_token()
-      vim.ui.input({ prompt = "Find " .. state.desk_grouping .. ": ", default = state.desk_query }, function(value)
+      dialog.input({ prompt = "Find " .. state.desk_grouping .. ": ", default = state.desk_query }, function(value)
         if value ~= nil and same_hub(token) then
           state.desk_query = value
           state.sel = 1
@@ -2136,7 +2149,7 @@ local function dispatch(action)
   elseif action == "delete_card" then
     local entry = selected_card_entry()
     if entry and entry.kind then
-      manage_selection(entry.kind == "deck" and "Detach UI-created deck" or "Remove chapter")
+      manage_selection(entry.kind == "deck" and "Detach collection" or "Remove chapter")
     else
       M.delete_selected()
     end
@@ -2145,7 +2158,7 @@ local function dispatch(action)
   elseif action == "edit_card" then
     local entry = state.page == "overview" and selected_card_entry()
     if entry and entry.kind then
-      manage_selection(entry.kind == "deck" and "Deck label" or "Rename chapter")
+      manage_selection(entry.kind == "deck" and "Rename collection" or "Rename chapter")
     else
       M.edit_card()
     end
@@ -2288,6 +2301,8 @@ function M.close()
   end
   state.closing = true
   state.generation = state.generation + 1
+  dialog.close_for_parent(state.main.win)
+  dialog.close_for_parent(state.side.win)
   popup.close(peek)
   popup.close(key_help)
   local hub_tab = state.tab

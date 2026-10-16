@@ -253,26 +253,48 @@ Overview browses collections -> chapters -> cards:
   x               Suspend or resume
   b               Bury until tomorrow or unbury
   g               Filter cards by tag
-  m               Manage collections, chapters, tags, and daily goals
+  m               Actions for the selected collection, chapter, or card
+
+Workspace menus and inputs use small bordered dialogs with the desk's colors
+and ui.ascii setting. No extra picker configuration is needed.
+
+  j/k, Ctrl-j/k, arrows   Select an item
+  Enter, l, Right        Choose
+  h, Left                Back to the parent menu
+  q, Esc                 Cancel
+  Ctrl-D/U, gg/G         Navigate a long list
+
+Inputs open in Insert mode. Enter confirms, Esc returns to Normal mode, and q
+cancels there. Invalid values stay visible with an explanation. Destructive
+confirmations name the target, explain what remains, and select Cancel first.
 
 Collections are subjects, chapters organize cards within a subject, and tags
 categorize cards independently. Existing cards appear in Unfiled. n creates a
-chapter; M moves cards. m > Create chapter from tag moves matching cards after
-confirmation and leaves their tags intact. Removing a chapter keeps its cards
+chapter; M moves cards. On a collection, m > Tags > a tag > Create chapter from
+tag moves matching cards after confirmation and leaves their tags intact.
+Removing a chapter keeps its cards
 in Unfiled. Renames and moves preserve IDs, schedules and history. Chapters
 are independent of filenames; new cards use the collection's default file.
 
-Management can create empty category notes, edit labels, theme accents and
-shelf order, rename/merge tag tokens, or remove tags without deleting cards.
+Collection menus contain Rename collection, New chapter, Tags, and Daily goal.
+UI-created collections put the goal and card-type controls in Study settings.
+Chapter menus contain Add card, New chapter, Rename chapter, and Remove chapter.
+Card menus contain Edit card, Move card to chapter, and Delete card. Invalid
+cards offer Repair source; unclosed blocks cannot be deleted.
+
+Tags can create empty category notes, rename/merge tag tokens, or remove tags
+without deleting cards. A tag's Note appearance menu changes its label, theme
+color, and shelf order.
 Tag changes confirm the affected count and preserve source snapshots at
 <source>.flashcards-tags-backup. Modified buffers remain unsaved. Failures
 report any partial progress; restore snapshots only after inspecting changes.
 
-New deck asks for an ID, name, directory, and bundled card type. UI-created
+New collection asks for an ID, name, directory, and bundled card type. UI-created
 decks can enable more bundled types, choose their default, or be detached
 without deleting source/history. Configured schemas/defaults remain owned by
 Lua or Nix. The registry defaults to stdpath("data")/neorg-flashcards/decks.json;
-deck_registry can override that path or disable UI-created decks with false.
+deck_registry can override that path or disable UI-created decks with false,
+which also hides New collection from the menu.
 Setup checks source roots and history isolation for both kinds of deck.
 
 Each collection's .flashcards-workspace.json stores chapters, card-ID membership,
@@ -672,7 +694,7 @@ Commands call public functions on require("neorg_flashcards"):
         Open the short plugin guide.
 
 UI-opening and control functions return whether the synchronous request was
-accepted. A vim.ui prompt may return true before its callback receives a later
+accepted. A picker or input dialog may return true before its callback receives a later
 answer. active_collection() and get_review_state() return data; validation
 calls return their documented status and diagnostics. Source mutations return
 ok, message, persisted. A successful result with persisted=false changed an

@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local flashcards = require("neorg_flashcards")
   local form = require("neorg_flashcards.form")
   local overview = require("neorg_flashcards.overview")
@@ -52,10 +53,10 @@ return function(T)
   end
 
   local function with_select(replacement, callback)
-    local original = vim.ui.select
-    vim.ui.select = replacement
+    local original = dialog.select
+    dialog.select = replacement
     local ok, result = xpcall(callback, debug.traceback)
-    vim.ui.select = original
+    dialog.select = original
     if not ok then
       error(result, 0)
     end
@@ -320,9 +321,9 @@ return function(T)
     card_type_callback("term_definition")
     assert_true(not form.is_open(), "a stale card-type callback cannot open a form in another collection")
 
-    local input_original = vim.ui.input
+    local input_original = dialog.input
     local tag_callback
-    vim.ui.input = function(_, callback)
+    dialog.input = function(_, callback)
       tag_callback = callback
     end
     assert_true(flashcards.review_tag(""), "the tag prompt opens")
@@ -331,7 +332,7 @@ return function(T)
     assert_true(not flashcards.get_review_state().active, "a stale tag prompt cannot start a review")
 
     local score_callback
-    vim.ui.input = function(_, callback)
+    dialog.input = function(_, callback)
       score_callback = callback
     end
     assert_true(flashcards.review_score(""), "the rating prompt opens")
@@ -341,7 +342,7 @@ return function(T)
     )
     score_callback("good")
     assert_true(not flashcards.get_review_state().active, "a stale rating prompt cannot start a review")
-    vim.ui.input = input_original
+    dialog.input = input_original
   end
 
   do

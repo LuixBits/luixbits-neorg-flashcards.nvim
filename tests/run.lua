@@ -22,6 +22,8 @@ local suites = {
   "desk_workspace_spec.lua",
   "chapters_spec.lua",
   "library_spec.lua",
+  "dialog_spec.lua",
+  "manage_dialog_spec.lua",
   "navigation_spec.lua",
   "desk_interaction_spec.lua",
   "scratch_display_spec.lua",

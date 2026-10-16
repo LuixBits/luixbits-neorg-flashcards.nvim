@@ -1,4 +1,5 @@
 return function(T)
+  local dialog = require("neorg_flashcards.dialog")
   local flashcards = require("neorg_flashcards")
   local overview = require("neorg_flashcards.overview")
   local metadata = require("neorg_flashcards.metadata")
@@ -36,12 +37,12 @@ return function(T)
     end
     error("missing key " .. lhs)
   end
-  local input, select = vim.ui.input, vim.ui.select
+  local input, select = dialog.input, dialog.select
   local answer, choice = "Lesson 1", nil
-  vim.ui.input = function(_, cb)
+  dialog.input = function(_, cb)
     cb(answer)
   end
-  vim.ui.select = function(items, _, cb)
+  dialog.select = function(items, _, cb)
     if type(choice) == "function" then
       cb(choice(items))
     else
@@ -96,13 +97,13 @@ return function(T)
   key("h")
   contains(T.current_tab_text(), "COLLECTION", "h returns to collections")
   local stale
-  vim.ui.input = function(_, cb)
+  dialog.input = function(_, cb)
     stale = cb
   end
   key("e")
   overview.close()
   stale("Expired rename")
   equal(metadata.load(config).label, nil, "a prompt cannot mutate a closed collection")
-  vim.ui.input, vim.ui.select = input, select
+  dialog.input, dialog.select = input, select
   vim.fn.delete(root, "rf")
 end
