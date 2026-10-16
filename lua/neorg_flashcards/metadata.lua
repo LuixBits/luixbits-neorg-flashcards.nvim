@@ -161,8 +161,8 @@ end
 
 function M.tags(card)
   local result, seen = {}, {}
-  for tag in util.trim(card.values.tags):gsub(",", " "):gmatch("%S+") do
-    tag = tag:lower()
+  for raw_tag in util.trim(card.values.tags):gsub(",", " "):gmatch("%S+") do
+    local tag = raw_tag:lower()
     if not seen[tag] then
       seen[tag] = true
       table.insert(result, tag)
