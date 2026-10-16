@@ -104,9 +104,15 @@ local function set_review_lines(lines, rating_spans)
   if not popup.is_open(state) then
     return
   end
-  local pending, finished = {}, 0
+  local pending, finished, unseen, retries = {}, 0, 0, 0
   for _, attempt in ipairs(state.queue) do
     pending[attempt.card.values.id] = true
+    if not state.unique[attempt.card.values.id] then
+      unseen = unseen + 1
+    end
+    if attempt.requeued then
+      retries = retries + 1
+    end
   end
   for id in pairs(state.unique) do
     if not pending[id] then
@@ -132,6 +138,11 @@ local function set_review_lines(lines, rating_spans)
       pending = #state.queue,
       unique = vim.tbl_count(state.unique),
       finished = finished,
+      unseen = unseen,
+      retries = retries,
+      original = state.session.original,
+      ratings = { state.session[1], state.session[2], state.session[3] },
+      aside = state.session.buried + state.session.suspended,
       answers = state.session.total,
       completed = state.completed,
       revealed = state.showing_answer,

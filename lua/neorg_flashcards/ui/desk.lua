@@ -9,15 +9,19 @@ function M.render(model)
   local c = canvas.new(width, model.ascii)
   local entries = {}
   local selected = model.selected or 1
-  local content_width = width >= 110 and width - 27 or width
-  local tile_width = math.max(20, math.min(27, content_width - 6))
-  local columns = math.max(1, math.floor((content_width - 4) / (tile_width + 3)))
-  local left = math.max(2, math.floor((content_width - columns * (tile_width + 3) + 3) / 2))
+  local frame_width = math.min(150, width - 2)
+  local frame_left = math.max(1, math.floor((width - frame_width) / 2) + 1)
+  local wide = frame_width >= 110
+  local content_width = frame_width - 6 - (wide and 27 or 0)
+  local tile_width =
+    math.max(18, math.min(26, content_width >= 50 and math.floor((content_width - 3) / 2) or content_width))
+  local columns = math.max(1, math.floor((content_width + 3) / (tile_width + 3)))
+  local left = frame_left + 3
   local progress = calendar.progress(model.history, model.metadata)
-  local compact_goal = width < 110 and progress.goal > 0 and progress.unique >= progress.goal
+  local compact_goal = not wide and progress.goal > 0 and progress.unique >= progress.goal
   c:put(2, left, compact_goal and "[ GOAL REACHED ]" or "YOUR STUDY DESK", compact_goal and h.good or h.title)
-  c:put(2, math.max(left + 20, width - 21), os.date("%a %d %b"), h.muted)
-  if width < 110 then
+  c:put(2, frame_left + frame_width - 19, os.date("%a %d %b"), h.muted)
+  if not wide then
     local goal = progress.goal > 0 and (progress.unique .. "/" .. progress.goal) or tostring(progress.unique)
     c:put(
       3,
@@ -77,8 +81,8 @@ function M.render(model)
     )
   end
 
-  local row = 12
-  c:put(row, left, canvas.fit(model.label .. "  /  CATEGORY NOTES", content_width - left), h.title)
+  local row = 11
+  c:put(row, left, canvas.fit(model.label .. "  /  CATEGORY NOTES", content_width), h.title)
   if model.query ~= "" then
     c:put(row + 1, left, "Find: " .. model.query .. "   (Esc clears)", h.accent)
     row = row + 1
@@ -91,13 +95,10 @@ function M.render(model)
   end
   for index, group in ipairs(groups) do
     local x = left + ((index - 1) % columns) * (tile_width + 3)
-    local y = row + 2 + math.floor((index - 1) / columns) * 7
+    local y = row + 2 + math.floor((index - 1) / columns) * 6
     local active = #entries + 1 == selected
     local accent = h[group.accent] or h.note
     local edge = active and h.selected or accent
-    if active then
-      y = y - 1
-    end
     c:box(y, x, tile_width, 5, edge)
     c:put(y + 1, x + 2, canvas.fit((active and "> " or "") .. group.label, tile_width - 4), active and h.title or h.ink)
     c:put(y + 2, x + 2, string.format("%d ready", group.due), group.due > 0 and h.accent or h.muted)
@@ -112,7 +113,7 @@ function M.render(model)
       id = group.name or "@all",
     })
   end
-  local bottom = row + 2 + math.ceil(#groups / columns) * 7
+  local bottom = row + 2 + math.ceil(#groups / columns) * 6
   local active = entries[selected]
   if active and active.group then
     local group = active.group
@@ -125,8 +126,8 @@ function M.render(model)
     c:put(bottom, left, canvas.fit(group.label .. "  /  " .. detail, width - left), h.muted)
   end
 
-  local px, py = width >= 110 and width - 24 or left, width >= 110 and 5 or bottom + 2
-  local pw = math.min(23, width - px)
+  local px, py = wide and (frame_left + frame_width - 26) or left, wide and 4 or bottom + 2
+  local pw = math.min(23, frame_width - 6)
   c:box(py, px, pw, 8, h.note, progress.goal > 0 and progress.unique >= progress.goal and "GOAL REACHED" or "TODAY")
   c:put(
     py + 2,
@@ -142,14 +143,6 @@ function M.render(model)
   end
   c:put(py + 5, px + 2, string.format("%d / 7 study days", progress.active_days), h.ink)
   c:put(py + 6, px + 2, string.format("%d day streak", progress.streak), h.muted)
-  if width >= 110 then
-    c:put(16, px + 5, "   _   _", h.note)
-    c:put(17, px + 5, "  ( )_( )", h.note)
-    c:put(18, px + 5, "   \\ | /", h.note)
-    c:put(19, px + 5, "  .-----.", h.edge)
-    c:put(20, px + 5, "   \\___/", h.edge)
-    c:put(23, px, "One card at a time.", h.muted)
-  end
   if model.error then
     c:put(math.max(bottom + 1, c.height + 1), left, canvas.fit("Metadata: " .. model.error, width - left), h.again)
   end
@@ -161,6 +154,8 @@ function M.render(model)
       h.hard
     )
   end
+  local frame_height = math.max(c.height + 2, math.min(model.height or 32, 38) - 2)
+  c:box(1, frame_left, frame_width, frame_height, h.edge)
   local lines, spans = c:finish()
   -- The floating shortcut strip occupies the final visible row.
   table.insert(lines, "")

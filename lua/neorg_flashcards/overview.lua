@@ -1155,6 +1155,7 @@ local function render()
       or { { id = config.id, label = collection_label() } }
     main_lines, main_spans, state.entries, state.columns, state.sel = desk.render({
       width = main_width(),
+      height = vim.fn.winheight(state.main.win),
       ascii = config.ui.ascii,
       selected = state.sel,
       decks = decks,

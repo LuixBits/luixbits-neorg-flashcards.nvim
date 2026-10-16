@@ -71,7 +71,7 @@ M.defaults = {
     shadow = { link = "NonText" },
     note = { link = "String" },
     title = { link = "Title" },
-    selected = { link = "IncSearch" },
+    selected = { link = "Visual" },
     accent = { link = "Special" },
     muted = { link = "Comment" },
   },

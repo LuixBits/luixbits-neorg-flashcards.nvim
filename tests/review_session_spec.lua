@@ -28,8 +28,9 @@ return function(T)
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, -1, 0, -1, { details = true })) do
       local details = mark[4] or {}
       local label = rating_labels[details.hl_group]
-      if label then
-        local line = lines[mark[2] + 1]
+      local line = lines[mark[2] + 1]
+      -- Session counters use whole spans; controls color the exact label.
+      if label and line:sub(mark[3] + 1, details.end_col) == label then
         table.insert(marks, {
           group = details.hl_group,
           label = line:sub(mark[3] + 1, details.end_col),
