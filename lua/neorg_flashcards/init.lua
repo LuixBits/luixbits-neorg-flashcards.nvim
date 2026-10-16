@@ -535,6 +535,15 @@ function M.add_kind(kind)
   return add_card(kind)
 end
 
+local function composer_chapter_label(card_config, chapter, card)
+  local data = require("neorg_flashcards.metadata").load(card_config)
+  if card then
+    chapter = require("neorg_flashcards.chapters").id(data, card)
+  end
+  local entry = (data.chapters or {})[chapter or ""]
+  return entry and entry.label or "Unfiled"
+end
+
 ---Add a card straight to the default file, no matter which buffer is current.
 ---Used by the overview's `a` key. Falls back to default_card_type.
 ---@param kind string|nil
@@ -573,6 +582,7 @@ function M.add_to_default(kind, initial_values, chapter)
   local opened = form.open(card_config, kind, {
     target_label = target.label,
     target_path = target.path,
+    chapter_label = composer_chapter_label(card_config, chapter),
     initial_values = initial_values,
     on_close = function()
       clear_add_anchor(target.anchor)
@@ -1062,9 +1072,10 @@ function M.edit_card(card, context)
   local opened = form.open(card_config, card.kind, {
     edit = true,
     allow_save_new = false,
-    title = " Edit " .. ((schema.for_kind(card_config, card.kind) or {}).label or card.kind) .. " card ",
+    title = " Edit card ",
     target_label = util.path_label(card.path, card_config.path),
     target_path = card.path,
+    chapter_label = composer_chapter_label(card_config, nil, card),
     initial_values = card.values,
     on_save = function(values)
       local replacements = {}

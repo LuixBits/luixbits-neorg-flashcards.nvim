@@ -7,6 +7,7 @@ local schema = require("neorg_flashcards.schema")
 local actions = require("neorg_flashcards.ui.actions")
 local highlights = require("neorg_flashcards.highlights")
 local util = require("neorg_flashcards.util")
+local canvas = require("neorg_flashcards.ui.canvas")
 
 local M = {}
 
@@ -26,6 +27,7 @@ local function fresh_state(generation)
     kind_label = nil,
     title = nil,
     fields = {},
+    roles = {},
     on_save = nil,
     on_close = nil,
     config = {},
@@ -137,24 +139,19 @@ local function field_title(field)
   return one_line(field.title or field.key or "Field")
 end
 
-local function label_width()
-  local width = 0
-  for _, field in ipairs(state.fields) do
-    local marker = field.required and " *" or ""
-    width = math.max(width, vim.fn.strdisplaywidth(field_title(field) .. marker))
-  end
-  return width
+local function layout()
+  local available = math.max(1, vim.o.lines - 6)
+  local spacious = available >= #state.fields * 3 + 6
+  return {
+    spacious = spacious,
+    height = math.min(available, #state.fields * (spacious and 3 or 2) + (spacious and 6 or 5)),
+    width = math.max(1, math.min(96, vim.o.columns - 4, math.floor(vim.o.columns * 0.82))),
+  }
 end
 
 local function window_config()
-  local available_width = math.max(1, vim.o.columns - 4)
-  local minimum_width = math.max(54, label_width() + 28)
-  local width = math.min(92, math.max(minimum_width, math.floor(vim.o.columns * 0.64)))
-  width = math.max(1, math.min(width, available_width))
-
-  local available_height = math.max(1, vim.o.lines - 4)
-  local height = math.max(8, #state.fields + 4)
-  height = math.max(1, math.min(height, available_height))
+  local dimensions = layout()
+  local width, height = dimensions.width, dimensions.height
 
   local config = {
     relative = "editor",
@@ -162,21 +159,24 @@ local function window_config()
     height = height,
     row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
     col = math.max(0, math.floor((vim.o.columns - width) / 2)),
-    border = "rounded",
-    title = state.title or (" Add " .. (state.kind_label or state.kind or "flashcard") .. " card "),
-    title_pos = "center",
+    border = state.config.ui and state.config.ui.ascii and { "+", "-", "+", "|", "+", "-", "+", "|" } or "rounded",
+    title = state.title or (state.edit_mode and " Edit card " or " New card "),
+    title_pos = "left",
     style = "minimal",
   }
   if show_shortcuts() then
-    config.footer = actions.footer("form", width, form_capabilities())
+    config.footer = { { canvas.fit(actions.footer("form", width, form_capabilities()), width), FORM_HIGHLIGHTS.label } }
     config.footer_pos = "center"
   end
   return config
 end
 
+local render
+
 local function resize()
   if M.is_open() then
     pcall(vim.api.nvim_win_set_config, state.win, window_config())
+    render()
   end
 end
 
@@ -209,13 +209,6 @@ local function status_chunks()
   if field and state.errors[state.selected] then
     return { { "  ! " .. state.errors[state.selected], FORM_HIGHLIGHTS.error } }
   end
-  if field and not util.isempty(field.help) then
-    return {
-      { "  Hint  ", FORM_HIGHLIGHTS.muted },
-      { one_line(field.help), FORM_HIGHLIGHTS.hint },
-    }
-  end
-
   local remaining = 0
   local lines = current_lines()
   for index, item in ipairs(state.fields) do
@@ -230,33 +223,70 @@ local function status_chunks()
   return { { "  Ready to save", FORM_HIGHLIGHTS.status_ok } }
 end
 
-local function render()
+local function header_lines(dimensions)
+  local collection = one_line(state.config.label or state.config.id or "Collection")
+  local context = collection .. " / " .. one_line(state.target.chapter_label or "Unfiled")
+  local lines = { { { "  " .. canvas.fit(context, dimensions.width - 4), FORM_HIGHLIGHTS.target } } }
+  -- A very short terminal must leave room for the active field itself.
+  if dimensions.height >= 10 then
+    table.insert(lines, {
+      { "  " .. canvas.fit(one_line(state.kind_label or state.kind), dimensions.width - 4), FORM_HIGHLIGHTS.muted },
+    })
+    table.insert(lines, {
+      {
+        "  Target  " .. canvas.fit(one_line(state.target.label or state.target.path), dimensions.width - 10),
+        FORM_HIGHLIGHTS.muted,
+      },
+    })
+    if dimensions.spacious then
+      table.insert(lines, { { "", FORM_HIGHLIGHTS.muted } })
+    end
+  end
+  return lines
+end
+
+render = function()
   if not valid_buffer() or #state.fields == 0 then
     return
   end
 
+  local view = M.is_open() and vim.api.nvim_win_call(state.win, vim.fn.winsaveview) or nil
+  local dimensions = layout()
+  local header = header_lines(dimensions)
   state.selected = selected_row()
   vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
 
   local lines = current_lines()
-  local widest = label_width()
   for index, field in ipairs(state.fields) do
-    local title = field_title(field)
-    local marker = field.required and " *" or ""
-    local padding = string.rep(" ", math.max(0, widest - vim.fn.strdisplaywidth(title .. marker)))
+    local selected = index == state.selected
+    local caption = {
+      { "  " .. field_title(field), state.errors[index] and FORM_HIGHLIGHTS.error or FORM_HIGHLIGHTS.label },
+      { "  " .. (state.roles[field.key] or "Details"), FORM_HIGHLIGHTS.muted },
+      {
+        field.required and " · required" or " · optional",
+        field.required and FORM_HIGHLIGHTS.required or FORM_HIGHLIGHTS.muted,
+      },
+    }
+    if field.multiline then
+      table.insert(caption, { " · Enter to edit", FORM_HIGHLIGHTS.hint })
+    end
+    local above = index == 1 and vim.deepcopy(header) or {}
+    if index > 1 and dimensions.spacious then
+      table.insert(above, { { "", FORM_HIGHLIGHTS.muted } })
+    end
+    table.insert(above, caption)
     local options = {
       priority = 100,
       right_gravity = false,
       virt_text = {
-        { "  " .. title, FORM_HIGHLIGHTS.label },
-        { marker, FORM_HIGHLIGHTS.required },
-        { padding .. "  │ ", FORM_HIGHLIGHTS.muted },
+        { selected and "  > " or "    ", selected and FORM_HIGHLIGHTS.target or FORM_HIGHLIGHTS.muted },
       },
       virt_text_pos = "inline",
+      hl_mode = "combine",
+      virt_lines = above,
+      virt_lines_above = true,
+      line_hl_group = selected and FORM_HIGHLIGHTS.active or FORM_HIGHLIGHTS.input,
     }
-    if index == state.selected then
-      options.line_hl_group = FORM_HIGHLIGHTS.active
-    end
     vim.api.nvim_buf_set_extmark(state.buf, namespace, index - 1, 0, options)
 
     local value = lines[index] or ""
@@ -269,10 +299,8 @@ local function render()
         string.format("  ↳ %d %s · Enter to edit", count, count == 1 and "line" or "lines"),
         FORM_HIGHLIGHTS.hint,
       }
-    elseif field.multiline then
-      decoration = { "  Enter to open the long-field editor", FORM_HIGHLIGHTS.muted }
-    elseif util.isempty(value) and not util.isempty(field.placeholder) then
-      decoration = { "  " .. one_line(field.placeholder), FORM_HIGHLIGHTS.muted }
+    elseif util.isempty(value) then
+      decoration = { one_line(field.placeholder ~= "" and field.placeholder or "Enter a value"), FORM_HIGHLIGHTS.muted }
     end
     if decoration then
       vim.api.nvim_buf_set_extmark(state.buf, namespace, index - 1, #value, {
@@ -280,27 +308,36 @@ local function render()
         right_gravity = false,
         virt_text = { decoration },
         virt_text_pos = "eol",
+        hl_mode = "combine",
       })
     end
   end
 
-  local target_label = one_line(state.target.label or state.target.path or "[No target]")
-  vim.api.nvim_buf_set_extmark(state.buf, namespace, 0, 0, {
-    priority = 90,
-    virt_lines = {
-      {
-        { "  Target  ", FORM_HIGHLIGHTS.muted },
-        { target_label, FORM_HIGHLIGHTS.target },
-      },
-    },
-    virt_lines_above = true,
-  })
-
+  local field = state.fields[state.selected]
+  local help = field and one_line(field.help) or ""
+  if field and field.multiline then
+    help = "Enter to open the long-field editor" .. (help ~= "" and " · " .. help or "")
+  end
+  local below = { status_chunks() }
+  if help ~= "" then
+    table.insert(below, 1, { { "  " .. canvas.fit(help, dimensions.width - 4), FORM_HIGHLIGHTS.hint } })
+  end
+  if dimensions.spacious then
+    table.insert(below, 1, { { "", FORM_HIGHLIGHTS.muted } })
+  end
   local last_line = lines[#state.fields] or ""
   vim.api.nvim_buf_set_extmark(state.buf, namespace, #state.fields - 1, #last_line, {
     priority = 90,
-    virt_lines = { status_chunks() },
+    virt_lines = below,
   })
+  if view then
+    -- Neovim otherwise hides virtual labels above the first visible value.
+    -- Preserve horizontal scrolling while including that field's caption.
+    view.topfill = view.topline == 1 and (#header + 1) or (dimensions.spacious and 2 or 1)
+    vim.api.nvim_win_call(state.win, function()
+      vim.fn.winrestview(view)
+    end)
+  end
 end
 
 local function replace_lines(lines)
@@ -1056,6 +1093,7 @@ local function infer_target(config, opts, source_buf)
   return {
     path = path,
     label = label,
+    chapter_label = opts.chapter_label or "Unfiled",
   }
 end
 
@@ -1068,6 +1106,8 @@ local function configure_window(buf)
   vim.wo[state.win].signcolumn = "no"
   vim.wo[state.win].spell = false
   vim.wo[state.win].wrap = false
+  vim.wo[state.win].scrolloff = 0
+  vim.wo[state.win].sidescrolloff = 3
 end
 
 local handle_native_close
@@ -1177,6 +1217,9 @@ function M.open(config, kind, opts)
   state.on_close = opts.on_close
   state.config = config
   state.fields = vim.deepcopy(fields)
+  for _, field in ipairs(card_schema.fields or {}) do
+    state.roles[field.key] = field.key == card_schema.front and "Front" or (field.reveal and "Answer" or "Details")
+  end
   state.initial_values = vim.deepcopy(opts.initial_values or {})
   state.allow_save_new = opts.allow_save_new ~= false
   state.edit_mode = opts.edit == true

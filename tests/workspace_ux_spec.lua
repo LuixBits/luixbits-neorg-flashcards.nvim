@@ -62,16 +62,8 @@ return function(T)
     return result
   end
 
-  local function current_title()
-    local title = vim.api.nvim_win_get_config(0).title
-    if type(title) == "string" then
-      return title
-    end
-    local chunks = {}
-    for _, chunk in ipairs(title or {}) do
-      table.insert(chunks, type(chunk) == "table" and tostring(chunk[1] or "") or tostring(chunk))
-    end
-    return table.concat(chunks)
+  local function composer_context()
+    return T.decoration_text(vim.api.nvim_get_current_buf())
   end
 
   local function contains(values, expected)
@@ -104,7 +96,7 @@ return function(T)
     assert_equal(select_calls, 0, "one card type does not show an unnecessary picker")
     assert_true(form.is_open(), "the direct one-type path opens the composer")
     assert_contains(
-      current_title(),
+      composer_context(),
       "Japanese word → reading + English",
       "the direct path uses the only configured card type"
     )
@@ -159,7 +151,7 @@ return function(T)
     assert_true(type(picker_callback) == "function", "the picker provides a selection callback")
     picker_callback("term_definition")
     assert_true(form.is_open(), "choosing a card type opens the composer")
-    assert_contains(current_title(), "Term and definition", "the composer uses the selected card type")
+    assert_contains(composer_context(), "Term and definition", "the composer uses the selected card type")
     assert_true(form.close({ force = true }), "the selected-type composer closes cleanly")
 
     local cancelled = with_select(function(_, _, callback)
@@ -178,7 +170,7 @@ return function(T)
     end)
     assert_true(explicit, "an explicit card type opens the composer")
     assert_equal(explicit_select_calls, 0, "an explicit card type bypasses the picker")
-    assert_contains(current_title(), "Term and definition", "the explicit type reaches the matching composer")
+    assert_contains(composer_context(), "Term and definition", "the explicit type reaches the matching composer")
     assert_true(form.close({ force = true }), "the explicit-type composer closes cleanly")
   end
 

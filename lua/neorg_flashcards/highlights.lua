@@ -53,6 +53,7 @@ M.groups = {
   },
   form = {
     active = "NeorgFlashcardsFormActive",
+    input = "NeorgFlashcardsFormInput",
     error = "NeorgFlashcardsFormError",
     hint = "NeorgFlashcardsFormHint",
     label = "NeorgFlashcardsFormLabel",
@@ -111,6 +112,7 @@ local DEFAULT_LINKS = {
   [M.groups.hub.tab_inactive] = "TabLine",
   [M.groups.hub.footer] = "StatusLine",
   [M.groups.form.active] = "CursorLine",
+  [M.groups.form.input] = "Pmenu",
   [M.groups.form.error] = "DiagnosticError",
   [M.groups.form.hint] = "Comment",
   [M.groups.form.label] = "Identifier",

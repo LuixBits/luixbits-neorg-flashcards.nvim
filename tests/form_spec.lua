@@ -121,6 +121,12 @@ return function(T)
     assert_contains(initial_decorations, "Japanese", "composer renders field labels outside the buffer")
     assert_contains(initial_decorations, "e.g. 猫", "composer renders schema placeholders")
     assert_contains(initial_decorations, "Word or expression", "composer renders help for the active field")
+    assert_contains(initial_decorations, "Front", "the composer identifies which value appears on the front")
+    assert_contains(initial_decorations, "Answer", "the composer identifies values shown after reveal")
+    assert_contains(initial_decorations, "required", "required fields use a readable label")
+    assert_contains(initial_decorations, "optional", "optional fields are explicitly marked")
+    assert_true(vim.fn.winsaveview().topfill > 0, "the first field's label and destination remain in view")
+    assert_true(not vim.wo.list and vim.wo.conceallevel == 0, "form inputs suppress source whitespace and concealment")
 
     local form_action_ids = {}
     for _, binding in ipairs(actions.available_bindings("form", { save_new = true })) do
