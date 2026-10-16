@@ -1,5 +1,6 @@
 -- Display-cell layout, with byte-indexed highlight spans at the API boundary.
 local M = {}
+local ASCII_GLYPHS = { ["█"] = "#", ["░"] = ".", ["▒"] = ":", ["▓"] = "#", ["●"] = "*" }
 
 function M.fit(value, width)
   width = math.max(0, width)
@@ -58,6 +59,9 @@ function M.new(viewport_width, ascii)
     self.rows[row] = self.rows[row] or {}
     local cells = self.rows[row]
     for _, char in ipairs(vim.fn.split(tostring(text), "\\zs")) do
+      if self.ascii then
+        char = ASCII_GLYPHS[char] or char
+      end
       local size = vim.fn.strdisplaywidth(char, math.max(0, col - 1))
       if size == 0 and cells[col - 1] then
         cells[col - 1].text = cells[col - 1].text .. char

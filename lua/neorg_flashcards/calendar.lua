@@ -121,53 +121,45 @@ end
 
 function M.render(entries, metadata, selected, width, ascii, now, height)
   now = now or os.time()
+  width = math.min(width, 39)
   local h, c = highlights.groups.desk, canvas.new(width, ascii)
-  local cell = math.max(3, math.min(7, math.floor((width - 5) / 7)))
-  local left = math.max(2, math.floor((width - cell * 7) / 2))
+  local cell = math.max(3, math.min(5, math.floor((width - 5) / 7)))
+  local left = math.max(3, math.floor((width - cell * 7) / 2) + 1)
   local data = M.progress(entries, metadata, now)
+  local compact = (height or 40) <= 12
   local start = M.month(selected)
   local offset = (os.date("*t", start).wday + 5) % 7
-  c:put(2, left, os.date("%B %Y", selected):upper(), h.title)
-  c:put(4, left, canvas.fit("h/l day  j/k week  [/] month  . today", width - left), h.muted)
-  for index, name in ipairs({ "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" }) do
-    c:put(6, left + (index - 1) * cell, name, h.muted)
+  c:box(1, 1, width, compact and 10 or 15, h.edge, os.date("%B %Y", selected):upper())
+  if not compact then
+    c:put(3, 3, canvas.fit("h/l day  j/k week  [/] month", width - 4), h.muted)
   end
-  local chosen_month = os.date("%Y-%m", selected)
-  local selected_key = M.day(selected)
-  local compact = (height or 40) < 28
-  local first_row, row_step = compact and 7 or 8, compact and 1 or 2
+  for index, name in ipairs({ "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" }) do
+    c:put(compact and 2 or 5, left + (index - 1) * cell, name, h.muted)
+  end
+  local month, selected_key = os.date("%Y-%m", selected), M.day(selected)
   for index = 0, 41 do
     local epoch = M.shift(start, index - offset)
-    if os.date("%Y-%m", epoch) == chosen_month then
-      local key, y, x = M.day(epoch), first_row + math.floor(index / 7) * row_step, left + (index % 7) * cell
-      local day = data.days[key]
-      local target = metadata.goals[key]
+    if os.date("%Y-%m", epoch) == month then
+      local key, y, x = M.day(epoch), (compact and 3 or 6) + math.floor(index / 7), left + (index % 7) * cell
+      local day, target = data.days[key], metadata.goals[key]
       local marker = day and (target and target > 0 and day.unique >= target and "#" or "*") or " "
-      local label = string.format("%2d%s", tonumber(os.date("%d", epoch)), marker)
+      local label = string.format("%2d", tonumber(os.date("%d", epoch)))
       if key == selected_key then
-        local suffix = cell >= 6 and (marker .. (key == M.day(now) and "T" or "")) or ""
-        c:put(y, x - 1, "[" .. label:sub(1, 2) .. "]" .. suffix, h.selected)
+        c:put(y, x - 1, "[" .. label .. "]", h.selected)
       else
         c:put(
           y,
           x,
-          label .. (key == M.day(now) and cell >= 4 and "T" or ""),
+          label .. (key == M.day(now) and "T" or marker),
           key == M.day(now) and h.accent or (day and h.note or h.muted)
         )
       end
     end
   end
-  local legend = compact and 14 or 21
-  c:put(legend, left, "* studied  # goal reached  T today", h.muted)
-  c:put(legend + 2, left, string.format("THIS WEEK   %d / 7 active days", data.active_days), h.title)
-  c:put(legend + 4, left, string.format("%d card-days  /  %d answers", data.week_unique, data.week_answers), h.ink)
-  c:put(
-    legend + 5,
-    left,
-    string.format("Last week: %d card-days / %d answers", data.previous_unique, data.previous_answers),
-    h.muted
-  )
-  c:put(legend + 7, left, "Enter opens this day's cards in Overview", h.accent)
+  c:put(compact and 9 or 12, 3, compact and "h/l day  j/k week  . today" or ". today   Enter inspect", h.accent)
+  if not compact then
+    c:put(14, 3, "* studied  # goal  T today", h.muted)
+  end
   return c:finish()
 end
 

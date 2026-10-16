@@ -217,16 +217,6 @@ local function add_span(spans, line, start_col, end_col, hl)
   table.insert(spans, { line = line, start_col = start_col, end_col = end_col, hl = hl })
 end
 
-local function append_section(lines, spans, section_lines, section_spans)
-  local offset = #lines
-  for _, line in ipairs(section_lines or {}) do
-    table.insert(lines, line)
-  end
-  for _, span in ipairs(section_spans or {}) do
-    add_span(spans, span.line + offset, span.start_col, span.end_col, span.hl)
-  end
-end
-
 local function count_states(cards, now)
   local result = {
     total = #cards,
@@ -971,58 +961,35 @@ local function build_card_detail()
   return lines, spans
 end
 
-local function distribution_bar(count, maximum, width)
-  if count <= 0 or maximum <= 0 then
-    return ""
-  end
-  return string.rep("█", math.max(1, math.floor(count / maximum * width + 0.5)))
-end
-
 local function build_stats_insights()
   local now = os.time()
   local counts = count_states(state.all_cards, now)
   local lines, spans = {}, {}
   add_line(lines, spans, " Study health", HIGHLIGHTS.heading)
   add_line(lines, spans, "")
-  add_line(lines, spans, " Queue", HIGHLIGHTS.title)
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Ready now     %4d  %s",
-      counts.ready,
-      distribution_bar(counts.ready, math.max(1, counts.total), 24)
-    ),
-    counts.ready > 0 and HIGHLIGHTS.due or HIGHLIGHTS.scheduled
-  )
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Overdue       %4d  %s",
-      counts.overdue,
-      distribution_bar(counts.overdue, math.max(1, counts.total), 24)
-    ),
-    counts.overdue > 0 and HIGHLIGHTS.overdue or HIGHLIGHTS.muted
-  )
-  add_line(
-    lines,
-    spans,
-    string.format(
-      "  Scheduled     %4d  %s",
-      counts.scheduled,
-      distribution_bar(counts.scheduled, math.max(1, counts.total), 24)
-    ),
-    HIGHLIGHTS.scheduled
-  )
+  local attention = state.insights.attention or {}
   add_line(lines, spans, "")
-  add_line(lines, spans, " Learning state", HIGHLIGHTS.title)
-  add_line(lines, spans, string.format("  New           %4d", counts.new), HIGHLIGHTS.new)
-  add_line(lines, spans, string.format("  Learning      %4d", counts.learning), HIGHLIGHTS.learning)
-  add_line(lines, spans, string.format("  Relearning    %4d", counts.relearning), HIGHLIGHTS.learning)
-  add_line(lines, spans, string.format("  Review        %4d", counts.review), HIGHLIGHTS.review)
-  add_line(lines, spans, string.format("  Suspended     %4d", counts.suspended), HIGHLIGHTS.suspended)
-  add_line(lines, spans, string.format("  Buried        %4d", counts.buried), HIGHLIGHTS.buried)
+  add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
+  if #attention == 0 then
+    add_line(
+      lines,
+      spans,
+      counts.total == 0 and "  Statistics appear after you add cards." or "  No cards need attention right now.",
+      HIGHLIGHTS.muted
+    )
+  else
+    for index = 1, math.min(5, #attention) do
+      local insight = attention[index]
+      local reason = insight.reasons[1] and insight.reasons[1].message or "recent reviews"
+      add_line(
+        lines,
+        spans,
+        "  " .. GLYPH .. " " .. truncate(card_front(insight.card) .. " · " .. reason, math.max(20, main_width() - 8)),
+        HIGHLIGHTS.overdue
+      )
+    end
+    add_line(lines, spans, "  Open Overview and choose f → Card clinic to work through them.", HIGHLIGHTS.muted)
+  end
   local tag_counts = {}
   for _, card in ipairs(state.all_cards) do
     for _, tag in ipairs(card_tags(card)) do
@@ -1050,84 +1017,25 @@ local function build_stats_insights()
       )
     end
   end
-  local attention = state.insights.attention or {}
-  add_line(lines, spans, "")
-  add_line(lines, spans, " Needs attention", HIGHLIGHTS.title)
-  if #attention == 0 then
-    add_line(
-      lines,
-      spans,
-      counts.total == 0 and "  Statistics appear after you add cards." or "  No cards need attention right now.",
-      HIGHLIGHTS.muted
-    )
-  else
-    for index = 1, math.min(5, #attention) do
-      local insight = attention[index]
-      local reason = insight.reasons[1] and insight.reasons[1].message or "recent reviews"
-      add_line(
-        lines,
-        spans,
-        "  " .. GLYPH .. " " .. truncate(card_front(insight.card) .. " · " .. reason, math.max(20, main_width() - 8)),
-        HIGHLIGHTS.overdue
-      )
-    end
-    add_line(lines, spans, "  Open Cards and choose f → Card clinic to work through them.", HIGHLIGHTS.muted)
-  end
   return lines, spans
-end
-
-local function add_optional_stats_section(lines, spans, name, ...)
-  if type(stats[name]) ~= "function" then
-    return false
-  end
-  local ok, section_lines, section_spans = pcall(stats[name], ...)
-  if not ok then
-    return false
-  end
-  add_line(lines, spans, "")
-  append_section(lines, spans, section_lines, section_spans)
-  return true
 end
 
 local function build_full_stats()
-  local now = os.time()
-  local cards = state.all_cards
-  local log_entries, log_errors = state.history_entries, state.history_errors
-  local width = side_width()
-  local weeks = math.max(4, math.min(20, math.floor((width - 8) / 2)))
-  local lines, spans = {}, {}
-  add_line(lines, spans, " Analytics · " .. collection_label(), HIGHLIGHTS.heading)
-  add_line(lines, spans, "")
-  if log_errors and #log_errors > 0 then
-    add_line(
-      lines,
-      spans,
-      string.format(
-        "  ⚠ %d history line%s skipped · press c to inspect",
-        #log_errors,
-        #log_errors == 1 and "" or "s"
-      ),
-      HIGHLIGHTS.overdue
-    )
-    add_line(lines, spans, "")
-  end
-  append_section(lines, spans, stats.summary_section(cards, log_entries, now))
-  add_optional_stats_section(lines, spans, "retention_section", log_entries, now)
-  add_optional_stats_section(lines, spans, "ratings_section", log_entries, now, width)
-  add_optional_stats_section(lines, spans, "state_section", cards, now)
-  add_line(lines, spans, "")
-  append_section(lines, spans, stats.heatmap_section(log_entries, now, weeks))
-  add_line(lines, spans, "")
-  append_section(lines, spans, stats.forecast_section(cards, now, width))
-  add_line(lines, spans, "")
-  add_line(lines, spans, " About these numbers", HIGHLIGHTS.title)
-  if #log_entries == 0 then
-    add_line(lines, spans, "  No review history yet. Complete a review to begin the timeline.", HIGHLIGHTS.muted)
-  else
-    add_line(lines, spans, "  Activity is shown only since review tracking began.", HIGHLIGHTS.muted)
-    add_line(lines, spans, "  Prefer trends over conclusions from one noisy day.", HIGHLIGHTS.muted)
-  end
-  return lines, spans
+  local lines, spans = build_stats_insights()
+  return require("neorg_flashcards.ui.dashboard").render({
+    width = main_width(),
+    height = vim.fn.winheight(state.main.win),
+    ascii = config.ui.ascii,
+    label = collection_label(),
+    cards = state.all_cards,
+    history = state.history_entries,
+    progress = state.progress_entries,
+    errors = state.history_errors,
+    metadata = state.metadata,
+    date = state.date,
+    health_lines = lines,
+    health_spans = spans,
+  })
 end
 
 local function set_pane_lines(pane, lines)
@@ -1265,15 +1173,7 @@ local function day_detail()
   table.insert(lines, "")
   table.insert(lines, "  Enter: inspect this day's cards in Overview")
   table.insert(lines, "")
-  local full, spans = build_stats_insights()
-  local more, more_spans = build_full_stats()
-  append_section(full, spans, more, more_spans)
-  local offset = #lines
-  vim.list_extend(lines, full)
-  for _, span in ipairs(spans) do
-    span.line = span.line + offset
-  end
-  return lines, spans
+  return lines, { { line = 1, start_col = 0, end_col = -1, hl = HIGHLIGHTS.heading } }
 end
 
 local function render()
@@ -1289,15 +1189,7 @@ local function render()
     end
     side_lines, side_spans = build_card_detail()
   elseif state.page == "stats" then
-    main_lines, main_spans = calendar.render(
-      state.progress_entries,
-      state.metadata,
-      state.date,
-      main_width(),
-      config.ui.ascii,
-      nil,
-      vim.api.nvim_win_get_height(state.main.win)
-    )
+    main_lines, main_spans = build_full_stats()
     side_lines, side_spans = day_detail()
   else
     local counts = count_states(state.all_cards, os.time())
@@ -2004,7 +1896,9 @@ end
 
 function M.review_host()
   if M.is_open() and vim.api.nvim_get_current_tabpage() == state.tab then
-    M.show("desk")
+    if state.page ~= "desk" then
+      M.show("desk")
+    end
     return state.main.win
   end
 end
@@ -2192,7 +2086,10 @@ local function dispatch(action)
     else
       local day = calendar.activity(state.progress_entries)[calendar.day(state.date)]
       state.day_filter = day and vim.deepcopy(day.ids) or {}
-      if calendar.day(state.date) > calendar.day(os.time()) then
+      if
+        calendar.day(state.date) > calendar.day(os.time())
+        or (not day and calendar.day(state.date) == calendar.day(os.time()))
+      then
         for _, card in ipairs(calendar.scheduled(state.all_cards, state.date, os.time(), config)) do
           state.day_filter[card_key(card)] = true
         end
@@ -2297,7 +2194,7 @@ local function configure_window(win)
 end
 
 local function panel_width()
-  return math.max(38, math.min(54, math.floor(vim.o.columns * 0.36)))
+  return state.page == "stats" and 42 or math.max(38, math.min(54, math.floor(vim.o.columns * 0.36)))
 end
 
 apply_layout = function()

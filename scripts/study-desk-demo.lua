@@ -57,4 +57,29 @@ local chapters = require("neorg_flashcards.chapters")
 chapters.create(config, "Lesson 1", { cards[1], cards[2], cards[4] })
 chapters.create(config, "Lesson 2", { cards[3], cards[7], cards[8] })
 chapters.create(config, "Verbs", { cards[5], cards[6] })
+if vim.env.FLASHCARDS_DEMO_HISTORY == "1" then
+  local history = require("neorg_flashcards.history")
+  local calendar = require("neorg_flashcards.calendar")
+  for offset = 0, 13 do
+    if offset % 4 ~= 3 then
+      for index = 1, (offset % 5) + 2 do
+        history.append(
+          {
+            version = 1,
+            type = "review",
+            event = "rated",
+            event_id = "demo-" .. offset .. "-" .. index,
+            card_id = "fc_visual_" .. index,
+            collection_id = "japanese",
+            epoch = calendar.shift(os.time(), -offset),
+            rating = index % 3 == 0 and 2 or 3,
+            duration_ms = 1200 + index * 800,
+            hint_used = index == 3,
+          },
+          config
+        )
+      end
+    end
+  end
+end
 require("neorg_flashcards").desk()
