@@ -127,6 +127,14 @@ return function(T)
     assert_contains(initial_decorations, "optional", "optional fields are explicitly marked")
     assert_true(vim.fn.winsaveview().topfill > 0, "the first field's label and destination remain in view")
     assert_true(not vim.wo.list and vim.wo.conceallevel == 0, "form inputs suppress source whitespace and concealment")
+    assert_equal(vim.b[form_buf].completion, false, "the composer opts out of completion mapping replacement")
+    local hijacked_keys = 0
+    for _, key in ipairs({ "<Tab>", "<CR>", "<BS>" }) do
+      vim.keymap.set("i", key, function()
+        hijacked_keys = hijacked_keys + 1
+      end, { buffer = form_buf })
+    end
+    vim.api.nvim_exec_autocmds("InsertEnter", { buffer = form_buf })
 
     local form_action_ids = {}
     for _, binding in ipairs(actions.available_bindings("form", { save_new = true })) do
@@ -181,6 +189,22 @@ return function(T)
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i<BS><Esc>", true, false, true), "xt", false)
     assert_equal(vim.api.nvim_buf_line_count(form_buf), 5, "actual Backspace input cannot join masked field rows")
     assert_contains(decoration_text(form_buf), "Japanese", "actual Backspace input cannot remove a virtual label")
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Tab>", true, false, true), "xt", false)
+    assert_equal(vim.api.nvim_win_get_cursor(0)[1], 2, "Tab navigates fields in Normal mode")
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<S-Tab>", true, false, true), "xt", false)
+    assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Shift-Tab returns to the previous field in Normal mode")
+    vim.api.nvim_feedkeys(
+      vim.api.nvim_replace_termcodes("i机<Tab>つくえ<CR>desk<Esc>", true, false, true),
+      "xt",
+      false
+    )
+    assert_true(
+      vim.deep_equal(vim.api.nvim_buf_get_lines(form_buf, 0, -1, false), { "机", "つくえ", "desk", "", "" }),
+      "actual Insert-mode Tab and Enter keep the Japanese, reading and answer in separate fields"
+    )
+    assert_equal(hijacked_keys, 0, "late editor integrations cannot replace form deletion guards")
+    vim.api.nvim_buf_set_lines(form_buf, 0, -1, false, { "", "", "", "", "" })
+    form.goto_field(1)
 
     vim.api.nvim_buf_set_lines(form_buf, 0, 1, false, { "ab" })
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
@@ -550,7 +574,8 @@ return function(T)
         "long-field editor has a dedicated filetype"
       )
       assert_contains(window_footer(), "Ctrl-S apply", "long-field footer explains how to apply text")
-      assert_contains(window_footer(), "Esc cancel", "long-field footer explains how to cancel")
+      assert_contains(window_footer(), "Esc normal mode", "long-field footer explains native mode switching")
+      assert_contains(window_footer(), "q cancel", "long-field footer explains how to cancel")
       local question_maps = {}
       for _, mode in ipairs({ "n", "i" }) do
         for _, map in ipairs(vim.api.nvim_buf_get_keymap(question_editor, mode)) do
@@ -560,7 +585,21 @@ return function(T)
       assert_true(question_maps["n:<c-s>"], "Ctrl-S applies a long field from Normal mode")
       assert_true(question_maps["i:<c-s>"], "Ctrl-S applies a long field from Insert mode")
       assert_true(question_maps["n:<esc>"], "Esc cancels a long field from Normal mode")
-      assert_true(question_maps["i:<esc>"], "Esc cancels a long field from Insert mode")
+      assert_true(question_maps["i:<esc>"], "Esc leaves Insert mode within a long field")
+      assert_true(vim.wo.wrap and vim.wo.linebreak, "long paragraphs wrap within the editor")
+      assert_true(not vim.wo.list and vim.wo.conceallevel == 0, "long fields isolate inherited source display options")
+      local escape_prompts = 0
+      local escape_select = vim.ui.select
+      vim.ui.select = function()
+        escape_prompts = escape_prompts + 1
+      end
+      vim.cmd("stopinsert")
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("iDraft question<Esc>", true, false, true), "xt", false)
+      vim.ui.select = escape_select
+      assert_equal(escape_prompts, 0, "leaving Insert mode does not ask to discard the long answer")
+      assert_equal(vim.api.nvim_get_current_buf(), question_editor, "Esc keeps the value editor focused")
+      assert_equal(vim.api.nvim_get_current_line(), "Draft question", "native mode switching preserves text")
+      assert_equal(vim.fn.mode(), "n", "Esc reaches Normal mode for Vim editing")
 
       local blocked_save_messages = {}
       local blocked_save_notify = vim.notify

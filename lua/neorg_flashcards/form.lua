@@ -12,6 +12,7 @@ local canvas = require("neorg_flashcards.ui.canvas")
 local M = {}
 
 local namespace = vim.api.nvim_create_namespace("neorg_flashcards_form")
+local long_namespace = vim.api.nvim_create_namespace("neorg_flashcards_field")
 local FORM_HIGHLIGHTS = highlights.groups.form
 
 local generation_counter = 0
@@ -372,8 +373,8 @@ end
 
 local function long_window_config(index)
   local field = state.fields[index] or {}
-  local width = math.max(48, math.min(96, math.floor(vim.o.columns * 0.7)))
-  local height = math.max(10, math.min(26, #long_editor_lines() + 5))
+  local width = layout().width
+  local height = math.max(10, math.min(24, math.floor(vim.o.lines * 0.65)))
   width = math.max(1, math.min(width, vim.o.columns - 4))
   height = math.max(1, math.min(height, vim.o.lines - 4))
   return {
@@ -382,13 +383,42 @@ local function long_window_config(index)
     height = height,
     row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
     col = math.max(0, math.floor((vim.o.columns - width) / 2)),
-    border = "rounded",
-    title = " " .. field_title(field) .. " ",
-    title_pos = "center",
-    footer = " Ctrl-S apply · Esc cancel ",
+    border = state.config.ui and state.config.ui.ascii and { "+", "-", "+", "|", "+", "-", "+", "|" } or "rounded",
+    title = " " .. canvas.fit(field_title(field), width - 2) .. " ",
+    title_pos = "left",
+    footer = show_shortcuts() and {
+      { canvas.fit(" Ctrl-S apply · Esc normal mode · q cancel ", width), FORM_HIGHLIGHTS.label },
+    } or nil,
     footer_pos = "center",
     style = "minimal",
   }
+end
+
+local function render_long_field()
+  if not long_editor_open() then
+    return
+  end
+  local field = state.fields[long_editor.index]
+  local width = vim.api.nvim_win_get_width(long_editor.win)
+  local view = vim.api.nvim_win_call(long_editor.win, vim.fn.winsaveview)
+  vim.api.nvim_buf_clear_namespace(long_editor.buf, long_namespace, 0, -1)
+  vim.api.nvim_buf_set_extmark(long_editor.buf, long_namespace, 0, 0, {
+    virt_lines_above = true,
+    virt_lines = { { { canvas.fit(one_line(field.help), width), FORM_HIGHLIGHTS.hint } } },
+  })
+  local lines = long_editor_lines()
+  if #lines == 1 and lines[1] == "" and not util.isempty(field.placeholder) then
+    vim.api.nvim_buf_set_extmark(long_editor.buf, long_namespace, 0, 0, {
+      virt_text = { { one_line(field.placeholder), FORM_HIGHLIGHTS.muted } },
+      virt_text_pos = "eol",
+    })
+  end
+  if view.topline == 1 then
+    view.topfill = 1
+    vim.api.nvim_win_call(long_editor.win, function()
+      vim.fn.winrestview(view)
+    end)
+  end
 end
 
 local function focus_long_editor()
@@ -420,10 +450,14 @@ local function reopen_long_window()
     return false
   end
   long_editor.win = vim.api.nvim_open_win(long_editor.buf, true, long_window_config(long_editor.index))
+  require("neorg_flashcards.ui.window").configure(long_editor.win)
   vim.wo[long_editor.win].number = false
   vim.wo[long_editor.win].relativenumber = false
   vim.wo[long_editor.win].signcolumn = "no"
-  vim.wo[long_editor.win].wrap = false
+  vim.wo[long_editor.win].wrap = true
+  vim.wo[long_editor.win].linebreak = true
+  vim.wo[long_editor.win].breakindent = true
+  vim.wo[long_editor.win].scrolloff = 0
   local watched_win = long_editor.win
   vim.api.nvim_create_autocmd("WinClosed", {
     group = state.augroup,
@@ -437,6 +471,7 @@ local function reopen_long_window()
       vim.schedule(M.cancel_long_field)
     end,
   })
+  render_long_field()
   vim.cmd("startinsert")
   return true
 end
@@ -511,6 +546,9 @@ function M.open_long_field(index)
   }
   vim.bo[long_editor.buf].buftype = "nofile"
   vim.bo[long_editor.buf].bufhidden = "hide"
+  -- Completion integrations such as Blink honor this buffer-local opt-out.
+  -- Their InsertEnter mappings must not replace the composer's field controls.
+  vim.b[long_editor.buf].completion = false
   vim.bo[long_editor.buf].filetype = "neorg_flashcards_field"
   vim.bo[long_editor.buf].swapfile = false
   vim.bo[long_editor.buf].undofile = false
@@ -530,11 +568,13 @@ function M.open_long_field(index)
     nowait = true,
     desc = "Apply this long flashcard field",
   })
-  vim.keymap.set("i", "<Esc>", cancel, {
+  vim.keymap.set("i", "<Esc>", function()
+    vim.cmd("stopinsert")
+  end, {
     buffer = long_editor.buf,
     silent = true,
     nowait = true,
-    desc = "Cancel this long flashcard field",
+    desc = "Return to Normal mode in this flashcard field",
   })
   vim.keymap.set("n", "q", cancel, {
     buffer = long_editor.buf,
@@ -547,6 +587,11 @@ function M.open_long_field(index)
     silent = true,
     nowait = true,
     desc = "Cancel this long flashcard field",
+  })
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    group = state.augroup,
+    buffer = long_editor.buf,
+    callback = render_long_field,
   })
 
   reopen_long_window()
@@ -1157,9 +1202,63 @@ handle_native_close = function(form_win)
   end)
 end
 
+local function configure_keymaps(buf)
+  for _, binding in ipairs(actions.available_bindings("form", form_capabilities())) do
+    local action_name = binding.action
+    vim.keymap.set(binding.mode, binding.key, function()
+      dispatch(action_name)
+    end, { buffer = buf, silent = true, nowait = true, desc = binding.description })
+  end
+
+  local mask_options = { buffer = buf, expr = true, silent = true, nowait = true }
+  vim.keymap.set(
+    "i",
+    "<BS>",
+    M.masked_backspace,
+    vim.tbl_extend("force", mask_options, {
+      desc = "Delete only inside the current flashcard value",
+    })
+  )
+  vim.keymap.set(
+    "i",
+    "<C-h>",
+    M.masked_backspace,
+    vim.tbl_extend("force", mask_options, {
+      desc = "Delete only inside the current flashcard value",
+    })
+  )
+  vim.keymap.set(
+    "i",
+    "<Del>",
+    M.masked_delete,
+    vim.tbl_extend("force", mask_options, {
+      desc = "Delete only inside the current flashcard value",
+    })
+  )
+  vim.keymap.set(
+    "i",
+    "<C-w>",
+    M.masked_word_backspace,
+    vim.tbl_extend("force", mask_options, {
+      desc = "Delete a word only inside the current flashcard value",
+    })
+  )
+end
+
 local function configure_autocmds(buf)
   state.augroup = vim.api.nvim_create_augroup("NeorgFlashcardsForm" .. buf, { clear = true })
   watch_form_window(state.augroup, state.win)
+  vim.api.nvim_create_autocmd({ "BufEnter", "InsertEnter" }, {
+    group = state.augroup,
+    buffer = buf,
+    callback = function()
+      -- Completion and pairing plugins may attach after the form opens.
+      -- Keep field navigation and deletion boundaries local to this buffer.
+      if state.buf == buf then
+        configure_keymaps(buf)
+      end
+    end,
+  })
   vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     group = state.augroup,
     buffer = buf,
@@ -1177,6 +1276,10 @@ local function configure_autocmds(buf)
       vim.schedule(function()
         if state.generation == expected_generation then
           resize()
+          if long_editor_open() then
+            vim.api.nvim_win_set_config(long_editor.win, long_window_config(long_editor.index))
+            render_long_field()
+          end
         end
       end)
     end,
@@ -1233,6 +1336,7 @@ function M.open(config, kind, opts)
   -- Keep the draft alive long enough for WinClosed to recover native :q or
   -- <C-w>c closes. close_now() deletes it after an intentional final close.
   vim.bo[buf].bufhidden = "hide"
+  vim.b[buf].completion = false
   vim.bo[buf].filetype = "neorg_flashcards_form"
   vim.bo[buf].swapfile = false
   vim.bo[buf].undofile = false
@@ -1243,46 +1347,7 @@ function M.open(config, kind, opts)
   configure_window(buf)
   configure_autocmds(buf)
 
-  for _, binding in ipairs(actions.available_bindings("form", form_capabilities())) do
-    local action_name = binding.action
-    vim.keymap.set(binding.mode, binding.key, function()
-      dispatch(action_name)
-    end, { buffer = buf, silent = true, nowait = true, desc = binding.description })
-  end
-
-  local mask_options = { buffer = buf, expr = true, silent = true, nowait = true }
-  vim.keymap.set(
-    "i",
-    "<BS>",
-    M.masked_backspace,
-    vim.tbl_extend("force", mask_options, {
-      desc = "Delete only inside the current flashcard value",
-    })
-  )
-  vim.keymap.set(
-    "i",
-    "<C-h>",
-    M.masked_backspace,
-    vim.tbl_extend("force", mask_options, {
-      desc = "Delete only inside the current flashcard value",
-    })
-  )
-  vim.keymap.set(
-    "i",
-    "<Del>",
-    M.masked_delete,
-    vim.tbl_extend("force", mask_options, {
-      desc = "Delete only inside the current flashcard value",
-    })
-  )
-  vim.keymap.set(
-    "i",
-    "<C-w>",
-    M.masked_word_backspace,
-    vim.tbl_extend("force", mask_options, {
-      desc = "Delete a word only inside the current flashcard value",
-    })
-  )
+  configure_keymaps(buf)
 
   render()
   M.goto_field(1)

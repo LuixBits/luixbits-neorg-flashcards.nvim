@@ -235,17 +235,6 @@ local catalog = {
     }),
   },
   form = {
-    action({ "q", "<Esc>" }, "close", "Close the card form (Normal mode)", { "form" }, {
-      modes = { "n" },
-      hint_key = "q",
-      hints = { form = "close" },
-      essential = true,
-    }),
-    action({ "?" }, "context_help", "Show form keys (Normal mode)", { "form" }, {
-      modes = { "n" },
-      hints = { form = "keys" },
-      essential = true,
-    }),
     action({ "<C-s>" }, "save_close", "Save the card and return (Normal or Insert mode)", { "form" }, {
       modes = { "n", "i" },
       hint_key = "Ctrl-S",
@@ -258,18 +247,29 @@ local catalog = {
       hints = { form = "new" },
       capability = "save_new",
     }),
+    action({ "<Tab>" }, "next_form_field", "Move to the next field (Normal or Insert mode)", { "form" }, {
+      modes = { "n", "i" },
+      hint_key = "Tab/S-Tab",
+      hints = { form = "fields" },
+    }),
+    action({ "<S-Tab>" }, "previous_form_field", "Move to the previous field (Normal or Insert mode)", { "form" }, {
+      modes = { "n", "i" },
+    }),
+    action({ "?" }, "context_help", "Show form keys (Normal mode)", { "form" }, {
+      modes = { "n" },
+      hints = { form = "keys" },
+      essential = true,
+    }),
+    action({ "q", "<Esc>" }, "close", "Close the card form (Normal mode)", { "form" }, {
+      modes = { "n" },
+      hint_key = "q",
+      hints = { form = "close" },
+      essential = true,
+    }),
     action({ "<CR>" }, "next_or_save", "Move next; save and return from the last field (Insert mode)", { "form" }, {
       modes = { "i" },
       hint_key = "Enter",
       hints = { form = "next/save" },
-    }),
-    action({ "<Tab>" }, "next_form_field", "Move to the next field (Insert mode)", { "form" }, {
-      modes = { "i" },
-      hint_key = "Tab/S-Tab",
-      hints = { form = "fields" },
-    }),
-    action({ "<S-Tab>" }, "previous_form_field", "Move to the previous field (Insert mode)", { "form" }, {
-      modes = { "i" },
     }),
     action({ "<Esc>" }, "leave_insert", "Leave the field and return to Normal mode", { "form" }, {
       modes = { "i" },
