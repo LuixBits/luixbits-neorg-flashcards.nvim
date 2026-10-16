@@ -18,8 +18,8 @@ end
 
 local catalog = {
   hub = {
-    action({ "h", "<Left>" }, "left", "Select left / parent folder / previous day", HUB),
-    action({ "l", "<Right>" }, "right", "Select right / open folder / next day", HUB),
+    action({ "h", "<Left>" }, "left", "Select left / back one level / previous day", HUB),
+    action({ "l", "<Right>" }, "right", "Select right / open selection / next day", HUB),
     action({ "[" }, "month_previous", "Previous month", { "stats" }),
     action({ "]" }, "month_next", "Next month", { "stats" }),
     action({ "." }, "today", "Select today", { "stats" }),
@@ -76,10 +76,14 @@ local catalog = {
         stats = "Select the previous week; scroll when the detail pane is focused",
       },
     }),
-    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", { "overview", "stats" }, {
-      hint_key = "<C-w>w",
-      hints = { desk = "pane", overview = "pane", stats = "pane" },
+    action({ "<C-h>" }, "focus_left", "Focus the pane to the left (also Ctrl-W h)", { "overview", "stats" }, {
+      hint_key = "Ctrl-h/j/k/l",
+      hints = { overview = "panes", stats = "panes" },
     }),
+    action({ "<C-j>" }, "focus_down", "Focus the pane below (also Ctrl-W j)", { "overview", "stats" }),
+    action({ "<C-k>" }, "focus_up", "Focus the pane above (also Ctrl-W k)", { "overview", "stats" }),
+    action({ "<C-l>" }, "focus_right", "Focus the pane to the right (also Ctrl-W l)", { "overview", "stats" }),
+    action({ "<C-w>w" }, "focus_other_pane", "Focus the other hub pane", { "overview", "stats" }),
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
       hint_key = "Ctrl-D/U",
       hint_id = "page_scroll",
@@ -144,29 +148,35 @@ local catalog = {
     action({ "R" }, "refresh", "Reload the collection", HUB, { hints = { stats = "refresh" } }),
   },
   review = {
-    action({ "q", "<Esc>" }, "close", "Close review", REVIEW_ALL, {
-      hints = { review_question = "close", review_answer = "close", review_complete = "close" },
+    action({ "h", "<Left>", "q", "<Esc>" }, "close", "Close review and return to the workspace", REVIEW_ALL, {
+      hints = { review_question = "back", review_answer = "back", review_complete = "back" },
       essential = true,
     }),
     action({ "?" }, "context_help", "Show keys for the current review state", REVIEW_ALL, {
       hints = { review_question = "keys", review_answer = "keys", review_complete = "keys" },
       essential = true,
     }),
-    action({ "<CR>", "<Space>" }, "flip_or_next", "Reveal the answer", { "review_question", "review_complete" }, {
-      descriptions = {
-        review_question = "Reveal the answer",
-        review_complete = "Close the completed review",
-      },
-      hint_key = { review_question = "Enter/Space", review_complete = "Enter" },
-      hints = { review_question = "reveal", review_complete = "return" },
-      essential = { review_question = true },
-    }),
-    action({ "j" }, "next", "Browse the next pending card", REVIEW_ACTIVE, {
+    action(
+      { "l", "<Right>", "<CR>", "<Space>" },
+      "flip_or_next",
+      "Reveal the answer",
+      { "review_question", "review_complete" },
+      {
+        descriptions = {
+          review_question = "Reveal the answer",
+          review_complete = "Close the completed review",
+        },
+        hint_key = "l/Enter",
+        hints = { review_question = "reveal", review_complete = "return" },
+        essential = { review_question = true },
+      }
+    ),
+    action({ "j", "<Down>" }, "next", "Browse the next pending card", REVIEW_ACTIVE, {
       hint_key = "j/k",
       hints = { review_question = "browse", review_answer = "browse" },
     }),
-    action({ "k" }, "previous", "Browse the previous pending card", REVIEW_ACTIVE),
-    action({ "h" }, "hint", "Show a progressive hint", { "review_question" }, {
+    action({ "k", "<Up>" }, "previous", "Browse the previous pending card", REVIEW_ACTIVE),
+    action({ "H" }, "hint", "Show a progressive hint", { "review_question" }, {
       hints = { review_question = "hint" },
     }),
     action({ "t" }, "type_answer", "Type and check the answer", { "review_question" }, {
@@ -252,12 +262,12 @@ local catalog = {
     action({ "<Esc>" }, "leave_insert", "Leave the field and return to Normal mode", { "form" }, {
       modes = { "i" },
     }),
-    action({ "j" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
+    action({ "j", "<Down>" }, "next_form_field", "Select the next field (Normal mode)", { "form" }, {
       modes = { "n" },
       hint_key = "j/k",
       hints = { form = "fields" },
     }),
-    action({ "k" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
+    action({ "k", "<Up>" }, "previous_form_field", "Select the previous field (Normal mode)", { "form" }, {
       modes = { "n" },
     }),
     action({ "<CR>", "i" }, "edit_field", "Edit the selected field (Normal mode)", { "form" }, {
@@ -310,6 +320,12 @@ local function display_key(key)
     ["<Space>"] = "Space",
     ["<Down>"] = "Down",
     ["<Up>"] = "Up",
+    ["<Left>"] = "Left",
+    ["<Right>"] = "Right",
+    ["<C-h>"] = "Ctrl-H",
+    ["<C-j>"] = "Ctrl-J",
+    ["<C-k>"] = "Ctrl-K",
+    ["<C-l>"] = "Ctrl-L",
     ["<C-s>"] = "Ctrl-S",
     ["<C-n>"] = "Ctrl-N",
     ["<C-d>"] = "Ctrl-D",
@@ -442,13 +458,17 @@ function M.help_lines(context, capabilities)
     "These are the shortcuts available here.",
     "",
   }
+  local rows, key_width = {}, 17
   for _, item in ipairs(catalog[surface_for(context)] or {}) do
     if contains(item.contexts, context) and has_capability(item, capabilities) then
-      table.insert(
-        lines,
-        string.format("  %-17s %s", keys_for_help(item), description_for(item, context, capabilities))
-      )
+      local keys = keys_for_help(item)
+      key_width = math.max(key_width, vim.fn.strdisplaywidth(keys))
+      table.insert(rows, { keys = keys, description = description_for(item, context, capabilities) })
     end
+  end
+  for _, row in ipairs(rows) do
+    local padding = string.rep(" ", key_width - vim.fn.strdisplaywidth(row.keys) + 2)
+    table.insert(lines, "  " .. row.keys .. padding .. row.description)
   end
   table.insert(lines, "")
   table.insert(lines, "  /                 find text in this help window")

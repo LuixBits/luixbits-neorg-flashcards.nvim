@@ -1959,6 +1959,8 @@ local function manage_selection(action)
   }, action)
 end
 
+local pane_directions = { focus_left = "h", focus_down = "j", focus_up = "k", focus_right = "l" }
+
 local function dispatch(action)
   if review.is_active() then
     util.notify("Finish or close the active review before navigating the workspace", vim.log.levels.WARN)
@@ -2048,6 +2050,10 @@ local function dispatch(action)
     M.move(-1)
   elseif action == "focus_other_pane" then
     M.focus_other_pane()
+  elseif pane_directions[action] then
+    -- Use Neovim's spatial navigation so stacked layouts and pane edges behave
+    -- exactly like Ctrl-W h/j/k/l, without changing the selected item or date.
+    vim.cmd("wincmd " .. pane_directions[action])
   elseif action == "scroll_down" then
     M.scroll_page(1)
   elseif action == "scroll_up" then

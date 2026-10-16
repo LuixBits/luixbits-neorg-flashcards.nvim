@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## 0.3.0 - Unreleased
 
+- Added directional Ctrl-h/j/k/l pane navigation alongside native Ctrl-W keys.
+  Review uses h/Left to return, l/Right to reveal, and j/k or arrows to browse.
+  H now shows a hint; Enter/Space reveal and q/Esc close still work. The card
+  form also accepts Up/Down in Normal mode.
 - Kept Stats scrolling controls visible in narrow shortcut ribbons and moved
   review source filenames into workspace chrome outside the study card.
   Clarified the difference between burying until tomorrow and suspending until

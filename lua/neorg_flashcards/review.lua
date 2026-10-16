@@ -686,7 +686,7 @@ local function render()
       append_field(lines, "Hint " .. attempt.hint_level, progressive_hint(hint_source(card), attempt.hint_level), false)
     end
     table.insert(lines, "")
-    table.insert(lines, "Reveal the answer with ⏎ or Space before rating. Press h for a hint.")
+    table.insert(lines, "Reveal with l, Right, Enter or Space before rating. H shows a hint.")
   end
 
   set_review_lines(lines, rating_spans, util.path_label(card.path, config.path))
@@ -951,7 +951,7 @@ function M.rate_current(score, opts)
   opts = opts or {}
   if opts.require_reveal and not state.showing_answer then
     render()
-    local message = "Reveal with Enter or Space before rating"
+    local message = "Reveal with l, Right, Enter or Space before rating"
     util.notify(message)
     return false, message, false
   end

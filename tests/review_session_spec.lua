@@ -104,7 +104,7 @@ return function(T)
     assert_equal(#semantic_rating_marks(review_popup), 0, "rating words in card text are not colored before reveal")
     assert_buffer_maps(review_popup, { "q", "?", "j", "k", "1", "2", "3" })
     assert_buffer_maps_absent(review_popup, { "n", "p" })
-    assert_contains(window_footer(), "Enter/Space reveal", "question review shows its current shortcuts")
+    assert_contains(window_footer(), "l/Enter reveal", "question review shows its current shortcuts")
 
     vim.cmd("Flashcards add")
     assert_true(review_engine.is_active(), "add cannot strand an active review session")

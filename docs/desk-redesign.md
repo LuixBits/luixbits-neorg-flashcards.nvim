@@ -140,7 +140,7 @@ the right. A small label keeps the deck, category, and session scope visible.
                   '----------------------------'
 
   _______________________________________________________________
-  Space reveal    h hint    t type answer    ? keys    q return
+  l/Space reveal    H hint    t type answer    ? keys    h return
 ```
 
 After reveal, show the answer inside the same card and the three familiar

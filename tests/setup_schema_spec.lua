@@ -126,13 +126,27 @@ return function(T)
     assert_contains(delete_help, "Delete the selected card after confirmation", "Cards help explains safe deletion")
     local stats_help = table.concat(actions.help_lines("stats", {}), "\n")
     assert_contains(stats_help, "Ctrl-D / PageDown", "Stats help exposes half-page scrolling")
+    assert_contains(stats_help, "Ctrl-H", "Stats help exposes directional pane navigation")
+    assert_contains(stats_help, "also Ctrl-W j", "Stats help includes native window navigation")
     assert_contains(stats_help, "gg", "Stats help exposes top navigation")
     assert_contains(stats_help, "G", "Stats help exposes bottom navigation")
     local hub_keys = {}
     for _, binding in ipairs(actions.available_bindings("hub", { suspend = true, bury = true, delete = true })) do
       hub_keys[binding.key] = true
     end
-    for _, key in ipairs({ "<C-d>", "<C-u>", "<PageDown>", "<PageUp>", "<C-w>w", "gg", "G" }) do
+    for _, key in ipairs({
+      "<C-d>",
+      "<C-u>",
+      "<PageDown>",
+      "<PageUp>",
+      "<C-w>w",
+      "<C-h>",
+      "<C-j>",
+      "<C-k>",
+      "<C-l>",
+      "gg",
+      "G",
+    }) do
       assert_true(hub_keys[key], "hub scrolling mapping is registered: " .. key)
     end
     assert_true(hub_keys.D, "Cards deletion mapping is registered when supported")

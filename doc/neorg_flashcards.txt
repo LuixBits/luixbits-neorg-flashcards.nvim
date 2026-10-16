@@ -217,8 +217,9 @@ Common keys:
   C               Switch collection
   ?               Current page keys
   H               Open the short plugin guide
+  Ctrl-h/j/k/l    Focus the pane in that direction (also Ctrl-W h/j/k/l)
   Ctrl-W w        Focus the other pane
-  j / k           Select in the primary pane, or scroll the focused pane
+  hjkl / arrows   Navigate the current view; j/k scrolls in details
   Ctrl-D / Ctrl-U Scroll half a page
   PageDown / Up   Scroll half a page
   gg / G          Top / bottom
@@ -236,8 +237,8 @@ chapter, or prefills the selected tag in tag view.
 
 Overview browses collections -> chapters -> cards:
 
-  Enter / l       Open a collection/chapter; review a selected card
-  h               Back to chapters or collections
+  Enter/l/Right   Open a collection/chapter; review a selected card
+  h / Left        Back to chapters or collections
   a               New collection at root; otherwise add a card here
   n               New chapter in the selected collection
   e               Rename collection/chapter; edit a card
@@ -313,7 +314,7 @@ Insert-mode keys:
 
 Normal-mode keys:
 
-  j / k           Select a field
+  j/k or Down/Up  Select a field
   Enter / i       Edit the selected field
   Ctrl-S          Save and return
   Ctrl-N          Save and start another card
@@ -371,11 +372,12 @@ REVIEW                                             *neorg-flashcards-review*
 
 Review-window keys:
 
-  Enter / Space   Reveal the answer
-  h               Show a progressive hint
+  l / Right       Reveal the answer (also Enter or Space)
+  h / Left        Close review and return to the workspace
+  H               Show a progressive hint
   t               Type and compare an enabled answer
   1 / 2 / 3       Again / Hard / Good
-  j / k           Browse pending cards
+  j/k or Down/Up  Browse pending cards
   u               Undo the latest rating
   b               Bury until tomorrow
   x               Suspend
@@ -383,8 +385,8 @@ Review-window keys:
   ?               Show keys for the current review state
   q / Esc         Close review
 
-A rating pressed before reveal is ignored. Use Enter or Space explicitly;
-repeated rating keys cannot reveal and rate an unseen card. The revealed view
+A rating pressed before reveal is ignored. Use l, Right, Enter or Space
+explicitly; repeated rating keys cannot reveal and rate an unseen card. The revealed view
 previews every next interval. Again requeues a
 card once later in the current session, so Again cannot create an endless
 retry loop.
@@ -522,8 +524,10 @@ a seven-day forecast, tag sizes, and the Card Clinic attention list.
 The main pane shows analytics alongside a compact Monday-first calendar.
 h/l moves by day, j/k by week, [ and ] by month, and . returns to today.
 Enter opens the selected day's cards in Overview. Ctrl-D / Ctrl-U scroll
-down/up without changing that date; G / gg go to the bottom/top. Ctrl-W w
-switches panes, and scrolling affects the focused pane. Past days show
+down/up without changing that date; G / gg go to the bottom/top. Ctrl-h/l
+switches between columns; Ctrl-j/k switches between stacked panes in narrow
+windows. Native Ctrl-W h/j/k/l and Ctrl-W w work too. Scrolling affects the
+focused pane. Past days show
 unique cards, answer counts, ratings, hints, recorded time and saved goals.
 Deleted cards retain history with an unavailable source label. Future days
 show currently scheduled cards; later ratings can change that snapshot.

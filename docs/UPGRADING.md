@@ -11,7 +11,12 @@ history remain compatible. No card migration is required for this UI update.
 - Enter opens a deck box, then studies the due cards on the selected chapter
   note. `g` switches to tag notes. `review tag` retains its explicit all-active matching-card behavior.
   `A` remains an intentional cram action.
-- Rating keys require explicit reveal with Enter/Space. They no longer reveal
+- In review, `h`/Left returns to the workspace and `l`/Right reveals the answer.
+  Hints moved from `h` to `H`. `j/k` and Up/Down browse pending cards.
+  Enter/Space reveal and q/Esc close remain available.
+- `Ctrl-h/j/k/l` moves between Overview and Stats panes by direction, alongside
+  native `Ctrl-W h/j/k/l`. Narrow windows stack panes; use `Ctrl-j/k` there.
+- Rating keys require explicit reveal. They no longer reveal
   a hidden answer. This prevents key repeat from rating the next question.
 - Optional metadata appears at `<collection>/.flashcards-workspace.json` when
   you study or change presentation/goals. Back it up with the collection.

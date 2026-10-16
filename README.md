@@ -251,9 +251,11 @@ closes.
 - `C`: switch collection.
 - `?`: show the current page's complete key list.
 - `H`: open the short plugin guide.
-- `Ctrl-W w`: focus the other pane.
-- `j`, `k`, arrows: select a card in the primary pane or scroll the focused
-  detail/statistics pane.
+- `Ctrl-h/j/k/l` or `Ctrl-W h/j/k/l`: focus the pane in that direction.
+  `Ctrl-W w` cycles panes. In narrow windows, use `Ctrl-j/k` for the stacked panes.
+- `h/j/k/l` or arrows: move through the Desk and calendar; in Overview,
+  `j/k` selects rows, `l`/Right opens a selection, and `h`/Left goes back.
+  `j/k` or Up/Down scrolls the focused detail pane.
 - `Ctrl-D`, `Ctrl-U`, PageDown, PageUp: move half a page.
 - `gg`, `G`: go to the top or bottom.
 - `d`, `A`: review due cards or all active cards.
@@ -266,9 +268,10 @@ and tags. Move by rows with `j/k` and by items with `h/l`; `/` finds notes. `C`
 reaches every collection when the shelf has more boxes than fit. All due
 contains each card once. Caught-up notes do not start a cram session.
 
-Overview opens a compact collection → chapter → card browser. `Enter` or `l`
-opens a collection or chapter; `h` goes back. The side pane shows the selected
-item's details and actions. `:Flashcards cards` goes straight to the card list.
+Overview opens a compact collection → chapter → card browser. `Enter`, `l` or
+Right opens a collection or chapter; `h` or Left goes back. The side pane shows
+the selected item's details and actions. `:Flashcards cards` goes straight to
+the card list.
 
 | Selection | Create | Rename/edit | Remove | Other |
 | --- | --- | --- | --- | --- |
@@ -303,8 +306,9 @@ change; overdue cards stay in today's backlog.
 The main area shows totals, streaks, retention, card states, median answer
 time, heatmap, seven-day forecast, and Needs attention beside the compact
 calendar. `Ctrl-D` / `Ctrl-U` scroll down/up, and `G` / `gg` go to the
-bottom/top. These keys leave the selected date unchanged. `Ctrl-W w` switches
-between analytics and day details; scrolling affects the focused pane.
+bottom/top. These keys leave the selected date unchanged. Use `Ctrl-h/l` to
+switch between analytics and day details, or `Ctrl-j/k` when they are stacked.
+`Ctrl-W w` also switches panes; scrolling affects the focused pane.
 Weekly card-days count a card once per day; they are not a
 count of distinct cards across the week. Retention means Hard or Good as a
 percentage of effective ratings. Recorded answer time includes time with a
@@ -373,7 +377,7 @@ Delete cannot merge them into the value.
 
 - Insert mode: `Enter` advances and saves on the final field; `Tab` and
   `Shift-Tab` move between fields.
-- Normal mode: `j` and `k` select a field; `Enter` or `i` edits it.
+- Normal mode: `j/k` or Down/Up selects a field; `Enter` or `i` edits it.
 - `Ctrl-S`: save and return.
 - `Ctrl-N`: save and start another card.
 - `q` or `Esc` in Normal mode: cancel, with confirmation for a changed draft.
@@ -503,16 +507,17 @@ silently attached to the preceding field.
 
 Review mappings exist only in the review window:
 
-- `Space` or `Enter`: reveal.
-- `h`: show a progressively larger hint.
+- `l`, Right, `Space` or `Enter`: reveal.
+- `h`, Left, `q` or `Esc`: return to the workspace.
+- `H`: show a progressively larger hint.
 - `t`: type and compare an answer when the card type enables it.
 - `1`: Again; requeue once later in this session.
 - `2`: Hard; remove from the current queue.
 - `3`: Good; remove from the current queue.
-- `j`, `k`: browse pending cards.
+- `j/k` or Down/Up: browse pending cards.
 - `u`: undo the latest rating while it is still the latest action.
 - `b`: bury until tomorrow; `x`: suspend; `e`: edit.
-- `?`: current review keys; `q` or `Esc`: close.
+- `?`: current review keys.
 
 Rating keys do nothing until you explicitly reveal the answer. This prevents
 a held key from revealing and rating the next card. The piles distinguish
