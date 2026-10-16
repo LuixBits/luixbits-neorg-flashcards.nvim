@@ -62,7 +62,7 @@ local catalog = {
     action({ "j", "<Down>" }, "next", "Select the next item or scroll the focused pane", HUB, {
       hint_key = "j/k",
       hints = { desk = "navigate", overview = "navigate", stats = "calendar" },
-      essential = true,
+      essential = { desk = true, overview = true },
       descriptions = {
         desk = "Select the next row of boxes or notes",
         overview = "Select the next collection, chapter or card; scroll in details",
@@ -83,7 +83,8 @@ local catalog = {
     action({ "<C-d>", "<PageDown>" }, "scroll_down", "Scroll the focused pane down half a page", HUB, {
       hint_key = "Ctrl-D/U",
       hint_id = "page_scroll",
-      hints = { desk = "page", overview = "page", stats = "page" },
+      hints = { desk = "page", overview = "page", stats = "scroll" },
+      essential = { stats = true },
     }),
     action({ "<C-u>", "<PageUp>" }, "scroll_up", "Scroll the focused pane up half a page", HUB),
     action({ "gg" }, "scroll_top", "Go to the first item or top of the focused pane", HUB),
@@ -118,7 +119,7 @@ local catalog = {
         if action_state and action_state.selected_availability == "suspended" then
           return { description = "Resume the selected card", hint = "resume" }
         elseif action_state and action_state.selected_availability then
-          return { description = "Suspend the selected card", hint = "suspend" }
+          return { description = "Suspend the selected card until you resume it", hint = "suspend" }
         end
       end,
     }),
@@ -206,7 +207,7 @@ local catalog = {
       hints = { review_question = "bury", review_answer = "bury" },
       capability = "bury",
     }),
-    action({ "x" }, "suspend", "Suspend the card", REVIEW_ACTIVE, {
+    action({ "x" }, "suspend", "Suspend the card until you resume it with x in Overview", REVIEW_ACTIVE, {
       hints = { review_question = "suspend", review_answer = "suspend" },
       capability = "suspend",
     }),
@@ -407,12 +408,12 @@ function M.footer(context, width, capabilities)
     end
   end
 
-  local function rendered()
+  local function rendered(compact)
     local values = {}
     for _, part in ipairs(parts) do
       table.insert(values, part.text)
     end
-    return " " .. table.concat(values, "  \194\183  ") .. " "
+    return " " .. table.concat(values, compact and " \194\183 " or "  \194\183  ") .. " "
   end
 
   width = math.max(12, tonumber(width) or 80)
@@ -431,7 +432,7 @@ function M.footer(context, width, capabilities)
     table.remove(parts, remove_index)
     result = rendered()
   end
-  return result
+  return vim.fn.strdisplaywidth(result) > width and rendered(true) or result
 end
 
 function M.help_lines(context, capabilities)

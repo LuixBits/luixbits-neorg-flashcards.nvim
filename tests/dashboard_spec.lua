@@ -341,7 +341,7 @@ return function(T)
   overview.focus_side()
   stats_popup = vim.api.nvim_get_current_buf()
   assert_contains(vim.wo[0].winbar, "? keys", "Stats keeps current shortcuts in its detail winbar")
-  assert_contains(vim.wo[0].winbar, "j/k calendar", "Stats exposes calendar navigation")
+  assert_contains(vim.wo[0].winbar, "Ctrl-D/U scroll", "Stats exposes scrolling beyond the calendar")
 
   local stats_help = table.concat(require("neorg_flashcards.ui.actions").help_lines("stats", {}), "\n")
   assert_contains(stats_help, "Ctrl-W W", "Stats help exposes explicit pane focus")
@@ -375,7 +375,7 @@ return function(T)
   _G.__flashcards_hub_test.laststatus = vim.o.laststatus
   vim.o.laststatus = 3
   vim.wo[0].statusline = "%#lualine_transparent#"
-  assert_contains(vim.wo[0].winbar, "j/k calendar", "global statuslines do not replace the shortcut ribbon")
+  assert_contains(vim.wo[0].winbar, "Ctrl-D/U scroll", "global statuslines do not replace the shortcut ribbon")
   vim.o.laststatus = _G.__flashcards_hub_test.laststatus
 
   overview.context_help()
@@ -417,6 +417,26 @@ return function(T)
   )
   overview.scroll_edge("top")
   assert_equal(vim.api.nvim_win_get_cursor(0)[1], 1, "Stats gg navigation reaches the top")
+  overview.focus_main()
+  local function press(key)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "xt", false)
+  end
+  press("gg")
+  local calendar_before = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  press("<C-d>")
+  assert_true(vim.fn.winsaveview().topline > 1, "Ctrl-D scrolls the main Stats dashboard")
+  press("G")
+  assert_equal(vim.fn.line("."), vim.fn.line("$"), "G reaches the end of analytics using the keyboard")
+  local bottom = vim.fn.winsaveview().topline
+  press("<C-u>")
+  assert_true(vim.fn.winsaveview().topline < bottom, "Ctrl-U scrolls back through analytics")
+  press("gg")
+  assert_equal(vim.fn.winsaveview().topline, 1, "gg returns to the calendar")
+  assert_equal(
+    table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"),
+    calendar_before,
+    "scrolling leaves the selected calendar day unchanged"
+  )
   overview.close()
   _G.__flashcards_hub_test = nil
   assert_true(not overview.is_open(), "closing the stats view closes the dashboard tab")
