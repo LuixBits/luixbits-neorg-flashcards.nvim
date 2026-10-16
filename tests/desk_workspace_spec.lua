@@ -91,6 +91,24 @@ return function(T)
   equal(calendar.progress(entries, data, day).unique, 1, "undo reverses daily goal progress")
   local calendar_lines = calendar.render(entries, data, day, 60, false, day, 16)
   contains(table.concat(calendar_lines, "\n"), "[29]", "calendar marks the selected date")
+  local dashboard_lines = require("neorg_flashcards.ui.dashboard").render({
+    width = 77,
+    height = 28,
+    label = "Japanese",
+    now = day,
+    date = day,
+    cards = cards,
+    history = entries,
+    progress = entries,
+    metadata = data,
+    errors = {},
+    health_lines = {},
+    health_spans = {},
+  })
+  local visible = table.concat(vim.list_slice(dashboard_lines, 1, 28), "\n")
+  contains(visible, "[29]", "the compact dashboard retains the selected date")
+  contains(visible, "3 Good", "all three rating totals fit above the fold at 122 by 30")
+  contains(visible, "LAST WEEK", "medium dashboards use the space beside the calendar for weekly comparisons")
   local due = calendar.scheduled(cards, day, day, config)
   equal(#due, 3, "today includes new cards")
   equal(

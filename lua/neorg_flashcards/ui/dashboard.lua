@@ -8,7 +8,7 @@ function M.render(model)
   local h, c = highlights.groups.desk, canvas.new(model.width, model.ascii)
   local now, width = model.now or os.time(), model.width
   local wide = width >= 86
-  local short = (model.height or 40) < 26
+  local short = (model.height or 40) < 34
   local column = wide and math.floor((width - 5) / 2) or width - 4
   local right = column + 4
   -- Preserve source byte spans when a section wraps in a smaller terminal.
@@ -74,6 +74,18 @@ function M.render(model)
   elseif short then
     c:put(4, 2, canvas.fit("Today " .. goal .. " cards  /  " .. week, width - 3), h.title)
     y = section(5, 2, 39, calendar.render(model.progress, model.metadata, model.date, 39, model.ascii, now, 10))
+    if width >= 76 then
+      local x, w = 44, width - 45
+      c:box(5, x, w, 10, h.edge, "THIS WEEK")
+      for _, item in ipairs({
+        { 2, string.format("%d / 7 active days", progress.active_days), h.title },
+        { 4, string.format("%d card-days / %d answers", progress.week_unique, progress.week_answers), h.ink },
+        { 6, "LAST WEEK", h.muted },
+        { 7, string.format("%d card-days / %d answers", progress.previous_unique, progress.previous_answers), h.muted },
+      }) do
+        c:put(5 + item[1], x + 2, canvas.fit(item[2], w - 4), item[3])
+      end
+    end
   else
     c:put(y, 2, "Today  " .. goal .. " cards   /   " .. progress.answers .. " answers", h.title)
     c:put(y + 1, 2, week, h.muted)

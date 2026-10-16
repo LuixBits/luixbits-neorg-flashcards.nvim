@@ -105,15 +105,15 @@ function M.render(model)
       end
     end
     pile(2, "PENDING", model.pending, {
-      { 2, model.pending .. " cards left", h.title },
+      { 2, model.pending .. (model.pending == 1 and " card left" or " cards left"), h.title },
       { 3, model.pending > 0 and "Including this card" or "Stack cleared", h.muted },
       { 5, "Unseen      " .. model.unseen },
       { 6, "Retry       " .. model.retries, h.again },
-      { 8, "Started     " .. model.original },
+      { 8, "At start    " .. model.original },
       { 9, "Set aside   " .. model.aside, h.muted },
     })
     pile(model.width - 25, "REVIEWED", model.finished, {
-      { 2, model.finished .. " cards finished", h.title },
+      { 2, model.finished .. (model.finished == 1 and " card finished" or " cards finished"), h.title },
       { 3, "Session size " .. model.original, h.muted },
       { 5, "Answers     " .. model.answers },
       { 7, "Again       " .. model.ratings[1], h.again },
