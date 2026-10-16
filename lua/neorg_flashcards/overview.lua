@@ -9,6 +9,7 @@ local schedule = require("neorg_flashcards.schedule")
 local schema = require("neorg_flashcards.schema")
 local stats = require("neorg_flashcards.stats")
 local util = require("neorg_flashcards.util")
+local window = require("neorg_flashcards.ui.window")
 
 local desk = require("neorg_flashcards.ui.desk")
 local metadata = require("neorg_flashcards.metadata")
@@ -1022,6 +1023,7 @@ local function apply_chrome()
   local action_state = current_action_state()
   for _, pane in ipairs({ state.main, state.side }) do
     if pane.win and vim.api.nvim_win_is_valid(pane.win) then
+      window.configure(pane.win)
       local footer = " "
       if show_shortcuts() then
         footer = actions.footer(state.page, vim.api.nvim_win_get_width(pane.win), action_state)
@@ -2034,12 +2036,13 @@ local function new_scratch()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].filetype = "norg"
+  vim.bo[buf].filetype = "neorg_flashcards"
   vim.bo[buf].swapfile = false
   return buf
 end
 
 local function configure_window(win)
+  window.configure(win)
   vim.wo[win].number = false
   vim.wo[win].relativenumber = false
   vim.wo[win].cursorline = true

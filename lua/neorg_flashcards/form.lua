@@ -1060,6 +1060,7 @@ end
 
 local function configure_window(buf)
   state.win = vim.api.nvim_open_win(buf, true, window_config())
+  require("neorg_flashcards.ui.window").configure(state.win)
   vim.wo[state.win].cursorline = true
   vim.wo[state.win].number = false
   vim.wo[state.win].relativenumber = false

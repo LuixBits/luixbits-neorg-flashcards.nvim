@@ -1,3 +1,4 @@
+local window = require("neorg_flashcards.ui.window")
 local M = {}
 
 function M.is_open(state)
@@ -20,7 +21,7 @@ function M.open(state, opts)
   state.buf = vim.api.nvim_create_buf(false, true)
   vim.bo[state.buf].buftype = "nofile"
   vim.bo[state.buf].bufhidden = "wipe"
-  vim.bo[state.buf].filetype = opts.filetype or "norg"
+  vim.bo[state.buf].filetype = opts.filetype or "neorg_flashcards"
   vim.bo[state.buf].swapfile = false
 
   local width = opts.width
@@ -51,6 +52,8 @@ function M.open(state, opts)
     footer_pos = "center",
     style = "minimal",
   })
+
+  window.configure(state.win)
 
   for _, map in ipairs(opts.maps or {}) do
     vim.keymap.set("n", map[1], map[2], {
