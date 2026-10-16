@@ -18,19 +18,21 @@ end
 
 local catalog = {
   hub = {
-    action({ "h", "<Left>" }, "left", "Select left / previous day", { "desk", "stats" }),
-    action({ "l", "<Right>" }, "right", "Select right / next day", { "desk", "stats" }),
+    action({ "h", "<Left>" }, "left", "Select left / parent folder / previous day", HUB),
+    action({ "l", "<Right>" }, "right", "Select right / open folder / next day", HUB),
     action({ "[" }, "month_previous", "Previous month", { "stats" }),
     action({ "]" }, "month_next", "Next month", { "stats" }),
     action({ "." }, "today", "Select today", { "stats" }),
     action(
       { "m" },
       "manage",
-      "Manage decks and categories",
+      "Manage collections, chapters and tags",
       { "overview" },
       { hints = { overview = "manage" }, capability = "manage" }
     ),
-    action({ "g" }, "category", "Choose a category", { "overview" }),
+    action({ "g" }, "category", "Filter cards by tag / switch Desk chapters and tags", { "desk", "overview" }),
+    action({ "n" }, "new_chapter", "Create a chapter", { "overview" }, { capability = "manage" }),
+    action({ "M" }, "move_card", "Move the selected card to a chapter", { "overview" }, { capability = "move_card" }),
     action({ "q" }, "close", "Close the flashcard hub", HUB, {
       hints = { desk = "close", overview = "close", stats = "close" },
       essential = true,
@@ -89,18 +91,17 @@ local catalog = {
     action({ "<CR>" }, "activate", "Run the primary action", HUB, {
       descriptions = {
         desk = "Open the selected deck or study category",
-        overview = "Review the selected card",
+        overview = "Open the collection or chapter; review a selected card",
         stats = "Inspect cards reviewed or scheduled on the selected day",
       },
-      hints = { desk = "open/study", overview = "review" },
-      capability = "review_selected",
+      hints = { desk = "open/study", overview = "open" },
     }),
     action({ "r" }, "review", "Review the selected queue or card", HUB, { capability = "review_selected" }),
     action({ "d" }, "review_due", "Review everything due now", HUB, {
       hints = { stats = "review due" },
     }),
     action({ "A" }, "review_all", "Review the full collection", HUB, { hints = { stats = "review all" } }),
-    action({ "a" }, "add", "Add a flashcard", { "desk", "overview" }, {
+    action({ "a" }, "add", "Add a card here / create a collection", { "desk", "overview" }, {
       hints = { desk = "add" },
       capability = "add",
     }),

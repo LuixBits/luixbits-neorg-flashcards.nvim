@@ -33,6 +33,8 @@ return function(T)
   }, invalid_ui_path)
 
   vim.cmd("Flashcards")
+  assert_contains(select(2, current_popup()), "Unfiled", "unassigned cards have a chapter home")
+  vim.api.nvim_feedkeys("g", "xt", false) -- Tag notes are a separate Desk view.
   local overview_popup, overview_text = current_popup()
   _G.__flashcards_hub_test = { main_win = vim.api.nvim_get_current_win() }
   assert_equal(overview.current_view(), "desk", "bare :Flashcards opens the Desk page")
@@ -122,7 +124,7 @@ return function(T)
   assert_contains(group_review_text, "tag:chapter-01 | 1/1", "desk studies only due cards in the selected category")
   flashcards.close_review()
   local _, canvas_text = current_popup()
-  assert_contains(canvas_text, "CATEGORY NOTES", "closing review returns to the desk")
+  assert_contains(canvas_text, "TAGS", "closing review returns to the desk")
 
   vim.cmd("Flashcards cards")
   assert_equal(overview.current_view(), "overview", ":Flashcards cards routes into the Cards browser")

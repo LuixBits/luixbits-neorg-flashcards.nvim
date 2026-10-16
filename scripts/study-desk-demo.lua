@@ -8,12 +8,12 @@ local base = vim.fn.tempname()
 vim.fn.mkdir(base .. "/japanese", "p")
 vim.fn.mkdir(base .. "/computer-science", "p")
 local samples = {
-  { "猫", "ねこ", "cat", "animals chapter-01" },
-  { "犬", "いぬ", "dog", "animals chapter-01" },
-  { "鳥", "とり", "bird", "animals chapter-02" },
-  { "水", "みず", "water", "food chapter-01" },
+  { "猫", "ねこ", "cat", "animals" },
+  { "犬", "いぬ", "dog", "animals" },
+  { "鳥", "とり", "bird", "animals" },
+  { "水", "みず", "water", "food" },
   { "食べる", "たべる", "to eat", "food verbs" },
-  { "勉強", "べんきょう", "study", "verbs chapter-02" },
+  { "勉強", "べんきょう", "study", "verbs" },
   { "山", "やま", "mountain", "nature" },
   { "川", "かわ", "river", "nature" },
 }
@@ -51,4 +51,10 @@ require("neorg_flashcards").setup({
     },
   },
 })
+local config = require("neorg_flashcards").active_collection()
+local cards = require("neorg_flashcards.parser").collect_flashcards(config)
+local chapters = require("neorg_flashcards.chapters")
+chapters.create(config, "Lesson 1", { cards[1], cards[2], cards[4] })
+chapters.create(config, "Lesson 2", { cards[3], cards[7], cards[8] })
+chapters.create(config, "Verbs", { cards[5], cards[6] })
 require("neorg_flashcards").desk()

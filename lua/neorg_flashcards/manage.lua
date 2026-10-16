@@ -1,3 +1,4 @@
+local chapters = require("neorg_flashcards.chapters")
 local metadata = require("neorg_flashcards.metadata")
 local store = require("neorg_flashcards.store")
 local util = require("neorg_flashcards.util")
@@ -141,6 +142,8 @@ function M.open(context)
     end)
   end
   local choices = {
+    "New chapter",
+    "Create chapter from tag",
     "Deck label",
     "Daily goal",
     "Create category",
@@ -154,12 +157,64 @@ function M.open(context)
     "Deck default card type",
     "Detach UI-created deck",
   }
-  vim.ui.select(choices, { prompt = "Manage " .. (config.label or config.id) }, function(choice)
+  if context.chapter and context.chapter ~= "" then
+    table.insert(choices, 1, "Rename chapter")
+    table.insert(choices, 2, "Remove chapter")
+  end
+  if context.card then
+    table.insert(choices, 1, "Move card to chapter")
+  end
+  local function run(choice)
     if not choice or not live() then
       return
     end
     local data = metadata.load(config)
-    if choice == "Deck label" then
+    if choice == "New chapter" then
+      input("Chapter name: ", "", function(value)
+        finish(chapters.create(config, value))
+      end)
+    elseif choice == "Create chapter from tag" then
+      choose_category(function(group)
+        input("New chapter name: ", group.label, function(value)
+          vim.ui.select({ "Cancel", "Create chapter" }, {
+            prompt = string.format("Move %d cards into %s? Existing tags are kept.", #group.cards, value),
+          }, function(answer)
+            if answer == "Create chapter" and live() then
+              finish(chapters.create(config, value, group.cards))
+            end
+          end)
+        end)
+      end)
+    elseif choice == "Rename chapter" then
+      local chapter = data.chapters[context.chapter]
+      if chapter then
+        input("Chapter name: ", chapter.label, function(value)
+          finish(chapters.rename(config, context.chapter, value))
+        end)
+      end
+    elseif choice == "Remove chapter" then
+      local chapter = data.chapters[context.chapter]
+      if chapter then
+        vim.ui.select({ "Cancel", "Remove chapter" }, {
+          prompt = "Remove " .. chapter.label .. "? Its cards move to Unfiled; history is kept.",
+        }, function(answer)
+          if answer == "Remove chapter" and live() then
+            finish(chapters.delete(config, context.chapter))
+          end
+        end)
+      end
+    elseif choice == "Move card to chapter" then
+      vim.ui.select(chapters.groups(context.cards, data, config), {
+        prompt = "Move card to chapter",
+        format_item = function(group)
+          return group.label
+        end,
+      }, function(group)
+        if group and live() then
+          finish(chapters.move(config, { context.card }, group.name))
+        end
+      end)
+    elseif choice == "Deck label" then
       input("Deck label: ", data.label or config.label, function(value)
         if value == "" then
           return
@@ -275,7 +330,12 @@ function M.open(context)
         end
       )
     end
-  end)
+  end
+  if context.action then
+    run(context.action)
+  else
+    vim.ui.select(choices, { prompt = "Manage " .. (config.label or config.id) }, run)
+  end
 end
 
 return M

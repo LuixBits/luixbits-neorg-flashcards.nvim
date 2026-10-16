@@ -82,7 +82,15 @@ function M.render(model)
   end
 
   local row = 11
-  c:put(row, left, canvas.fit(model.label .. "  /  CATEGORY NOTES", content_width), h.title)
+  c:put(
+    row,
+    left,
+    canvas.fit(
+      model.label .. (model.grouping == "tags" and "  /  TAGS   g chapters" or "  /  CHAPTERS   g tags"),
+      content_width
+    ),
+    h.title
+  )
   if model.query ~= "" then
     c:put(row + 1, left, "Find: " .. model.query .. "   (Esc clears)", h.accent)
     row = row + 1

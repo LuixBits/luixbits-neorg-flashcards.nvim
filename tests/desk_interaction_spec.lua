@@ -49,6 +49,7 @@ return function(T)
     end
     error("missing binding " .. lhs)
   end
+  key("g") -- Switch chapter notes to tags.
   key("<CR>") -- Open box, select All due.
   key("l") -- Food note.
   key("<CR>")

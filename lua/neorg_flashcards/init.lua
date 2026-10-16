@@ -358,6 +358,13 @@ local function insert_card(kind, values, target, card_config)
     return result
   end
 
+  if target.chapter and target.chapter ~= "" then
+    local card = parser.parse_lines(card_lines, target.path)[1]
+    local assigned, chapter_error = require("neorg_flashcards.chapters").move(card_config, { card }, target.chapter)
+    if not assigned then
+      util.notify("Card saved in Unfiled; chapter assignment failed: " .. tostring(chapter_error), vim.log.levels.WARN)
+    end
+  end
   advance_add_anchor(target, row, #card_lines, bufnr)
   local message = write_err or ("Flashcard saved to " .. target.label)
   local result = add_result(target, true, persisted, message)
@@ -531,14 +538,14 @@ end
 ---Add a card straight to the default file, no matter which buffer is current.
 ---Used by the overview's `a` key. Falls back to default_card_type.
 ---@param kind string|nil
-function M.add_to_default(kind, initial_values)
+function M.add_to_default(kind, initial_values, chapter)
   kind = util.trim(kind or "")
   if kind == "" then
     if form_blocks("adding another card") or review_blocks("adding a card") then
       return false
     end
     return choose_card_type(function(selected)
-      return M.add_to_default(selected, initial_values)
+      return M.add_to_default(selected, initial_values, chapter)
     end)
   end
 
@@ -561,6 +568,7 @@ function M.add_to_default(kind, initial_values)
     append = true,
     create_with_heading = true,
   })
+  target.chapter = chapter
   local card_config = config
   local opened = form.open(card_config, kind, {
     target_label = target.label,
@@ -703,7 +711,7 @@ function M.stats()
 end
 
 function M.cards()
-  return M.overview({ view = "overview" })
+  return M.overview({ view = "overview", browser_level = "cards" })
 end
 
 -- Validate the current file against every card identity in the collection.
@@ -1543,7 +1551,7 @@ function M.setup(opts)
     stats.setup(context)
     help.setup(context)
     overview.setup(context, {
-      on_manage = function(hub_is_current)
+      on_manage = function(hub_is_current, selection, action)
         local expected_workspace, expected_config = workspace, config
         local function valid()
           return workspace == expected_workspace
@@ -1555,6 +1563,9 @@ function M.setup(opts)
         manage.open({
           config = config,
           cards = cards,
+          chapter = selection and selection.chapter,
+          card = selection and selection.card,
+          action = action,
           valid = valid,
           refresh = overview.refresh,
           create_deck = function(id, definition)
@@ -1643,13 +1654,18 @@ function M.setup(opts)
         for _, id in ipairs(collections.ids(workspace)) do
           local deck = collections.get(workspace, id)
           local presentation = require("neorg_flashcards.metadata").load(deck)
-          table.insert(result, { id = id, label = presentation.label or deck.label or id })
+          table.insert(result, {
+            id = id,
+            label = presentation.label or deck.label or id,
+            path = deck.path,
+            owned = setup_options.collections[id] ~= nil,
+          })
         end
         return result
       end,
       on_select_deck = M.select_collection,
-      on_add = function(tag)
-        M.add_to_default("", tag and { tags = tag } or nil)
+      on_add = function(tag, chapter)
+        M.add_to_default("", tag and { tags = tag } or nil, chapter)
       end,
       on_review_due = M.review_due,
       on_review_all = M.review_all,

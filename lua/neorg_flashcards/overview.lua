@@ -13,6 +13,7 @@ local window = require("neorg_flashcards.ui.window")
 
 local desk = require("neorg_flashcards.ui.desk")
 local metadata = require("neorg_flashcards.metadata")
+local chapters = require("neorg_flashcards.chapters")
 local calendar = require("neorg_flashcards.calendar")
 
 local M = {}
@@ -47,6 +48,9 @@ local state = {
   sel = 1,
   card_entries = {},
   card_sel = 1,
+  browser_level = "collections",
+  chapter_id = nil,
+  desk_grouping = "chapters",
   selected_card_key = nil,
   query = "",
   filter = "all",
@@ -165,6 +169,9 @@ local function invalid_source(descriptor)
 end
 
 local function browser_entry_key(entry)
+  if entry.kind then
+    return entry.kind .. ":" .. tostring(entry.id or "all")
+  end
   if entry.invalid then
     return table.concat({ "invalid", invalid_source(entry), card_key(entry.card) }, ":")
   end
@@ -327,7 +334,12 @@ local function current_action_state()
     action_state.review_selected = card ~= nil and not invalid and availability == "active"
   end
   if state.page == "overview" and not card then
-    action_state.suspend, action_state.bury, action_state.delete = false, false, false
+    action_state.suspend, action_state.bury = false, false
+    local entry = selected_card_entry()
+    action_state.delete = action_state.manage
+      and entry ~= nil
+      and (entry.kind == "deck" or (entry.kind == "chapter" and entry.id ~= nil and entry.id ~= ""))
+    action_state.review_selected = entry and entry.group and #entry.group.cards > 0 or false
   elseif invalid then
     action_state.suspend, action_state.bury = false, false
   end
@@ -337,6 +349,9 @@ local function current_action_state()
   if card and not invalid then
     action_state.selected_availability = card_state(card, os.time()).availability
   end
+  action_state.move_card = card ~= nil and not invalid and action_state.manage
+  action_state.selection_kind = state.page == "overview" and selected_card_entry() and selected_card_entry().kind
+    or "card"
   return action_state
 end
 
@@ -394,6 +409,9 @@ local function invalid_searchable_text(descriptor)
 end
 
 local function matches_filter(card, now, filter)
+  if state.chapter_id ~= nil and chapters.id(state.metadata, card) ~= state.chapter_id then
+    return false
+  end
   if filter == "day" then
     return state.day_filter and state.day_filter[card_key(card)] == true
   elseif filter:sub(1, 4) == "tag:" then
@@ -433,7 +451,10 @@ local function filtered_card_entries()
   end
   if state.filter == "all" or state.filter == "invalid" then
     for _, descriptor in ipairs(state.invalid_cards) do
-      if query == "" or invalid_searchable_text(descriptor):find(query, 1, true) then
+      if
+        (state.chapter_id == nil or chapters.id(state.metadata, descriptor.card) == state.chapter_id)
+        and (query == "" or invalid_searchable_text(descriptor):find(query, 1, true))
+      then
         table.insert(result, {
           card = descriptor.card,
           invalid = true,
@@ -494,6 +515,128 @@ local function restore_card_selection(entries)
   state.selected_card_key = browser_entry_key(entries[state.card_sel])
 end
 
+local function chapter_label()
+  if state.chapter_id == nil then
+    return "All cards"
+  end
+  local chapter = state.metadata.chapters[state.chapter_id]
+  return chapter and chapter.label or "Unfiled"
+end
+
+local function build_library_browser()
+  local entries, lines, spans = {}, {}, {}
+  local collections_view = state.browser_level == "collections"
+  local title = collections_view and ("Overview · " .. collection_label() .. " / Collections")
+    or ("Collections / " .. collection_label() .. " / Chapters")
+  add_line(lines, spans, " " .. title, HIGHLIGHTS.heading)
+  add_line(lines, spans, " Enter/l open   h back   a add   e rename   D remove   m manage", HIGHLIGHTS.muted)
+  add_line(lines, spans, "")
+  if collections_view then
+    for _, deck_ in
+      ipairs(
+        type(handlers.on_decks) == "function" and handlers.on_decks()
+          or { { id = config.id, label = collection_label() } }
+      )
+    do
+      table.insert(
+        entries,
+        { kind = "deck", id = deck_.id, label = deck_.label, path = deck_.path, owned = deck_.owned }
+      )
+    end
+  else
+    table.insert(entries, {
+      kind = "chapter",
+      label = "All cards",
+      group = {
+        cards = state.all_cards,
+        due = count_states(state.all_cards, os.time()).ready,
+      },
+    })
+    for _, group in ipairs(chapters.groups(state.all_cards, state.metadata, config, os.time())) do
+      table.insert(entries, { kind = "chapter", id = group.name, label = group.label, group = group })
+    end
+  end
+  if collections_view and not state.selected_card_key then
+    state.selected_card_key = "deck:" .. config.id
+  end
+  restore_card_selection(entries)
+  local width = main_width()
+  add_line(
+    lines,
+    spans,
+    "   " .. pad(collections_view and "COLLECTION" or "CHAPTER", math.max(12, width - 32)) .. "  CARDS   READY",
+    HIGHLIGHTS.table_header
+  )
+  add_line(lines, spans, " " .. string.rep(config.ui.ascii and "-" or "─", math.max(1, width - 2)), HIGHLIGHTS.muted)
+  for index, entry in ipairs(entries) do
+    local count, ready = "", ""
+    if entry.group then
+      count, ready = tostring(#entry.group.cards), tostring(entry.group.due)
+    elseif entry.id == config.id then
+      count, ready = tostring(#state.all_cards), tostring(count_states(state.all_cards, os.time()).ready)
+    end
+    local text = (index == state.card_sel and " > " or "   ")
+      .. pad(entry.label, math.max(12, width - 32))
+      .. "  "
+      .. pad(count, 7)
+      .. " "
+      .. ready
+    entry.line =
+      add_line(lines, spans, text, index == state.card_sel and highlights.groups.desk.selected or HIGHLIGHTS.title)
+  end
+  if state.metadata_error then
+    add_line(lines, spans, " Metadata: " .. state.metadata_error, HIGHLIGHTS.invalid)
+  end
+  return lines, spans, entries
+end
+
+local function build_library_detail(entry)
+  local lines, spans = {}, {}
+  if not entry then
+    return { " No selection" }, spans
+  end
+  add_line(lines, spans, " " .. entry.label, HIGHLIGHTS.heading)
+  add_line(lines, spans, "")
+  if entry.kind == "deck" then
+    add_line(lines, spans, " Collection", HIGHLIGHTS.title)
+    add_line(lines, spans, " " .. (entry.path or config.path), HIGHLIGHTS.muted)
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Enter  Browse chapters")
+    add_line(lines, spans, " a      New collection")
+    add_line(lines, spans, " e      Rename display label")
+    add_line(lines, spans, " m      Collection settings")
+    add_line(lines, spans, " D      Detach collection")
+    if entry.owned then
+      add_line(lines, spans, "")
+      add_line(lines, spans, " Configured collection: edit its path and card types in setup().", HIGHLIGHTS.muted)
+    end
+  else
+    local counts = count_states(entry.group.cards, os.time())
+    add_line(lines, spans, string.format(" %d cards   %d ready", counts.total, counts.ready), HIGHLIGHTS.title)
+    add_line(
+      lines,
+      spans,
+      string.format(" %d scheduled   %d suspended", counts.scheduled, counts.suspended),
+      HIGHLIGHTS.muted
+    )
+    add_line(lines, spans, "")
+    add_line(lines, spans, " Enter  Browse cards")
+    add_line(lines, spans, " r      Study this chapter")
+    add_line(lines, spans, " a      Add card here")
+    add_line(lines, spans, " n      New chapter")
+    if entry.id and entry.id ~= "" then
+      add_line(lines, spans, " e      Rename chapter")
+      add_line(lines, spans, " D      Remove chapter")
+    end
+    add_line(lines, spans, " m      Manage / chapter from tag")
+    if entry.id == "" then
+      add_line(lines, spans, "")
+      add_line(lines, spans, " Cards without a chapter appear here. Use M on a card to move it.", HIGHLIGHTS.muted)
+    end
+  end
+  return lines, spans
+end
+
 local function build_cards_browser()
   local now = os.time()
   local browser_entries = filtered_card_entries()
@@ -502,7 +645,7 @@ local function build_cards_browser()
   local width = main_width()
   local total_blocks = #state.all_cards + #state.invalid_cards
   local page_title = state.filter == "clinic" and " Needs attention / Card clinic" or " Overview"
-  add_line(lines, spans, page_title .. " · " .. collection_label(), HIGHLIGHTS.heading)
+  add_line(lines, spans, page_title .. " · " .. collection_label() .. " / " .. chapter_label(), HIGHLIGHTS.heading)
   local scope = string.format(
     " %d shown of %d blocks · %d reviewable · %d invalid · filter: %s · sort: %s",
     #browser_entries,
@@ -675,6 +818,9 @@ local function build_card_detail()
   local lines, spans = {}, {}
   add_line(lines, spans, " Card details", HIGHLIGHTS.heading)
   add_line(lines, spans, "")
+  if entry and entry.kind then
+    return build_library_detail(entry)
+  end
   if not entry then
     local no_match = state.query ~= "" or state.filter ~= "all"
     add_line(
@@ -1136,7 +1282,11 @@ local function render()
   end
   local main_lines, main_spans, side_lines, side_spans
   if state.page == "overview" then
-    main_lines, main_spans, state.card_entries = build_cards_browser()
+    if state.browser_level == "cards" then
+      main_lines, main_spans, state.card_entries = build_cards_browser()
+    else
+      main_lines, main_spans, state.card_entries = build_library_browser()
+    end
     side_lines, side_spans = build_card_detail()
   elseif state.page == "stats" then
     main_lines, main_spans = calendar.render(
@@ -1161,7 +1311,9 @@ local function render()
       decks = decks,
       config = config,
       cards = state.all_cards,
-      groups = state.groups,
+      groups = state.desk_grouping == "tags" and state.groups
+        or chapters.groups(state.all_cards, state.metadata, config, os.time()),
+      grouping = state.desk_grouping,
       ready = counts.ready,
       label = collection_label(),
       query = state.desk_query,
@@ -1269,10 +1421,23 @@ function M.review_group()
     return
   end
   local tag = entry.group.name
-  review_cards(due, tag == "" and "untagged" or (tag and "tag:" .. tag or "due"), nil)
+  review_cards(
+    due,
+    entry.group.chapter and ("chapter: " .. entry.group.label)
+      or (tag == "" and "untagged" or (tag and "tag:" .. tag or "due")),
+    nil
+  )
 end
 
 function M.review_selected()
+  local entry = selected_card_entry()
+  if state.page == "overview" and entry and entry.group then
+    local due = vim.tbl_filter(function(card)
+      return is_ready(card, os.time())
+    end, entry.group.cards)
+    review_cards(due, entry.label, "No due cards in " .. entry.label)
+    return
+  end
   local card = selected_card()
   if not card then
     util.notify("No card selected", vim.log.levels.WARN)
@@ -1586,6 +1751,7 @@ function M.search()
     if input == nil or not same_hub(token) then
       return
     end
+    state.browser_level = "cards"
     state.query = util.trim(input)
     state.card_sel, state.selected_card_key = 1, nil
     M.show("overview")
@@ -1669,6 +1835,7 @@ function M.choose_filter()
     if not choice or not same_hub(token) then
       return
     end
+    state.browser_level = "cards"
     state.filter, state.card_sel, state.selected_card_key = choice.value, 1, nil
     M.show("overview")
   end)
@@ -1877,6 +2044,49 @@ local function cycle_page(delta)
   M.show(PAGES[((index - 1 + delta) % #PAGES) + 1])
 end
 
+local function reset_library(level, chapter)
+  state.browser_level, state.chapter_id = level, chapter
+  state.card_sel, state.selected_card_key = 1, nil
+  state.query, state.filter = "", "all"
+  render()
+end
+
+local function library_open()
+  local entry = selected_card_entry()
+  if not entry then
+    return
+  end
+  if entry.kind == "deck" then
+    if entry.id ~= config.id then
+      call_handler("on_select_deck", entry.id)
+    end
+    reset_library("chapters")
+  elseif entry.kind == "chapter" then
+    reset_library("cards", entry.id)
+  else
+    M.review_selected()
+  end
+end
+
+local function library_back()
+  reset_library(state.browser_level == "cards" and "chapters" or "collections")
+end
+
+local function manage_selection(action)
+  local entry = state.page == "overview" and selected_card_entry() or nil
+  if entry and entry.kind == "deck" and entry.id ~= config.id then
+    call_handler("on_select_deck", entry.id)
+    reset_library("collections")
+  end
+  local token = hub_token()
+  call_handler("on_manage", function()
+    return same_hub(token)
+  end, {
+    chapter = entry and entry.kind == "chapter" and entry.id or state.chapter_id,
+    card = entry and entry.card,
+  }, action)
+end
+
 local function dispatch(action)
   if review.is_active() then
     util.notify("Finish or close the active review before navigating the workspace", vim.log.levels.WARN)
@@ -1892,6 +2102,10 @@ local function dispatch(action)
       render()
     elseif state.page == "desk" then
       select_index(state.entries, "sel", state.sel + direction)
+    elseif direction < 0 then
+      library_back()
+    else
+      library_open()
     end
   elseif action == "month_previous" or action == "month_next" then
     state.date = calendar.month(state.date, action == "month_previous" and -1 or 1)
@@ -1900,10 +2114,15 @@ local function dispatch(action)
     state.date = os.time()
     render()
   elseif action == "manage" then
-    local token = hub_token()
-    call_handler("on_manage", function()
-      return same_hub(token)
-    end)
+    manage_selection()
+  elseif action == "new_chapter" then
+    manage_selection("New chapter")
+  elseif action == "move_card" then
+    manage_selection("Move card to chapter")
+  elseif action == "category" and state.page == "desk" then
+    state.desk_grouping = state.desk_grouping == "chapters" and "tags" or "chapters"
+    state.sel, state.desk_query = 1, ""
+    render()
   elseif action == "category" then
     local token = hub_token()
     local choices = { { label = "All cards", filter = "all" } }
@@ -1917,6 +2136,7 @@ local function dispatch(action)
       end,
     }, function(choice)
       if choice and same_hub(token) then
+        state.browser_level, state.chapter_id = "cards", nil
         state.filter = choice.filter
         state.day_filter = nil
         render()
@@ -1931,6 +2151,8 @@ local function dispatch(action)
       render()
     elseif state.page == "overview" and (state.query ~= "" or state.filter ~= "all") then
       M.clear_browser()
+    elseif state.page == "overview" and state.browser_level ~= "collections" then
+      library_back()
     else
       M.close()
     end
@@ -1966,7 +2188,7 @@ local function dispatch(action)
     if state.page == "desk" then
       M.review_group()
     elseif state.page == "overview" then
-      M.review_selected()
+      library_open()
     else
       local day = calendar.activity(state.progress_entries)[calendar.day(state.date)]
       state.day_filter = day and vim.deepcopy(day.ids) or {}
@@ -1975,6 +2197,7 @@ local function dispatch(action)
           state.day_filter[card_key(card)] = true
         end
       end
+      state.browser_level, state.chapter_id = "cards", nil
       state.filter = "day"
       state.query = ""
       M.show("overview")
@@ -1992,14 +2215,23 @@ local function dispatch(action)
   elseif action == "review_all" then
     M.review_all()
   elseif action == "add" then
-    local entry = state.page == "desk" and selected_overview_entry()
-    local tag = entry and entry.group and entry.group.name
-      or (state.page == "overview" and state.filter:sub(1, 4) == "tag:" and state.filter:sub(5))
-    call_handler("on_add", tag or nil)
+    local entry = state.page == "desk" and selected_overview_entry() or selected_card_entry()
+    if state.page == "overview" and state.browser_level == "collections" then
+      manage_selection("New deck")
+    else
+      local group = entry and entry.group
+      local chapter = group and group.chapter and group.name or state.chapter_id
+      if state.page == "overview" and entry and entry.kind == "chapter" then
+        chapter = entry.id
+      end
+      local tag = state.page == "desk" and state.desk_grouping == "tags" and group and group.name
+        or (state.page == "overview" and state.filter:sub(1, 4) == "tag:" and state.filter:sub(5))
+      call_handler("on_add", tag or nil, chapter)
+    end
   elseif action == "search" then
     if state.page == "desk" then
       local token = hub_token()
-      vim.ui.input({ prompt = "Find category: ", default = state.desk_query }, function(value)
+      vim.ui.input({ prompt = "Find " .. state.desk_grouping .. ": ", default = state.desk_query }, function(value)
         if value ~= nil and same_hub(token) then
           state.desk_query = value
           state.sel = 1
@@ -2020,11 +2252,21 @@ local function dispatch(action)
   elseif action == "bury" then
     M.bury()
   elseif action == "delete_card" then
-    M.delete_selected()
+    local entry = selected_card_entry()
+    if entry and entry.kind then
+      manage_selection(entry.kind == "deck" and "Detach UI-created deck" or "Remove chapter")
+    else
+      M.delete_selected()
+    end
   elseif action == "peek" then
     M.peek()
   elseif action == "edit_card" then
-    M.edit_card()
+    local entry = state.page == "overview" and selected_card_entry()
+    if entry and entry.kind then
+      manage_selection(entry.kind == "deck" and "Deck label" or "Rename chapter")
+    else
+      M.edit_card()
+    end
   elseif action == "check" then
     call_handler("on_check")
   elseif action == "refresh" then
@@ -2213,15 +2455,20 @@ function M.open(collect, opts)
     state.selected_card_key = nil
     state.query = ""
     state.desk_query = ""
+    state.desk_grouping = "chapters"
     state.filter = "all"
+    state.browser_level = opts.browser_level or state.browser_level or "collections"
+    state.chapter_id = nil
     state.sort = "due"
   end
+  state.browser_level = opts.browser_level or state.browser_level
   state.sel = opts.sel or state.sel or 1
   if opts.reset_browser or not M.is_open() then
     state.sel = 0 -- Resolve the active deck within the visible shelf at render time.
   end
   state.capabilities = {
     manage = type(handlers.on_manage) == "function",
+    move_card = type(handlers.on_manage) == "function",
     add = type(handlers.on_add) == "function",
     collection = type(handlers.on_collection) == "function",
     help = type(handlers.on_help) == "function",
