@@ -19,14 +19,16 @@ unsaved, so retrying created a duplicate. The form did not show its target or
 protect a changed draft when closing.
 
 General question, definition, code, and sentence cards also need fields that
-can contain paragraphs or code. Letting those lines spill into the protected
-form would bring back the structural ambiguity that the composer removed.
+can contain paragraphs or code. The first structured composer used a separate
+editor for these fields, including Notes. This interrupted ordinary typing:
+Tab left Insert mode, and users had to open and apply a second editor before
+saving the card.
 
 ## Decision
 
-- The composer buffer contains one protected row for each schema field. Scalar
-  rows hold the raw one-line value. A field with `multiline = true` holds a
-  first-line preview while its complete value stays in the structured draft.
+- Every field's full value is editable directly in the composer. Scalar fields
+  occupy one line; fields with `multiline = true` can span several lines. The
+  draft tracks each field's range separately from its text.
   Labels, required marks, placeholders, field help, validation, target context,
   and save status are extmark decorations rather than buffer text.
 - Labels sit above the values, with front/answer roles and explicit
@@ -34,13 +36,15 @@ form would bring back the structural ambiguity that the composer removed.
   The header captures collection, chapter, type, and file. Restoring the window
   view includes virtual lines above the first visible value so its label and
   destination remain visible.
-- Line-count changes are rejected and the last valid draft is restored. A
-  Backspace, word deletion, and Delete are also stopped at value boundaries so
-  they cannot join adjacent fields.
-- Enter on a multiline field opens a larger scratch editor with paragraph
-  wrapping. `Ctrl-S` applies the complete value. Insert-mode `Esc` enters
-  Normal mode; Normal-mode `Esc` or `q` cancels. Cancelling changed text requires
-  confirmation, and the parent form cannot close behind an unresolved editor.
+- Multiline paste and native o/O can add lines within a multiline field.
+  Changes that delete a field or join neighbouring fields restore the last
+  valid draft. Backspace, word deletion, and Delete stop at field boundaries
+  but can join lines within the same field. Undo history retains field ranges
+  so undo/redo restores their ownership along with the text.
+- All fields use the same entry flow: Tab or Shift-Tab changes fields without
+  leaving Insert mode, Enter advances and saves on the last field, and Ctrl-S
+  saves the complete card. Native j/k and arrows navigate individual lines.
+  Paragraphs wrap in the form; there is no second editor or apply step.
 - Multiline values use an explicit on-disk block. The header is `field: |` and
   each value line has a two-space container indent. Only fields declared with
   `multiline = true` accept the block form; scheduler and identity fields never
@@ -68,7 +72,7 @@ form would bring back the structural ambiguity that the composer removed.
 - Composer mappings, its compact footer, and `?` help continue to come from
   the shared action catalogue. No new global or NVF shortcut is added.
 - Tab and Shift-Tab select fields in both modes. Composer buffers set
-  `b:completion = false`, which Blink honors. The parent form restores its
+  `b:completion = false`, which Blink honors. The form restores its
   own mappings on BufEnter and InsertEnter because completion and pairing
   plugins can otherwise replace navigation or deletion guards after opening.
 
@@ -84,6 +88,7 @@ manual repair.
 
 Schemas may provide `title`, `placeholder`, `help`, and `multiline`
 presentation metadata. The composer requires Neovim 0.10's inline virtual text
-support. The focused editor lets long values use ordinary buffer editing while
-the parent form keeps one row per field. A parse, serialize, add, edit, or
-restore round trip preserves the value's line breaks and indentation.
+support. Field ranges add bookkeeping for native edits and undo, but remove
+the separate editor's focus, apply, and discard states. Save-and-new starts a
+fresh undo history so a saved card cannot reappear in the next draft. A parse,
+serialize, add, edit, or restore round trip preserves line breaks and indentation.

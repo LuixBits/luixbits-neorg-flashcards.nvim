@@ -10,8 +10,10 @@ All notable changes to this project will be documented here.
   previously hidden context above the first field.
 - Made the form follow theme input colors and ASCII-border settings. Save
   controls appear first, and Tab/Shift-Tab navigate in both editing modes.
-- Expanded the long-field editor, wrapped paragraphs, and made Insert-mode
-  Escape return to Normal mode. Both form windows adapt to terminal resizing.
+- Made Notes and other multiline fields directly editable in the same form.
+  Tab and Enter preserve Insert mode across every field; Ctrl-S saves the whole
+  card. Multiline paste, native o/O, and undo/redo preserve field boundaries,
+  line breaks, and indentation. Paragraphs wrap within the composer.
 - Protected composer controls from completion and pairing plugin mappings.
   Fixed Tab and Ctrl-N being replaced by Blink in a configured editor.
 

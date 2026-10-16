@@ -383,18 +383,18 @@ navigation and deletion guards when entering the draft.
 
 - `Tab` and `Shift-Tab` move between fields in Normal or Insert mode.
 - Insert mode: `Enter` advances and saves on the final field.
-- Normal mode: `j/k` or Down/Up selects a field; `Enter` or `i` edits it.
+- Normal mode: `j/k` or arrows move through the editable lines; `Enter` or `i`
+  edits at the cursor.
 - `Ctrl-S`: save and return.
 - `Ctrl-N`: save and start another card.
 - `q` or `Esc` in Normal mode: cancel, with confirmation for a changed draft.
 - `?`: show every form shortcut.
 
-A multiline field shows a preview and an `Enter to edit` label. Its editor
-provides more room and wraps paragraphs without changing stored line breaks.
-Press `Esc` to leave Insert mode and use normal Vim editing commands. `Ctrl-S`
-applies the value to the draft; `q` or `Esc` in Normal mode cancels, with a
-confirmation for changed text. Apply the field, then save the card from the
-parent composer.
+Every field is editable directly in the form, including Notes. Tab and Enter
+keep you in Insert mode as you move between fields. For longer notes, answers,
+or code, paste multiple lines or use native `o`/`O` in Normal mode to add a
+line. Paragraphs wrap to fit the window; line breaks and indentation are
+preserved when saving. `Ctrl-S` saves the whole card in one step.
 
 See the [composer screenshots](docs/demo/README.md#card-entry-refinement).
 

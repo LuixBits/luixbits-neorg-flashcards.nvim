@@ -193,9 +193,7 @@ keymaps.prefix option is the exact key used to open |:Flashcards|.
 
 Useful current shortcuts are visible in the workspace winbar and floating
 window footers when ui.show_shortcuts is true. Set it to false to hide the
-compact ribbons without disabling mappings or `?` help. The focused long-field
-editor keeps its short apply/cancel footer because those controls are local to
-that editor.
+compact ribbons without disabling mappings or `?` help.
 
 Every `?` window is searchable with Neovim's normal `/`. Use `n` and `N` for
 the next and previous matches. The short plugin guide opened with `H` or
@@ -317,19 +315,19 @@ Insert-mode keys:
 Normal-mode keys:
 
   Tab / S-Tab     Next / previous field
-  j/k or Down/Up  Select a field
-  Enter / i       Edit the selected field
+  j/k or arrows   Move through editable lines
+  Enter / i       Edit at the cursor
   Ctrl-S          Save and return
   Ctrl-N          Save and start another card
   ?               Show all form keys
   q / Esc         Cancel; confirm first when the draft changed
 
-A multiline field appears as one protected preview row. Press Enter on it to
-open a larger editor with wrapped paragraphs. Ctrl-S applies the long text
-to the parent draft. Esc in Insert mode returns to Normal mode for Vim editing;
-q or Esc in Normal mode cancels it. Changed text gets a discard confirmation.
-Applying does not save the card until the parent composer is saved. Resizing
-reflows both windows without changing the draft.
+All fields, including Notes, are editable directly in the form. Moving between
+fields with Tab or Enter keeps Insert mode active. Paste multiline text or use
+native o/O in Normal mode to add a line in notes, answers, or other multiline
+fields. Paragraphs wrap inside the composer. Undo/redo restores both the text
+and its field boundaries. Ctrl-S saves the whole card; there is no separate
+apply step. Resizing preserves the draft's line breaks and indentation.
 
 Bundled card types:
 
