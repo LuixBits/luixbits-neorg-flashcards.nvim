@@ -24,6 +24,8 @@ video preparation. Check items only after completing them.
 - [x] Refresh the local Graphify index.
 - [x] Finish the scoped commits and verify a clean final plugin tree.
 - [x] Record exact validation and release preparation status below.
+- [x] Verify Neovim motions, arrow aliases and directional pane navigation.
+- [x] Review wrapped help and rebuilt personal-editor behavior.
 
 ## Flashcards video
 
@@ -68,6 +70,16 @@ suite and full flake checks. A separate full personal NVF package also opens
 Desk, Overview and Stats with Kanagawa. Native Kitty review at 122 × 30 caught
 and corrected Unicode cursor offsets, singular labels and calendar height.
 The updated [visual gallery](demo/README.md) includes these checks.
+
+The keyboard follow-up at runtime `98a6bf0` passed the three-version regression
+suite, clean-install check and full x86_64 Linux flake checks. It adds directional
+Ctrl-h/j/k/l, review arrow aliases and `H` hints. Native Ctrl-W navigation is
+preserved. Real key tests cover pane edges, stacked layouts, unchanged calendar
+dates and ratings, and Insert-mode Ctrl-H backspace. Help wraps locally under
+nowrap. The rebuilt personal NVF package loads this runtime and passes a check
+of all three pages, directional navigation and help. Dark/light grid captures
+include review and help at 150 × 42, 122 × 30 and 70 × 24. The local code index
+was refreshed after the source changes.
 
 Eight spoken chapter scripts, the private preproduction plan and the capture
 inventory now describe the refined interface. Thirteen earlier silent takes

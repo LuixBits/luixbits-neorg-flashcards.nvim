@@ -10,6 +10,8 @@ Follow-up to the 2026-10-16 review in the user's actual NVF setup.
 - [x] Verify the full user configuration, themes, resizes, keyboard navigation and persistence.
 - [x] Review images, run release checks and make scoped commits throughout.
 - [x] Update documentation, video facts and the temporary Neovim build.
+- [x] Use Neovim motions and arrows consistently; verify Ctrl-h/j/k/l in both pane layouts.
+- [x] Review shortcut help at narrow widths and keep all descriptions readable.
 
 The screenshots exposed inherited `listchars` markers and Neorg concealment in
 app scratch buffers. UI buffers need their own filetype and local display
@@ -46,3 +48,17 @@ hint in narrow panes. It now keeps `Ctrl-D/U scroll` visible, with real keyboard
 coverage for paging and top/bottom navigation. The source filename moved from
 the study card to muted workspace chrome. Help and documentation explain
 burying until local midnight and suspending until manually resumed.
+
+The keyboard follow-up moves review hints to `H`, makes `h`/Left return and
+`l`/Right reveal, and adds arrow browsing. Ctrl-h/j/k/l uses Neovim's directional
+window commands; native Ctrl-W motions remain available. Real key tests cover
+column and stacked layouts, pane edges, calendar-date preservation, review
+navigation without ratings, and Insert-mode Ctrl-H backspace in the composer.
+Image review caught clipped help under inherited nowrap; help now wraps locally.
+
+Runtime `98a6bf0` passed the regression suite on Neovim 0.10.4, 0.11.5 and
+0.12.4, the clean-install check and the full x86_64 Linux flake checks. The
+separate personal NVF package was rebuilt and verified with the real collection
+configuration: all three pages, Ctrl-H/L pane movement and wrapped help. The
+video ledger and private capture cues now use the same keys. No new video
+footage was recorded for this follow-up.
