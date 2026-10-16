@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented here.
 
+## Unreleased
+
+- Reworked card entry with labels above each input, front/answer roles,
+  explicit required/optional markers, and more space between fields. The
+  header shows collection, chapter, type, and destination, including the
+  previously hidden context above the first field.
+- Made the form follow theme input colors and ASCII-border settings. Save
+  controls appear first, and Tab/Shift-Tab navigate in both editing modes.
+- Expanded the long-field editor, wrapped paragraphs, and made Insert-mode
+  Escape return to Normal mode. Both form windows adapt to terminal resizing.
+- Protected composer controls from completion and pairing plugin mappings.
+  Fixed Tab and Ctrl-N being replaced by Blink in a configured editor.
+
 ## 0.3.0 - 2026-10-16
 
 - Added directional Ctrl-h/j/k/l pane navigation alongside native Ctrl-W keys.

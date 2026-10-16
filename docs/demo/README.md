@@ -67,3 +67,32 @@ The retained `live-desk.png`, `live-calendar.png`, and earlier review media are
 historical captures from the previous candidate. They are not evidence of the
 current chapter hierarchy or Stats layout. Updated video takes belong in the
 private Remotion capture inventory.
+
+## Card entry refinement
+
+Captured on 2026-10-16 from runtime `3020371` using the configured NVF editor
+and temporary synthetic collections. These images come from Neovim's external
+line grid. This refinement follows v0.3.0 and is recorded under Unreleased.
+
+| View | Terminal | Theme | Image |
+| --- | --- | --- | --- |
+| Previous composer | 122 × 30 | Kanagawa | [Before](composer-before.png) |
+| New card, with collection and chapter | 122 × 30 | Kanagawa | [Composer](composer.png) |
+| Completed required fields | 122 × 30 | Kanagawa | [Filled form](composer-filled.png) |
+| Compact field layout | 80 × 24 | peachpuff | [Light form](composer-light.png) |
+| Missing required fields | 80 × 24 | peachpuff | [Validation](composer-errors.png) |
+| Last field in a short ASCII window | 60 × 20 | habamax | [Small form](composer-compact.png) |
+| Multiline notes editor | 122 × 30 | Kanagawa | [Notes](composer-notes.png) |
+
+The previous form hid its target above the first visible value. The new form
+keeps the header and field captions in view and separates labels from inputs.
+Required and optional fields are explicit. Narrow windows reduce spacing;
+fields remain reachable with Tab, Shift-Tab, j/k, or arrows.
+
+The configured-editor interaction check caught Blink replacing Tab and Ctrl-N.
+After the fix, actual keys entered two Japanese cards, saved the first with
+Ctrl-N and the second with Ctrl-S, and preserved their chapter assignment.
+Backspace at a field boundary stayed within the field. Editing multiline notes,
+switching to Normal mode with Escape, resizing to 60 × 20, and saving preserved
+the line breaks, indentation, and card ID. The regression suite also passed on
+Neovim 0.10.4, 0.11.5, and 0.12.4.

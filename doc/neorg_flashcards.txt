@@ -300,10 +300,11 @@ in its Needs attention section.
 ==============================================================================
 COMPOSER AND CARD TYPES                      *neorg-flashcards-composer*
 
-The composer shows one protected row per field. Names, required marks,
-placeholders, validation messages, and the target file are decorations, not
-editable text. Backspace, word deletion, and Delete cannot cross a value's
-boundary.
+The composer places each label above its input and marks front/answer fields
+and required/optional values. Larger windows add space between fields. The
+header shows the collection, chapter, card type, and target file. These labels
+stay outside the editable values. Backspace, word deletion, and Delete cannot
+cross a value's boundary.
 
 Insert-mode keys:
 
@@ -315,6 +316,7 @@ Insert-mode keys:
 
 Normal-mode keys:
 
+  Tab / S-Tab     Next / previous field
   j/k or Down/Up  Select a field
   Enter / i       Edit the selected field
   Ctrl-S          Save and return
@@ -323,9 +325,11 @@ Normal-mode keys:
   q / Esc         Cancel; confirm first when the draft changed
 
 A multiline field appears as one protected preview row. Press Enter on it to
-open a focused editor containing only the value. Ctrl-S applies the long text
-to the parent draft; Esc cancels it. Changed text gets a discard confirmation.
-Applying does not save the card until the parent composer is saved.
+open a larger editor with wrapped paragraphs. Ctrl-S applies the long text
+to the parent draft. Esc in Insert mode returns to Normal mode for Vim editing;
+q or Esc in Normal mode cancels it. Changed text gets a discard confirmation.
+Applying does not save the card until the parent composer is saved. Resizing
+reflows both windows without changing the draft.
 
 Bundled card types:
 

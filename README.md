@@ -371,23 +371,32 @@ trail, with the newest rating on the right. Stats uses the same rules, so its
 
 ## Composer
 
-The form renders one protected row per field. Field names, required markers,
-placeholders, errors, and the destination are decorations; Backspace and
-Delete cannot merge them into the value.
+The composer gives each field a label above its input, with room between
+fields on larger screens. Labels identify the front and answer fields and
+spell out which values are required or optional. The header shows the
+collection, chapter, card type, and destination file. Colors follow your theme.
 
-- Insert mode: `Enter` advances and saves on the final field; `Tab` and
-  `Shift-Tab` move between fields.
+Labels, placeholders, and errors stay outside the editable values. Backspace
+and Delete cannot join adjacent fields. The form opts out of completion through
+the buffer-local `completion` flag, which Blink supports, and reapplies its
+navigation and deletion guards when entering the draft.
+
+- `Tab` and `Shift-Tab` move between fields in Normal or Insert mode.
+- Insert mode: `Enter` advances and saves on the final field.
 - Normal mode: `j/k` or Down/Up selects a field; `Enter` or `i` edits it.
 - `Ctrl-S`: save and return.
 - `Ctrl-N`: save and start another card.
 - `q` or `Esc` in Normal mode: cancel, with confirmation for a changed draft.
 - `?`: show every form shortcut.
 
-A multiline field stays as one protected preview row. Press `Enter` on it to
-open a focused editor containing only the value. Use normal editing commands,
-then press `Ctrl-S` to apply it to the draft or `Esc` to cancel. Unsaved long
-text gets its own discard confirmation. Applying the field does not save the
-card; the parent composer still does that.
+A multiline field shows a preview and an `Enter to edit` label. Its editor
+provides more room and wraps paragraphs without changing stored line breaks.
+Press `Esc` to leave Insert mode and use normal Vim editing commands. `Ctrl-S`
+applies the value to the draft; `q` or `Esc` in Normal mode cancels, with a
+confirmation for changed text. Apply the field, then save the card from the
+parent composer.
+
+See the [composer screenshots](docs/demo/README.md#card-entry-refinement).
 
 ## Card types
 

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-22
-- Amended: 2026-08-22
+- Amended: 2026-10-16
 
 ## Context
 
@@ -29,11 +29,17 @@ form would bring back the structural ambiguity that the composer removed.
   first-line preview while its complete value stays in the structured draft.
   Labels, required marks, placeholders, field help, validation, target context,
   and save status are extmark decorations rather than buffer text.
+- Labels sit above the values, with front/answer roles and explicit
+  required/optional markers. Larger windows separate fields with blank lines.
+  The header captures collection, chapter, type, and file. Restoring the window
+  view includes virtual lines above the first visible value so its label and
+  destination remain visible.
 - Line-count changes are rejected and the last valid draft is restored. A
   Backspace, word deletion, and Delete are also stopped at value boundaries so
   they cannot join adjacent fields.
-- Enter on a multiline field opens a focused scratch editor. `Ctrl-S` applies
-  the complete value; `Esc` or `q` cancels it. Cancelling changed text requires
+- Enter on a multiline field opens a larger scratch editor with paragraph
+  wrapping. `Ctrl-S` applies the complete value. Insert-mode `Esc` enters
+  Normal mode; Normal-mode `Esc` or `q` cancels. Cancelling changed text requires
   confirmation, and the parent form cannot close behind an unresolved editor.
 - Multiline values use an explicit on-disk block. The header is `field: |` and
   each value line has a two-space container indent. Only fields declared with
@@ -61,6 +67,10 @@ form would bring back the structural ambiguity that the composer removed.
   retryable draft.
 - Composer mappings, its compact footer, and `?` help continue to come from
   the shared action catalogue. No new global or NVF shortcut is added.
+- Tab and Shift-Tab select fields in both modes. Composer buffers set
+  `b:completion = false`, which Blink honors. The parent form restores its
+  own mappings on BufEnter and InsertEnter because completion and pairing
+  plugins can otherwise replace navigation or deletion guards after opening.
 
 ## Consequences
 
