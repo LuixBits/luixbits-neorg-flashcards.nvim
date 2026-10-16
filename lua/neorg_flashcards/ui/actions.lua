@@ -38,7 +38,7 @@ local catalog = {
     action(
       { "m" },
       "manage",
-      "Manage collections, chapters and tags",
+      "Actions for the selected collection, chapter or card",
       { "overview" },
       { hints = { overview = "manage" }, capability = "manage" }
     ),

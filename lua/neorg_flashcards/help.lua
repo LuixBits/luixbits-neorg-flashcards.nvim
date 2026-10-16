@@ -71,6 +71,8 @@ function M.open()
     "Stats: d due · A all · R refresh",
     "",
     "Collections: setup or m > New collection · C switch · c check",
+    "Menus: j/k or arrows · Enter choose · h back · q/Esc cancel",
+    "Inputs: Enter confirm · Esc normal · q cancel",
     "Stats: h/l day · j/k week · [/] month · . today · Enter inspect",
     "Card form: Enter next/save · Ctrl-S save · Ctrl-N save+new",
     "  Tab fields · Esc then ? keys · q cancel",

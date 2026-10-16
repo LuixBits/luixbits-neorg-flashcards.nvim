@@ -587,9 +587,8 @@ function M.close(opts)
       close_now()
       return
     end
-    if vim.api.nvim_get_current_tabpage() == vim.api.nvim_win_get_tabpage(state.win) then
-      focus_form()
-    end
+    -- The dialog restores its parent for an explicit cancel. If the user
+    -- moved to another window or tab, leave their focus there.
   end)
   return false
 end

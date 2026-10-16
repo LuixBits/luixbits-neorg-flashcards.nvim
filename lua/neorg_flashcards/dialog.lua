@@ -45,8 +45,12 @@ local function finish(s, value, index, restore)
     active = nil
   end
   pcall(vim.api.nvim_del_augroup_by_id, s.group)
-  if vim.api.nvim_get_current_win() == s.win then
+  local owns_window = popup.is_open(s)
+  if owns_window and vim.api.nvim_get_current_win() == s.win then
     vim.cmd.stopinsert()
+  end
+  if not owns_window then
+    s.win = nil
   end
   popup.close(s)
   if restore ~= false and vim.api.nvim_get_current_tabpage() == s.tab and vim.api.nvim_win_is_valid(s.parent) then
@@ -102,7 +106,13 @@ local function render(s)
       table.insert(above, { { line, H.ink } })
     end
     local values = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
-    local height = #lines + #values + 2
+    local errors = {}
+    if s.error then
+      for _, line in ipairs(canvas.wrap(s.error, math.max(1, width - 4))) do
+        table.insert(errors, { { "  " .. line, H.again } })
+      end
+    end
+    local height = #lines + #values + 2 + #errors
     for _, value in ipairs(values) do
       height = height + math.floor(vim.fn.strdisplaywidth(value) / math.max(1, width - 4))
     end
@@ -115,9 +125,9 @@ local function render(s)
       right_gravity = false,
       line_hl_group = highlights.groups.form.active,
     })
-    if s.error then
+    if #errors > 0 then
       vim.api.nvim_buf_set_extmark(s.buf, ns, #values - 1, 0, {
-        virt_lines = { { { "  " .. s.error, H.again } } },
+        virt_lines = errors,
       })
     end
     vim.api.nvim_win_call(s.win, function()
@@ -203,6 +213,7 @@ local function open(opts, callback, input, items)
   local function submit()
     if input then
       local values = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+      s.error_value = table.concat(values, "\n")
       if #values ~= 1 then
         s.error = "Use a single line."
         render(s)
@@ -231,7 +242,10 @@ local function open(opts, callback, input, items)
       group = s.group,
       buffer = s.buf,
       callback = function()
-        s.error = nil
+        local value = table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n")
+        if value ~= s.error_value then
+          s.error = nil
+        end
         render(s)
       end,
     })

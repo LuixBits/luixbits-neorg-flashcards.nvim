@@ -91,6 +91,16 @@ return function(T)
   contains(content(), "水", "card actions identify the card")
   choose("Edit card")
   truth(form.is_open(), "card menu opens the existing composer")
+  vim.api.nvim_buf_set_lines(0, 0, 1, false, { "未保存" })
+  form.close()
+  equal(vim.bo.filetype, "neorg_flashcards_dialog", "dirty drafts use the same confirmation")
+  overview.focus_side()
+  local other_pane = vim.api.nvim_get_current_win()
+  vim.wait(30, function()
+    return false
+  end)
+  equal(vim.api.nvim_get_current_win(), other_pane, "cancelling on focus loss does not pull focus back")
+  truth(form.is_open(), "leaving the discard prompt keeps the draft")
   form.close({ force = true })
   overview.focus_main()
   keys("m")
@@ -115,6 +125,14 @@ return function(T)
   equal(#parser.collect_flashcards(config), 0)
   truth(vim.fn.filereadable(source .. ".flashcards-backup") == 1, "deletion still creates the recovery copy")
 
+  vim.fn.writefile({ "@flashcard japanese", "japanese: 未完成" }, source)
+  overview.refresh()
+  keys("m")
+  contains(content(), "Repair source", "invalid cards offer repair in their menu")
+  truth(not content():find("Move card", 1, true), "invalid IDs cannot be moved through the menu")
+  truth(not content():find("Delete card", 1, true), "unclosed blocks do not offer deletion")
+  keys("q")
+
   overview.close()
   flashcards.overview({ view = "overview", browser_level = "collections", reset_browser = true })
   keys("e")
@@ -127,4 +145,44 @@ return function(T)
   truth(not vim.api.nvim_win_is_valid(stale), "closing the hub removes its pending rename")
   equal(metadata.load(config).label, nil)
   vim.fn.delete(root, "rf")
+
+  -- Exercise the real chained input flow and settings on a UI-created collection.
+  local registry_root = vim.fn.tempname()
+  truth(flashcards.setup({
+    default_collection = "japanese",
+    deck_registry = registry_root .. "/decks.json",
+    collections = {
+      japanese = {
+        path = registry_root .. "/japanese",
+        label = "Japanese",
+        default_card_type = "japanese",
+        schemas = require("neorg_flashcards.presets").only("japanese"),
+      },
+    },
+  }))
+  flashcards.overview({ view = "overview", browser_level = "collections", reset_browser = true })
+  keys("m")
+  choose("New collection")
+  enter("science")
+  enter("Science")
+  enter(registry_root .. "/science")
+  choose("Question and answer")
+  equal(flashcards.active_collection().id, "science")
+  keys("m")
+  choose("Study settings")
+  contains(content(), "Enable card type")
+  contains(content(), "Default card type")
+  keys("h")
+  choose("Detach collection")
+  choose("Cancel")
+  equal(flashcards.active_collection().id, "science", "cancel keeps the UI-created collection")
+  local kept = registry_root .. "/science/kept.norg"
+  vim.fn.writefile({ "* Keep this note" }, kept)
+  keys("m")
+  choose("Detach collection")
+  choose("Detach collection")
+  equal(vim.fn.readfile(kept)[1], "* Keep this note", "detachment keeps source files")
+  equal(flashcards.active_collection().id, "japanese")
+  overview.close()
+  vim.fn.delete(registry_root, "rf")
 end

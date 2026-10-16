@@ -1579,6 +1579,7 @@ function M.setup(opts)
           chapter = selection and selection.chapter,
           card = selection and selection.card,
           card_label = selection and selection.card_label,
+          invalid = selection and selection.invalid,
           kind = selection and selection.kind,
           owned = setup_options.collections[config.id] ~= nil,
           can_create = setup_options.deck_registry ~= false,

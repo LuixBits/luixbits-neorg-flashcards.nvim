@@ -105,7 +105,7 @@ function M.open(context)
   local config = context.config
   local initial = metadata.load(config)
   local collection = initial.label or config.label or config.id
-  local category, menu, tags, settings, run
+  local category, menu, tags, tag_actions, settings, run
   local function live()
     if context.valid() then
       return true
@@ -196,14 +196,17 @@ function M.open(context)
         run("New tag")
       else
         category = group
-        pick("Tag", group.name, {
-          "Rename or merge tag",
-          "Create chapter from tag",
-          "Note appearance",
-          "Remove tag",
-        }, tags)
+        tag_actions()
       end
     end)
+  end
+  tag_actions = function()
+    pick("Tag", category.name, {
+      "Rename or merge tag",
+      "Create chapter from tag",
+      "Note appearance",
+      "Remove tag",
+    }, tags)
   end
   settings = function()
     local choices = { "Daily goal" }
@@ -222,10 +225,10 @@ function M.open(context)
     elseif choice == "Study settings" then
       settings()
     elseif choice == "Note appearance" then
-      pick("Note appearance", category.label, { "Note label", "Note color", "Note order" }, tags)
+      pick("Note appearance", category.label, { "Note label", "Note color", "Note order" }, tag_actions)
     elseif choice == "Add card" then
       context.add_card()
-    elseif choice == "Edit card" then
+    elseif choice == "Edit card" or choice == "Repair source" then
       context.edit_card()
     elseif choice == "Delete card" then
       context.delete_card()
@@ -464,7 +467,10 @@ function M.open(context)
     local title, name, choices
     if context.card then
       title, name = "Card", context.card_label or collection
-      choices = { "Edit card", "Move card to chapter", "Delete card" }
+      choices = context.invalid and { "Repair source" } or { "Edit card", "Move card to chapter" }
+      if context.card.closed ~= false then
+        table.insert(choices, "Delete card")
+      end
     elseif context.kind == "chapter" or context.kind == "chapters" or context.kind == "cards" then
       local chapter = initial.chapters[context.chapter]
       title, name = "Chapter", chapter and chapter.label or (context.chapter == "" and "Unfiled" or "All cards")

@@ -88,6 +88,17 @@ return function(T)
   truth(not vim.api.nvim_win_is_valid(win), "leaving a dialog cancels and removes it")
   equal(vim.api.nvim_get_current_win(), parent, "cancellation never takes focus back")
 
+  open()
+  win = vim.api.nvim_get_current_win()
+  local replacement = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(win, replacement)
+  drain()
+  truth(vim.api.nvim_win_is_valid(win), "cleanup does not close a window now displaying another buffer")
+  equal(vim.api.nvim_win_get_buf(win), replacement)
+  equal(value, nil)
+  vim.api.nvim_win_close(win, true)
+  vim.api.nvim_buf_delete(replacement, { force = true })
+
   local labels = {}
   for n = 1, 20 do
     labels[n] = { name = string.rep("日本語", 10) .. " " .. n }
@@ -128,6 +139,7 @@ return function(T)
   vim.cmd.stopinsert()
   local input_win = vim.api.nvim_get_current_win()
   keys("<CR>")
+  drain()
   truth(vim.api.nvim_win_is_valid(input_win), "validation leaves the input open")
   contains(T.decoration_text(0), "Enter a name.")
   keys("iLesson 3<Esc><CR>")
