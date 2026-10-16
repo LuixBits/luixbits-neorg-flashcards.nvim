@@ -11,7 +11,13 @@ function M.path(config)
 end
 
 function M.defaults()
-  return { version = 1, categories = {}, goals = {}, goal = 20 }
+  return { version = 1, categories = {}, chapters = {}, chapter_cards = {}, goals = {}, goal = 20 }
+end
+
+local function normalize(data)
+  data.chapters = data.chapters or {}
+  data.chapter_cards = data.chapter_cards or {}
+  return data
 end
 
 function M.validate(data)
@@ -20,6 +26,30 @@ function M.validate(data)
   end
   if type(data.categories) ~= "table" or type(data.goals) ~= "table" then
     return false, "workspace categories and goals must be objects"
+  end
+  if
+    (data.chapters ~= nil and type(data.chapters) ~= "table")
+    or (data.chapter_cards ~= nil and type(data.chapter_cards) ~= "table")
+  then
+    return false, "workspace chapters and chapter_cards must be objects"
+  end
+  for id, chapter in pairs(data.chapters or {}) do
+    if
+      type(id) ~= "string"
+      or id == ""
+      or id:find("[%c]")
+      or type(chapter) ~= "table"
+      or type(chapter.label) ~= "string"
+      or util.trim(chapter.label) == ""
+      or chapter.label:find("[%c]")
+    then
+      return false, "chapters need stable IDs and non-empty single-line names"
+    end
+  end
+  for id, chapter in pairs(data.chapter_cards or {}) do
+    if type(id) ~= "string" or id == "" or type(chapter) ~= "string" or not (data.chapters or {})[chapter] then
+      return false, "chapter membership must reference an existing chapter"
+    end
   end
   local function valid_goal(value)
     return type(value) == "number" and value >= 0 and value <= 10000 and value == math.floor(value)
@@ -77,7 +107,7 @@ function M.load(config)
   if not valid then
     return M.defaults(), message
   end
-  return data
+  return normalize(data)
 end
 
 function M.update(config, change)
@@ -99,6 +129,7 @@ function M.update(config, change)
   if not valid then
     return false, message
   end
+  normalize(data)
   local ok, result = pcall(change, data)
   if not ok then
     return false, tostring(result)
