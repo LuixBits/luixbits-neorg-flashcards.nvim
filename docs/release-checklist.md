@@ -40,8 +40,9 @@ video preparation. Check items only after completing them.
 
 ## Validation and handoff
 
-Release target: **0.3.0**, prepared locally on `feat/ascii-study-desk`.
-Tagging, merging, pushing, and publishing remain separate release actions.
+Release version: **0.3.0**, prepared on `feat/ascii-study-desk`.
+The [release notes](releases/v0.3.0.md) describe the changes and upgrade steps.
+Installation examples pin the `v0.3.0` tag.
 
 Validated on 2026-10-16:
 

@@ -43,9 +43,9 @@ composer, workspace, review window, and statistics still work.
 
 ## Install
 
-Version 0.3 is still unreleased, so these examples follow the `main` branch.
-After the release, use a `0.3.x` version constraint if you prefer a fixed
-release line.
+These examples pin v0.3.0. If you are updating from v0.2, follow the
+[upgrade guide](docs/UPGRADING.md) to configure named collections before
+opening the workspace. Existing named-collection setups need no card migration.
 
 ### lazy.nvim
 
@@ -60,7 +60,7 @@ With Neorg:
 },
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  branch = "main",
+  tag = "v0.3.0",
   cmd = "Flashcards",
   dependencies = { "nvim-neorg/neorg" },
   config = function()
@@ -88,7 +88,7 @@ does not need LuaRocks:
 ```lua
 {
   "LuixBits/luixbits-neorg-flashcards.nvim",
-  branch = "main",
+  tag = "v0.3.0",
   cmd = "Flashcards",
   config = function()
     local presets = require("neorg_flashcards.presets")
@@ -111,7 +111,7 @@ does not need LuaRocks:
 
 ### Native packages and other plugin managers
 
-Clone the current main branch into a Neovim package directory, load it, then use the same
+Clone the release into a Neovim package directory, load it, then use the same
 setup table:
 
 ```sh
@@ -119,7 +119,7 @@ plugin_root="$(nvim --headless --clean \
   '+lua io.write(vim.fn.stdpath("data") .. "/site/pack/luixbits/opt")' \
   +qa 2>/dev/null)"
 mkdir -p "$plugin_root"
-git clone --branch main --depth 1 \
+git clone --branch v0.3.0 --depth 1 \
   https://github.com/LuixBits/luixbits-neorg-flashcards.nvim.git \
   "$plugin_root/luixbits-neorg-flashcards.nvim"
 ```
@@ -713,7 +713,7 @@ Add the flake input:
 
 ```nix
 inputs.luixbits-neorg-flashcards.url =
-  "github:LuixBits/luixbits-neorg-flashcards.nvim";
+  "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.0";
 ```
 
 Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:

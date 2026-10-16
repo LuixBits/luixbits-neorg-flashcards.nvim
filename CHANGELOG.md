@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented here.
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-10-16
 
 - Added directional Ctrl-h/j/k/l pane navigation alongside native Ctrl-W keys.
   Review uses h/Left to return, l/Right to reveal, and j/k or arrows to browse.
