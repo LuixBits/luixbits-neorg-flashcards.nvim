@@ -302,7 +302,8 @@ change; overdue cards stay in today's backlog.
 
 The main area shows totals, streaks, retention, card states, median answer
 time, heatmap, seven-day forecast, and Needs attention beside the compact
-calendar. `Ctrl-D/U` scrolls analytics; `Ctrl-W w` focuses the day details. Weekly card-days count a card once per day; they are not a
+calendar. `Ctrl-D/U` scrolls analytics; `Ctrl-W w` focuses the day details.
+Weekly card-days count a card once per day; they are not a
 count of distinct cards across the week. Retention means Hard or Good as a
 percentage of effective ratings. Recorded answer time includes time with a
 card open, and missing durations remain unavailable.
@@ -320,7 +321,6 @@ from tag creates a chapter and moves matching cards after confirmation. Tags
 stay on the cards. Removing a chapter returns its cards to Unfiled and keeps
 their IDs, scheduling, and history. Adding from a chapter assigns the new card
 to it; the card still goes into the collection's configured default file.
-
 
 Press `m` in Overview to change the deck's display label or daily goal; create,
 label, color, or order category notes; rename or merge tags; or remove a tag

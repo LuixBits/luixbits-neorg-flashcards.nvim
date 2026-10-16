@@ -1,6 +1,7 @@
 -- The shared workspace shell and functional card browser.
 
 local actions = require("neorg_flashcards.ui.actions")
+local canvas = require("neorg_flashcards.ui.canvas")
 local card_insights = require("neorg_flashcards.card_insights")
 local highlights = require("neorg_flashcards.highlights")
 local popup = require("neorg_flashcards.popup")
@@ -1203,7 +1204,8 @@ local function render()
   local entry = state.page == "overview" and selected_card_entry()
     or (state.page == "desk" and selected_overview_entry())
   if entry and state.main.win and vim.api.nvim_win_is_valid(state.main.win) then
-    pcall(vim.api.nvim_win_set_cursor, state.main.win, { entry.line, entry.col and entry.col - 1 or 0 })
+    local prefix = entry.col and canvas.fit(main_lines[entry.line] or "", entry.col - 1) or ""
+    pcall(vim.api.nvim_win_set_cursor, state.main.win, { entry.line, #prefix })
   end
 end
 

@@ -41,6 +41,15 @@ return function(T)
   for _, page in ipairs({ "desk", "stats", "overview", "desk" }) do
     T.assert_true(flashcards[page]())
     clean_windows()
+    if page == "desk" then
+      local cursor = vim.api.nvim_win_get_cursor(0)
+      local line = vim.api.nvim_get_current_line()
+      T.assert_equal(
+        vim.fn.strcharpart(line:sub(cursor[2] + 1), 0, 4),
+        "│ > ",
+        "desk cursor follows the selected box after multibyte border glyphs"
+      )
+    end
   end
   T.assert_true(flashcards.review_due())
   clean_windows()
