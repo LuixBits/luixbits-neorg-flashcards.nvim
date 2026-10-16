@@ -441,6 +441,15 @@ field. The composer creates the ID. Ratings maintain score, reviewed, due,
 interval, ease, reps, lapses, and lifecycle. Bury and suspend maintain
 availability and available_at.
 
+Bury (b) sets a card aside until the next local midnight. It then becomes
+eligible again according to its due date. Suspend (x) excludes it until you
+resume it with x in Overview. Use b in Overview to unbury early. Both actions
+remove the card from the current review without deleting it, resetting its
+learning schedule or counting as a rating.
+
+During review, the source filename is shown in muted workspace chrome outside
+the question/answer card.
+
 Long values use `field: |`. Every content line starts two spaces beyond its
 card directive; further indentation belongs to the value. An empty value line
 contains those two storage spaces. @end aligns with @flashcard, including when
@@ -510,9 +519,11 @@ Stats includes totals, streak, 7/30/90-day retention, 30-day ratings, card
 states, leeches, median answer time, estimated workload, an activity heatmap,
 a seven-day forecast, tag sizes, and the Card Clinic attention list.
 
-The main pane shows analytics alongside a compact Monday-first calendar. h/l moves by day, j/k by
-week, [ and ] by month, and . returns to today. Enter opens the selected day's
-cards in Overview. Ctrl-W w focuses details for scrolling. Past days show
+The main pane shows analytics alongside a compact Monday-first calendar.
+h/l moves by day, j/k by week, [ and ] by month, and . returns to today.
+Enter opens the selected day's cards in Overview. Ctrl-D / Ctrl-U scroll
+down/up without changing that date; G / gg go to the bottom/top. Ctrl-W w
+switches panes, and scrolling affects the focused pane. Past days show
 unique cards, answer counts, ratings, hints, recorded time and saved goals.
 Deleted cards retain history with an unavailable source label. Future days
 show currently scheduled cards; later ratings can change that snapshot.

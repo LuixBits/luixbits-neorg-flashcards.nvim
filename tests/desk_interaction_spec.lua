@@ -54,11 +54,25 @@ return function(T)
   key("l") -- Food note.
   key("<CR>")
   truth(review.is_active(), "a category note starts an integrated review")
+  local function source_outside_card()
+    local source_row, card_row
+    for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+      if line:find("Source: cards.norg", 1, true) then
+        source_row = row
+      end
+      if line:find(" QUESTION ", 1, true) or line:find(" ANSWER ", 1, true) then
+        card_row = row
+      end
+    end
+    truth(source_row and card_row and source_row < card_row, "the source stays in workspace chrome, outside the card")
+  end
+  source_outside_card()
   equal(flashcards.get_review_state().remaining, 2, "category stack contains both ready cards")
   key("3")
   key("3")
   equal(flashcards.get_review_state().reviewed, 0, "repeated rating keys cannot reveal and rate a question")
   key("<CR>")
+  source_outside_card()
   key("1")
   equal(flashcards.get_review_state().unique, 1, "Again increases unique progress once")
   equal(flashcards.get_review_state().remaining, 2, "Again leaves one finite retry pending")
@@ -76,6 +90,7 @@ return function(T)
   contains(stacks, "Retry       1", "the pending pile includes the finite retry")
   contains(stacks, "Again       1", "the reviewed pile shows actual rating totals")
   contains(stacks, "0 cards finished", "the pile does not count a pending retry as finished")
+  source_outside_card()
   vim.o.columns, vim.o.lines = 80, 24
   vim.api.nvim_exec_autocmds("VimResized", {})
   key("3")

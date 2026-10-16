@@ -100,7 +100,7 @@ local function show_shortcuts()
   return type(config.ui) ~= "table" or config.ui.show_shortcuts ~= false
 end
 
-local function set_review_lines(lines, rating_spans)
+local function set_review_lines(lines, rating_spans, source)
   if not popup.is_open(state) then
     return
   end
@@ -133,6 +133,7 @@ local function set_review_lines(lines, rating_spans)
       ascii = config.ui and config.ui.ascii,
       deck = presentation.label or config.label or config.id or "Deck",
       scope = state.label,
+      source = source,
       lines = lines,
       spans = rating_spans or {},
       pending = #state.queue,
@@ -651,7 +652,6 @@ local function render()
       #state.queue,
       state.session.requeued
     ),
-    "Source: " .. util.path_label(card.path, config.path),
   }
   local rating_spans = {}
 
@@ -689,7 +689,7 @@ local function render()
     table.insert(lines, "Reveal the answer with ⏎ or Space before rating. Press h for a hint.")
   end
 
-  set_review_lines(lines, rating_spans)
+  set_review_lines(lines, rating_spans, util.path_label(card.path, config.path))
 end
 
 local function commit_last_action()

@@ -22,7 +22,9 @@ are demonstration data, not an actual person's study record.
 | Light Desk | 100 × 32 | peachpuff | [Light desk](desk-light.png) |
 | ASCII Desk | 80 × 24 | peachpuff | [ASCII desk](desk-ascii.png) |
 | Revealed card and session stacks | 150 × 42 | Kanagawa | [Study](study.png) |
+| Compact card with source outside its border | 70 × 24 | peachpuff | [Compact study](study-compact.png) |
 | Calendar and main analytics | 180 × 42 | Kanagawa | [Stats](calendar.png) |
+| Analytics after Ctrl-D | 122 × 30 | Kanagawa | [Scrolled Stats](stats-scrolled.png) |
 | Compact ASCII calendar | 80 × 24 | peachpuff | [Compact Stats](calendar-compact.png) |
 | Chapter management | 150 × 38 | Kanagawa | [Chapters](chapters.png) |
 | Cards within a chapter | 150 × 38 | Kanagawa | [Cards](overview.png) |
@@ -39,6 +41,12 @@ The native probe caught a Unicode cursor offset and singular stack labels.
 The final stack shows six unseen cards, one retry, one finished card, and
 Again 1 / Hard 0 / Good 1. The smaller Stats layout retains all three rating
 totals above the fold and adds weekly comparisons alongside the calendar.
+
+The latest grid captures show the source filename in muted workspace chrome,
+outside the question/answer card, and the visible `Ctrl-D/U scroll` hint.
+Keyboard tests exercise Ctrl-D, Ctrl-U, G and gg in the main Stats pane and
+verify that scrolling leaves the selected calendar day unchanged. The native
+Kitty images above predate these two small placement/hint changes.
 
 Small desks scroll to later notes and the progress panel. The header retains
 today's progress. A 60 × 20 interaction regression checks paging past the last

@@ -17,7 +17,17 @@ function M.render(model)
   end
   left = math.min(model.width - card_width, left + offset)
   local heading = model.lines[1]:gsub("^%* ", ""):gsub(" | Reviewed.*$", "")
-  c:put(compact and 1 or 2, 3, canvas.fit(model.deck .. "  /  " .. heading, model.width - 6), h.title)
+  local heading_text = canvas.fit(model.deck .. "  /  " .. heading, model.width - 6)
+  c:put(compact and 1 or 2, 3, heading_text, h.title)
+  if model.source then
+    local source = "Source: " .. model.source
+    local row = compact and 1 or 2
+    if vim.fn.strdisplaywidth(heading_text .. "   " .. source) > model.width - 6 then
+      row = compact and (piles and 3 or 4) or 5
+    end
+    source = canvas.fit(source, model.width - 6)
+    c:put(row, model.width - 2 - vim.fn.strdisplaywidth(source), source, h.muted)
+  end
   local summary = string.format(
     "Pending %d  /  Finished %d of %d  /  %d answers",
     model.pending,

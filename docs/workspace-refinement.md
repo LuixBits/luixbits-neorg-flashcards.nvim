@@ -40,3 +40,9 @@ Two fresh silent probes preserve the revised interface and its subsequent
 visual corrections. The final probe passes hash, frame-timing and full-decode
 checks. Earlier footage needs a continuity/retake audit; narration and chapter
 assembly remain production work. No publication or system activation occurred.
+
+Further local testing exposed that the Stats ribbon dropped its scrolling
+hint in narrow panes. It now keeps `Ctrl-D/U scroll` visible, with real keyboard
+coverage for paging and top/bottom navigation. The source filename moved from
+the study card to muted workspace chrome. Help and documentation explain
+burying until local midnight and suspending until manually resumed.

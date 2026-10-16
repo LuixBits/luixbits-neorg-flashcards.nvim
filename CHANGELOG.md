@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## 0.3.0 - Unreleased
 
+- Kept Stats scrolling controls visible in narrow shortcut ribbons and moved
+  review source filenames into workspace chrome outside the study card.
+  Clarified the difference between burying until tomorrow and suspending until
+  manually resumed.
 - Added a collection → chapter → card manager with contextual create, rename,
   move, and confirmed removal. Chapters are independent of filenames and tags;
   existing cards appear in Unfiled. Chapter-from-tag preserves the source tags.

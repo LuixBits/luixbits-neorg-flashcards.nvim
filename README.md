@@ -302,7 +302,9 @@ change; overdue cards stay in today's backlog.
 
 The main area shows totals, streaks, retention, card states, median answer
 time, heatmap, seven-day forecast, and Needs attention beside the compact
-calendar. `Ctrl-D/U` scrolls analytics; `Ctrl-W w` focuses the day details.
+calendar. `Ctrl-D` / `Ctrl-U` scroll down/up, and `G` / `gg` go to the
+bottom/top. These keys leave the selected date unchanged. `Ctrl-W w` switches
+between analytics and day details; scrolling affects the focused pane.
 Weekly card-days count a card once per day; they are not a
 count of distinct cards across the week. Retention means Hard or Good as a
 percentage of effective ratings. Recorded answer time includes time with a
@@ -518,9 +520,15 @@ pending attempts from cards reviewed in this session. A finished receipt shows
 unique cards and answer counts separately; `u` undoes the last rating, `Enter`
 returns to the desk, and `s` opens Stats.
 
-Pressing a rating before reveal reveals the answer first. The revealed card
-shows the next interval beside each rating. An Again card is requeued only once
-per session, so Again cannot create an endless retry loop.
+The source filename appears in muted workspace chrome, outside the study card.
+The revealed card shows the next interval beside each rating. An Again card is
+requeued only once per session, so Again cannot create an endless retry loop.
+
+Bury (`b`) sets a card aside until the next local midnight. It becomes eligible
+again automatically, subject to its existing due date. Suspend (`x`) excludes
+the card until you resume it with `x` in Overview. You can unbury a card early
+with `b` there too. Both actions remove it from the current review and preserve
+its content, learning schedule and history. They do not count as ratings.
 
 Typed answers are intended for short answers and are opt-in per field.
 Comparison ignores case, outside spaces, and repeated whitespace, then chooses
