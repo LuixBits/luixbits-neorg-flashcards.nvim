@@ -162,10 +162,9 @@ Relative `default_file` and `history_file` values resolve inside that
 collection. Their defaults are `cards.norg` and `reviews.jsonl`, so the example
 does not need an explicit history path.
 
-Only `default_collection`, `collections`, `ui`, and `on_review` are valid at the
-top level. Version 0.3 rejects the old flat keys, including a top-level
-`schemas` or `scheduling`, instead of guessing which collection should receive
-them.
+The valid top-level options are `default_collection`, `collections`,
+`deck_registry`, `ui`, and `on_review`. Version 0.3 rejects old flat options
+such as top-level `schemas` or `scheduling`.
 
 ### Convert the NVF setup
 
@@ -259,12 +258,13 @@ answer: |
 ```
 
 An unindented continuation is invalid. Single-line values keep their scalar
-form even when the schema permits multiline text. In the composer, press Enter
-on a long field to open its focused editor, `Ctrl-S` to apply it, and `Esc` to
-cancel it. If a field is not allowed to be multiline, collapse its old
-continuation into one scalar line. A literal value consisting only of `|` also
-needs a multiline-enabled field and an explicit block containing an indented
-`|` line.
+form even when the schema permits multiline text. In v0.3.1 and later, edit
+long fields directly in the composer. Paste multiple lines or use `o`/`O` in
+Normal mode to add lines. `Ctrl-S` saves the whole card.
+
+If a field is not allowed to be multiline, collapse its old continuation into
+one scalar line. A literal value consisting only of `|` also needs a
+multiline-enabled field and an explicit block containing an indented `|` line.
 
 Version 0.2 showed typed checking for every revealed value. Version 0.3 shows
 the `t` action only when at least one non-empty reveal field declares

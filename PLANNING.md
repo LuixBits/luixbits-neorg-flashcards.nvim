@@ -9,10 +9,8 @@ The architectural choices behind this plan live in
 [`docs/adr/`](docs/adr/README.md).
 
 The [ASCII study desk redesign](docs/desk-redesign.md) records the 2026-10-15
-brainstorm for Desk, Overview, and Stats, including the agreed cozy visual
-style, light gamification, interaction sketches, and implementation slices.
-It is a design draft; its scope and release placement are not yet folded into
-the milestones below.
+design for Desk, Overview, and Stats, shipped in v0.3.0. Its original sketches
+include optional features that remain future work.
 
 ## 0.2: Finish the unified workspace
 
@@ -53,7 +51,7 @@ Release checks completed before v0.2.0:
 
 ## 0.3: Named study workspace
 
-Status: implemented and validated for the next release; not released
+Status: released as v0.3.0 (2026-10-16)
 
 Goal: Japanese and computer-science study never mix, while both subjects use
 the same small interface. Any future aggregate view must be a separate,
@@ -72,14 +70,13 @@ The implemented slice includes:
   `question_answer`, `term_definition`, `code_output`, Japanese recognition,
   production, kanji, and sentence cards, plus the existing Chinese type.
 - A card-type picker when a collection has more than one type and a type filter
-  in Cards. New history events include the card type.
-- Schema-gated multiline fields. Long values use explicit `field: |` blocks and
-  a focused editor reached from the protected composer.
+  in Overview. New history events include the card type.
+- Schema-gated multiline fields. Long values use explicit `field: |` blocks.
 - Schema-gated typed answers. The review shows `t` only for opted-in reveal
   fields, displays an aligned comparison, and keeps the attempt in memory.
-- Card Clinic as a Cards filter. It explains leeches, recent Again ratings, and
-  repeated hint use from effective review history, then shows a recall trail in
-  the existing detail pane.
+- Card Clinic as an Overview filter. It explains leeches, recent Again ratings,
+  and repeated hint use from effective review history, then shows a recall
+  trail in the existing detail pane.
 - An NVF `schemaPresets` attribute set keyed by collection ID. NVF still exposes
   exactly one optional global mapping, `<leader>nc`, for the hub.
 
@@ -87,7 +84,7 @@ Named collections require an explicit configuration migration. A v0.2
 `reviews.jsonl` can stay with the root that becomes a named collection; a mixed
 ledger must be split manually. Existing scalar card fields remain valid.
 
-Validation completed on 2026-08-23:
+Named-collection validation completed on 2026-08-23:
 
 1. The upgrade guide covers Lua and NVF migration, old ledgers, long fields,
    and removal of v0.2 shortcuts and setup keys.
@@ -97,24 +94,36 @@ Validation completed on 2026-08-23:
    types, multiline add/edit, typed comparisons, Card Clinic, and old-ledger
    reads on the supported Neovim line.
 4. Headless, clean-install, Neorg integration, formatting, documentation, Lua
-   lint, package, and Nix flake checks pass. Tagging v0.3.0 remains a separate
-   release action.
+   lint, package, and Nix flake checks passed.
 
 Automatic forward/reverse siblings and cloze siblings still need a separate
 note identity design. They must not silently duplicate scheduling state inside
 one card block.
 
-## Study desk release candidate
+### Study desk
 
-The v0.3 candidate now includes Desk / Overview / Stats, category management,
-UI-created deck definitions, an interactive calendar, unique-card goals,
-theme-aware card stacks, reduced motion, and ASCII borders. See the
-[release checklist](docs/release-checklist.md) for current validation and the
-[study desk ADR](docs/adr/0014-study-desk-and-workspace-metadata.md) for ownership
-and persistence decisions. The goal meter is a presentation target; it does
-not implement the queue quotas below.
+Version 0.3.0 also shipped Desk / Overview / Stats, independent chapters, tag
+management, UI-created decks, a calendar, and daily goals. Card stacks follow
+the theme, with optional reduced motion and ASCII borders. The
+[release checklist](docs/release-checklist.md) records validation; the
+[chapter ADR](docs/adr/0015-independent-chapters-and-window-isolation.md)
+explains how chapter membership is stored. Daily goals do not limit queues.
+
+### 0.3.1 and 0.3.2
+
+Both updates shipped on 2026-10-16:
+
+- [v0.3.1](docs/releases/v0.3.1.md) moved Notes and long answers into the main
+  card form. `Ctrl-S` saves the whole card.
+- [v0.3.2](docs/releases/v0.3.2.md) added contextual menus, confirmations, and
+  small input dialogs.
+
+Neither update requires a configuration or card migration from the previous
+release.
 
 ## 0.4: Daily study plans and scheduler adapters
+
+Status: planned
 
 Goal: control workload without confusing queue selection with interval math.
 

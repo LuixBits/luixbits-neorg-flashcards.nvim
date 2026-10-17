@@ -34,8 +34,7 @@ visible, and puts weekly comparisons in the space beside the calendar.
 The isolated editor package was rebuilt from runtime revision `5c2d8f5` and
 opened all three pages through the full personal NVF configuration. Regression
 checks cover Neovim 0.10.4, 0.11.5 and 0.12.4; the x86_64 Linux flake checks
-include Neorg integration and packaging. Existing installations still need to
-load this candidate explicitly until the release is published.
+include Neorg integration and packaging. These changes shipped in v0.3.0.
 
 The Remotion narration and private plan now describe independent chapters.
 Two fresh silent probes preserve the revised interface and its subsequent

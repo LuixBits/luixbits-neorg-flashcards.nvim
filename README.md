@@ -24,7 +24,7 @@ it is not required to use the plugin.
   term-and-definition, code-output, Chinese, and custom card types.
 - Provides a protected composer. Labels and hints are UI decorations, not text
   you can accidentally delete.
-- Gives long answers, notes, sentences, and code their own multiline editor.
+- Edits long answers, notes, sentences, and code directly in the card form.
 - Shows progressive hints and optional typed-answer differences during review.
   You still choose the rating yourself.
 - Finds struggling cards in Card Clinic and explains why each card is there.
@@ -474,8 +474,8 @@ local spanish = {
 ```
 
 Each schema needs a `front` field and at least one field. Set `required` for
-validation, `reveal` for answer-side content, `multiline` for the focused long
-editor, and `typed_answer` for text accepted by the review comparison. A typed
+validation, `reveal` for answer-side content, `multiline` to allow line breaks,
+and `typed_answer` for text accepted by the review comparison. A typed
 answer field must also be a reveal field.
 
 ## Stored card format
@@ -631,7 +631,7 @@ Top-level options:
 | `default_collection` | ID selected at startup; required |
 | `collections` | Non-empty map of collection IDs to collection tables |
 | `deck_registry` | Path for UI-created deck definitions, or `false` to disable them |
-| `ui.show_shortcuts` | Show compact shortcut ribbons; default `true` (the focused long editor keeps its apply/cancel footer) |
+| `ui.show_shortcuts` | Show compact shortcut ribbons; default `true` |
 | `ui.motion` | Short, cancellable card animations; default `true` |
 | `ui.ascii` | Plain ASCII desk/card borders; default `false` |
 | `ui.desk_highlights` | Theme links or exact attributes for desk materials and selection |

@@ -1,14 +1,14 @@
 # ASCII study desk redesign
 
-Status: implemented release candidate, 2026-10-16. This document preserves the
+Status: shipped in v0.3.0 on 2026-10-16. This document preserves the
 agreed design and its original sketches. The [README](../README.md),
-[ADR 0014](adr/0014-study-desk-and-workspace-metadata.md), and
+[chapter ADR](adr/0015-independent-chapters-and-window-isolation.md), and
 [release checklist](release-checklist.md) describe the shipped behavior and
 verification. Some optional extensions below remain future work.
 
 The implementation uses a canvas for Desk and two responsive panes for
-Overview/Stats. Category navigation is a `g` picker and management is an `m`
-menu; a permanent third navigation pane was unnecessary. Source tag edits are
+Overview/Stats. On Desk, `g` switches between chapters and tags. In Overview,
+`g` filters by tag and `m` opens actions for the selection. Source tag edits are
 available through each card's composer and confirmed whole-category actions;
 there is no bulk card-selection mode. The calendar keeps the existing seven-day
 forecast; thirty-day forecasts and historical category breakdowns remain later

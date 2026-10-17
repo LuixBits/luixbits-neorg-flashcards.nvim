@@ -40,9 +40,9 @@ video preparation. Check items only after completing them.
 
 ## Validation and handoff
 
-Release version: **0.3.0**, prepared on `feat/ascii-study-desk`.
+Released as **v0.3.0** on 2026-10-16.
 The [release notes](releases/v0.3.0.md) describe the changes and upgrade steps.
-Installation examples pin the `v0.3.0` tag.
+See the [README](../README.md#install) for current installation examples.
 
 Validated on 2026-10-16:
 
