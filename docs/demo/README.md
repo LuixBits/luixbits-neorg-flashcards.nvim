@@ -1,5 +1,11 @@
 # Study desk visual checks
 
+The [animated demo](study-desk.gif) shows a Japanese study stack, a hint,
+answer reveal, and an Again rating. It uses synthetic cards from the screen
+recordings made for the video. The 13-second loop is 1280 × 720 and about
+411 KiB. The footage was recorded on v0.3.0; these review controls also apply
+to v0.3.2. [View a still](desk.png).
+
 These images show actual Neovim redraws with synthetic Japanese cards. They
 were captured on 2026-10-16 through the full NVF configuration, with the local
 plugin loaded before its installed version. The editor had visible whitespace

@@ -1,13 +1,26 @@
 # luixbits-neorg-flashcards.nvim
 
-![The study desk with deck boxes and chapter notes](docs/demo/desk.png)
-
 Local flashcards for Neovim, stored as plain `.norg` files.
 
 The plugin gives each subject its own collection, card types, schedule, and
 review history. `:Flashcards` opens the workspace for browsing, adding,
 reviewing, and checking your progress. Neorg improves normal file editing, but
 it is not required to use the plugin.
+
+## Contents
+
+- [What it does](#what-it-does) · [Requirements](#requirements)
+- [Install](#install): Nix/NVF, Home Manager, Nixvim, and Lua
+- [First run](#first-run) · [Add another collection](#add-another-collection)
+- [Commands](#one-command) · [Workspace](#workspace) · [Card Clinic](#card-clinic)
+- [Composer](#composer) · [Card types](#card-types) · [Stored card format](#stored-card-format)
+- [Review](#review) · [Scheduling](#scheduling) · [Configuration](#configuration)
+- [Data and recovery](#data-and-recovery) · [Lua API](#lua-api) · [Upgrade](#upgrade)
+- [Development](#development) · [Platform support](#platform-support) · [Module layout](#module-layout) · [License](#license)
+
+![Opening a Japanese study stack, revealing an answer, and rating a card](docs/demo/study-desk.gif)
+
+[Still image](docs/demo/desk.png) · [Screenshots and demo details](docs/demo/README.md)
 
 ## What it does
 
@@ -46,6 +59,165 @@ composer, workspace, review window, and statistics still work.
 These examples pin v0.3.2. If you are updating from v0.2, follow the
 [upgrade guide](docs/UPGRADING.md) to configure named collections before
 opening the workspace. Existing named-collection setups need no card migration.
+
+### Nix with NVF
+
+This is the setup used for this project: [NVF](https://github.com/NotAShelf/nvf)
+managed through Home Manager. It assumes NVF already works and your module
+receives `inputs` through Home Manager's `extraSpecialArgs`.
+
+Add the plugin to your flake inputs:
+
+```nix
+inputs.luixbits-neorg-flashcards = {
+  url = "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.2";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+Use your editor's Nixpkgs input name for `follows`. For example, use
+`"nixpkgs-unstable"` if that is the input NVF follows in your flake.
+
+Add this to a Home Manager module:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [
+    inputs.luixbits-neorg-flashcards.homeManagerModules.nvf
+  ];
+
+  programs.nvf.neorg-flashcards = {
+    enable = true;
+    schemaPresets.japanese = [ "japanese" ];
+
+    setupOpts = {
+      default_collection = "japanese";
+      collections.japanese = {
+        label = "Japanese";
+        path = "~/notes/flashcards/japanese";
+        default_file = "cards.norg";
+        default_card_type = "japanese";
+      };
+      ui.show_shortcuts = true;
+    };
+
+    keymaps = {
+      enable = true;
+      prefix = "<leader>nc";
+    };
+  };
+}
+```
+
+The module installs the plugin and supplies its Lua setup. `schemaPresets`
+adds bundled card types to each collection; the optional mapping opens
+`:Flashcards`. Neorg is not installed or required. To configure another
+collection, add its ID under both `setupOpts.collections` and `schemaPresets`.
+
+With Home Manager inside NixOS, pass `inputs` through
+`home-manager.extraSpecialArgs = { inherit inputs; };`. Standalone Home Manager
+uses `extraSpecialArgs = { inherit inputs; };` in `homeManagerConfiguration`.
+If NVF is managed directly by NixOS, import `nixosModules.nvf` instead; the
+`programs.nvf.neorg-flashcards` settings are the same.
+
+From your configuration's flake directory, update the plugin's lock entry:
+
+```sh
+nix flake update luixbits-neorg-flashcards
+```
+
+Apply your configuration through your usual NixOS or Home Manager workflow.
+Restart Neovim and run `:Flashcards`. The Japanese collection is created when
+missing. Changing the input URL without updating the lock keeps the old revision.
+
+### Other Nix setups
+
+These alternatives use the same flake input. Choose the one that manages your
+Neovim installation.
+
+<details>
+<summary>2. Home Manager without NVF</summary>
+
+Add the plugin and its Lua setup through
+[Home Manager's Neovim module](https://nix-community.github.io/home-manager/options/home-manager/programs/neovim.html#programsneovimplugins).
+Pass `inputs` through `extraSpecialArgs` as above.
+
+```nix
+{ inputs, pkgs, ... }:
+{
+  programs.neovim = {
+    enable = true;
+    plugins = [
+      {
+        plugin = inputs.luixbits-neorg-flashcards.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        type = "lua";
+        config = ''
+          local presets = require("neorg_flashcards.presets")
+          require("neorg_flashcards").setup({
+            default_collection = "japanese",
+            collections = {
+              japanese = {
+                label = "Japanese",
+                path = vim.fn.expand("~/notes/flashcards/japanese"),
+                default_file = "cards.norg",
+                default_card_type = "japanese",
+                schemas = presets.only("japanese"),
+              },
+            },
+          })
+        '';
+      }
+    ];
+  };
+}
+```
+
+Update the flake lock, apply Home Manager, then reopen Neovim and run
+`:Flashcards`.
+
+</details>
+
+<details>
+<summary>3. Nixvim</summary>
+
+For an existing Nixvim installation, add the package with
+[`extraPlugins`](https://nix-community.github.io/nixvim/NeovimOptions/index.html#extraplugins)
+and its setup with `extraConfigLua`. This example is for a Home Manager or
+NixOS module that receives `inputs`:
+
+```nix
+{ inputs, pkgs, ... }:
+{
+  programs.nixvim = {
+    enable = true;
+    extraPlugins = [
+      inputs.luixbits-neorg-flashcards.packages.${pkgs.stdenv.hostPlatform.system}.default
+    ];
+    extraConfigLua = ''
+      local presets = require("neorg_flashcards.presets")
+      require("neorg_flashcards").setup({
+        default_collection = "japanese",
+        collections = {
+          japanese = {
+            label = "Japanese",
+            path = vim.fn.expand("~/notes/flashcards/japanese"),
+            default_file = "cards.norg",
+            default_card_type = "japanese",
+            schemas = presets.only("japanese"),
+          },
+        },
+      })
+    '';
+  };
+}
+```
+
+In a standalone `makeNixvim` configuration, use `extraPlugins` and
+`extraConfigLua` directly, without the `programs.nixvim` wrapper. Update the
+flake lock and rebuild your editor, then run `:Flashcards`.
+
+</details>
 
 ### lazy.nvim
 
@@ -732,74 +904,6 @@ focus, setup, and exit.
 invalid schemas, missing or duplicate IDs, malformed scheduling data, leeches,
 and history problems. Every copy of a duplicate ID is quarantined because the
 plugin cannot safely decide which block owns that review history.
-
-## NVF / Nix
-
-Add the flake input:
-
-```nix
-inputs.luixbits-neorg-flashcards.url =
-  "github:LuixBits/luixbits-neorg-flashcards.nvim/v0.3.2";
-```
-
-Import `homeManagerModules.nvf` (or `nixosModules.nvf`) and configure it:
-
-```nix
-{
-  imports = [
-    inputs.luixbits-neorg-flashcards.homeManagerModules.nvf
-  ];
-
-  programs.nvf.neorg-flashcards = {
-    enable = true;
-
-    schemaPresets = {
-      japanese = [ "japanese" ];
-      computer_science = [ "question_answer" ];
-    };
-
-    setupOpts = {
-      default_collection = "japanese";
-      collections = {
-        japanese = {
-          label = "Japanese";
-          path = "~/notes/flashcards/japanese";
-          default_file = "cards.norg";
-          default_card_type = "japanese";
-        };
-        computer_science = {
-          label = "Computer Science";
-          path = "~/notes/flashcards/computer-science";
-          default_file = "cards.norg";
-          default_card_type = "question_answer";
-        };
-      };
-      ui.show_shortcuts = true;
-    };
-
-    keymaps = {
-      enable = true;
-      prefix = "<leader>nc";
-    };
-  };
-}
-```
-
-To add a collection with NVF, add its ID in two places: once under
-`setupOpts.collections` for its path and defaults, and once under
-`schemaPresets` for its bundled card types. The `computer_science` entries above
-are the complete second-collection recipe. `C` can switch to it after the new
-configuration loads; it does not create it.
-
-`schemaPresets` is keyed by collection ID and merges bundled schemas into that
-collection. The module creates exactly one optional global mapping: the exact
-`keymaps.prefix` opens `:Flashcards`. It does not install or configure Neorg.
-
-After changing the input, run:
-
-```sh
-nix flake update luixbits-neorg-flashcards
-```
 
 ## Lua API
 
