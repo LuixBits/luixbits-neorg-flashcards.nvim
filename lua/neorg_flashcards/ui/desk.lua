@@ -128,12 +128,17 @@ function M.render(model)
   local active = entries[selected]
   if active and active.group then
     local group = active.group
-    local next_due = schedule.next_due(group.cards, os.time())
+    local now = os.time()
+    local next_due = schedule.next_due(group.cards, now)
+    local has_active = false
+    for _, card in ipairs(group.cards) do
+      has_active = has_active or schedule.is_available(card, now)
+    end
     local detail = group.due > 0 and "Enter to study this stack"
-      or (
-        next_due and "Caught up. Next review " .. schedule.humanize(next_due - os.time())
-        or "No cards ready. Add a card in Overview."
-      )
+      or (has_active and "Caught up. Enter to study again." or "No active cards. Add or enable a card in Overview.")
+    if next_due and group.due == 0 then
+      detail = detail .. " Next review " .. schedule.humanize(next_due - now)
+    end
     c:put(bottom, left, canvas.fit(group.label .. "  /  " .. detail, width - left), h.muted)
   end
 

@@ -229,8 +229,10 @@ Common keys:
 
 Desk shows one collection per box and its chapters as notes. Enter opens a
 box, then studies a note's due cards. g switches chapter notes and tag notes.
-All due deduplicates cards across tags. Caught-up notes do not start a cram
-session. Use A explicitly for all active cards. Move with h/l (items) and j/k
+All due deduplicates cards across tags. If the selected stack has no due
+cards, Enter starts its active cards for another practice session. Suspended
+and buried cards remain excluded. d and :Flashcards review due stay due-only;
+A studies all active cards in the collection. Move with h/l (items) and j/k
 (rows); / searches notes and C chooses any collection. a adds to the selected
 chapter, or prefills the selected tag in tag view.
 

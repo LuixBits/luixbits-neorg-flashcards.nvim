@@ -1281,21 +1281,25 @@ function M.review_group()
     return
   end
   local now = os.time()
-  local due = {}
+  local due, available = {}, {}
   for _, card in ipairs(entry.group.cards) do
     if is_ready(card, now) then
       table.insert(due, card)
     end
+    if is_available(card, now) then
+      table.insert(available, card)
+    end
   end
-  if #due == 0 then
-    util.notify("Caught up: " .. entry.group.label .. ". Use A to review all active cards.", vim.log.levels.WARN)
+  local queue = #due > 0 and due or available
+  if #queue == 0 then
+    util.notify("No active cards in " .. entry.group.label, vim.log.levels.WARN)
     return
   end
   local tag = entry.group.name
   review_cards(
-    due,
+    queue,
     entry.group.chapter and ("chapter: " .. entry.group.label)
-      or (tag == "" and "untagged" or (tag and "tag:" .. tag or "due")),
+      or (tag == "" and "untagged" or (tag and "tag:" .. tag or (#due > 0 and "due" or "all"))),
     nil
   )
 end

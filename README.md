@@ -310,7 +310,8 @@ with `dir = "~/projects/luixbits-neorg-flashcards.nvim"`.
 2. Press `a` to add a card. With the setup above, the composer opens directly.
 3. Fill the required fields and press `Ctrl-S`.
 4. Open the deck box with `Enter`, then choose All due or a chapter note.
-   Press `Enter` again to start its due stack. `d` starts all due cards directly.
+   Press `Enter` again to start its due stack, or all its active cards when none
+   are due. `d` starts all due cards directly.
 5. Reveal with `Space` or `Enter`, then rate with `1`, `2`, or `3`.
 
 The workspace shows useful current shortcuts in its winbar by default. Press
@@ -439,7 +440,9 @@ Desk shows one box per collection, with chapter notes inside it. `Enter` opens
 a box, then studies the selected note's due cards. `g` switches between chapters
 and tags. Move by rows with `j/k` and by items with `h/l`; `/` finds notes. `C`
 reaches every collection when the shelf has more boxes than fit. All due
-contains each card once. Caught-up notes do not start a cram session.
+contains each card once. When the selected stack has no due cards, `Enter`
+starts its active cards for another practice session. Suspended and buried
+cards stay excluded; `d` and `:Flashcards review due` remain due-only.
 
 Overview opens a compact collection → chapter → card browser. `Enter`, `l` or
 Right opens a collection or chapter; `h` or Left goes back. The side pane shows
